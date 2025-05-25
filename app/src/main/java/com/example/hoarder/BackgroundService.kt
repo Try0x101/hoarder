@@ -17,12 +17,17 @@ import android.net.TrafficStats
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Bundle // Added import for Bundle
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.telephony.CellInfo
+import android.telephony.CellInfoGsm
+import android.telephony.CellInfoLte
+import android.telephony.CellInfoWcdma
+import android.telephony.CellInfoNr
+import android.telephony.CellSignalStrength
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -37,7 +42,11 @@ import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.zip.GZIPOutputStream
+import java.util.zip.Deflater
+import java.util.zip.DeflaterOutputStream
+import java.util.zip.CRC32
+import java.nio.charset.StandardCharsets
+import kotlin.math.roundToInt
 
 class BackgroundService : Service() {
 
@@ -62,7 +71,7 @@ class BackgroundService : Service() {
     private var lastSentUploadStatus: String? = null
     private var lastSentMessageContent: Pair<String, String>? = null
     private var lastNetworkErrorSentTimestampMs: Long = 0L
-    private val NETWORK_ERROR_MESSAGE_COOLDOWN_MS = 5000L // 5 seconds
+    private val NETWORK_ERROR_MESSAGE_COOLDOWN_MS = 5000L
 
     private val PREFS_NAME = "HoarderServicePrefs"
     private val MAIN_ACTIVITY_PREFS_NAME = "HoarderPrefs"
@@ -72,6 +81,10 @@ class BackgroundService : Service() {
 
     private val TRAFFIC_UPDATE_INTERVAL_MS = 1000L
     private val UPLOAD_INTERVAL_MS = 1000L
+
+    private var lastRxBytes: Long = 0L
+    private var lastTxBytes: Long = 0L
+    private var lastTrafficStatsTimestamp: Long = 0L
 
 
     private val locationListener: LocationListener = object : LocationListener {
@@ -101,7 +114,7 @@ class BackgroundService : Service() {
                 }
 
                 val currentNow = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+                    batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) / 1000
                 } else {
                     0
                 }
@@ -126,11 +139,11 @@ class BackgroundService : Service() {
                 }
 
                 latestBatteryData = mapOf(
-                    "percent" to batteryPct,
+                    "percent" to batteryPct.toInt(),
                     "status" to statusString,
                     "current_mA" to currentNow,
-                    "remaining_capacity_mAh" to remainingCapacityMah,
-                    "estimated_full_capacity_mAh" to estimatedFullCapacityMah
+                    "remaining_capacity_mAh" to remainingCapacityMah.toInt(),
+                    "estimated_full_capacity_mAh" to estimatedFullCapacityMah.toInt()
                 )
             }
         }
@@ -279,7 +292,7 @@ class BackgroundService : Service() {
             isUploadActive = true
             lastSentUploadStatus = null
             totalUploadedBytes = 0L
-            sendUploadStatus("Connecting", "Service (re)start, attempting to connect...", totalUploadedBytes)
+            sendUploadStatus("Connecting", "Attempting to connect...", totalUploadedBytes)
             startUploadLoop()
         } else {
             isUploadActive = false
@@ -359,10 +372,23 @@ class BackgroundService : Service() {
 
         val deviceInfo = mutableMapOf<String, Any>()
         deviceInfo["deviceName"] = Build.MODEL
-        deviceInfo["deviceId"] = deviceId
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault())
-        dateFormat.timeZone = TimeZone.getDefault()
-        deviceInfo["dateTime"] = dateFormat.format(Date())
+        val currentDateTime = Date()
+        val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+        deviceInfo["date"] = dateFormatter.format(currentDateTime)
+        deviceInfo["time"] = timeFormatter.format(currentDateTime)
+
+        val timeZone = TimeZone.getDefault()
+        val currentOffsetMillis = timeZone.getOffset(currentDateTime.time)
+        val hoursOffset = currentOffsetMillis / (1000 * 60 * 60)
+        val gmtOffsetString = if (hoursOffset >= 0) {
+            "GMT+$hoursOffset"
+        } else {
+            "GMT$hoursOffset"
+        }
+        deviceInfo["timezone"] = gmtOffsetString
+
         dataMap["deviceInfo"] = deviceInfo
 
         latestBatteryData?.let {
@@ -372,14 +398,21 @@ class BackgroundService : Service() {
         }
 
         lastKnownLocation?.let {
+            val roundedAltitude = (it.altitude / 2).roundToInt() * 2
+            val roundedAccuracy = (it.accuracy / 10).roundToInt() * 10
+            val roundedBearing = it.bearing.roundToInt()
+            val speedKmH = (it.speed * 3.6).roundToInt()
+
+            val roundedLatitude = String.format(Locale.US, "%.4f", it.latitude).toDouble()
+            val roundedLongitude = String.format(Locale.US, "%.4f", it.longitude).toDouble()
+
             dataMap["gps"] = mapOf(
-                "latitude" to it.latitude,
-                "longitude" to it.longitude,
-                "altitude" to it.altitude,
-                "accuracy" to it.accuracy,
-                "bearing" to it.bearing,
-                "speed" to it.speed,
-                "time" to it.time
+                "latitude" to roundedLatitude,
+                "longitude" to roundedLongitude,
+                "altitude_m" to roundedAltitude,
+                "accuracy_m" to roundedAccuracy,
+                "bearing_deg" to roundedBearing,
+                "speed_kmh" to speedKmH
             )
         } ?: run {
             dataMap["gps"] = mapOf("status" to "GPS data unavailable")
@@ -388,7 +421,7 @@ class BackgroundService : Service() {
         try {
             val mobileNetworkData = mutableMapOf<String, Any>()
             mobileNetworkData["operatorName"] = telephonyManager.networkOperatorName
-            mobileNetworkData["networkType"] = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val activeNetworkType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 when (telephonyManager.dataNetworkType) {
                     TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
                     TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
@@ -414,13 +447,84 @@ class BackgroundService : Service() {
             } else {
                 "Unknown"
             }
+            mobileNetworkData["networkType"] = activeNetworkType
 
             val cellInfoList: List<CellInfo>? = telephonyManager.allCellInfo
-            val cellInfoString = StringBuilder()
+            val detailedCellInfo = mutableListOf<Map<String, Any>>()
+
             cellInfoList?.forEach { cellInfo ->
-                cellInfoString.append(cellInfo.toString()).append("\n")
+                if (cellInfo.isRegistered) {
+                    val cellTypeString = when (cellInfo) {
+                        is CellInfoLte -> "LTE"
+                        is CellInfoWcdma -> "WCDMA"
+                        is CellInfoGsm -> "GSM"
+                        is CellInfoNr -> "5G NR"
+                        else -> "Unknown"
+                    }
+
+                    if (cellTypeString == activeNetworkType) {
+                        val cellMap = mutableMapOf<String, Any>()
+
+                        when (cellInfo) {
+                            is CellInfoLte -> {
+                                cellMap["cid"] = cellInfo.cellIdentity.ci
+                                cellMap["tac"] = cellInfo.cellIdentity.tac
+                                cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                                cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                                val ssLte = cellInfo.cellSignalStrength
+                                cellMap["signalStrength"] = mapOf(
+                                    "rssi" to ssLte.rssi
+                                )
+                            }
+                            is CellInfoWcdma -> {
+                                cellMap["cid"] = cellInfo.cellIdentity.cid
+                                cellMap["lac"] = cellInfo.cellIdentity.lac
+                                cellMap["psc"] = cellInfo.cellIdentity.psc
+                                cellMap["uarfcn"] = cellInfo.cellIdentity.uarfcn
+                                cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                                cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                                val ssWcdma = cellInfo.cellSignalStrength
+                                cellMap["signalStrength"] = mapOf(
+                                    "rssi" to ssWcdma.dbm
+                                )
+                            }
+                            is CellInfoGsm -> {
+                                cellMap["cid"] = cellInfo.cellIdentity.cid
+                                cellMap["lac"] = cellInfo.cellIdentity.lac
+                                cellMap["arfcn"] = cellInfo.cellIdentity.arfcn
+                                cellMap["bsic"] = cellInfo.cellIdentity.bsic
+                                cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                                cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                                val ssGsm = cellInfo.cellSignalStrength
+                                cellMap["signalStrength"] = mapOf(
+                                    "rssi" to ssGsm.dbm
+                                )
+                            }
+                            is CellInfoNr -> {
+                                val cellIdentityNr = cellInfo.cellIdentity as? android.telephony.CellIdentityNr
+                                cellMap["nci"] = cellIdentityNr?.nci ?: "N/A"
+                                cellMap["tac"] = cellIdentityNr?.tac ?: -1
+                                cellMap["mcc"] = cellIdentityNr?.mccString ?: "N/A"
+                                cellMap["mnc"] = cellIdentityNr?.mncString ?: "N/A"
+                                val ssNr = cellInfo.cellSignalStrength as? android.telephony.CellSignalStrengthNr
+                                cellMap["signalStrength"] = mapOf<String, Int>(
+                                    "csiRsrp" to (ssNr?.csiRsrp ?: Int.MIN_VALUE),
+                                    "csiRsrq" to (ssNr?.csiRsrq ?: Int.MIN_VALUE),
+                                    "csiSinr" to (ssNr?.csiSinr ?: Int.MIN_VALUE),
+                                    "ssRsrp" to (ssNr?.ssRsrp ?: Int.MIN_VALUE),
+                                    "ssRsrq" to (ssNr?.ssRsrq ?: Int.MIN_VALUE),
+                                    "ssSinr" to (ssNr?.ssSinr ?: Int.MIN_VALUE)
+                                )
+                            }
+                            else -> {
+                                cellMap["details"] = cellInfo.toString()
+                            }
+                        }
+                        detailedCellInfo.add(cellMap)
+                    }
+                }
             }
-            mobileNetworkData["cellInfo"] = if (cellInfoString.isNotEmpty()) cellInfoString.toString() else "Cell info unavailable"
+            mobileNetworkData["cellInfo"] = if (detailedCellInfo.isNotEmpty()) detailedCellInfo else "Cell info unavailable or no active SIM detected for current network type"
             dataMap["mobileNetwork"] = mobileNetworkData
         } catch (e: SecurityException) {
             dataMap["mobileNetwork"] = mapOf("status" to "No permission to read phone state or location")
@@ -429,9 +533,7 @@ class BackgroundService : Service() {
         val wifiData = mutableMapOf<String, Any>()
         val wifiInfo = wifiManager.connectionInfo
         wifiData["SSID"] = wifiInfo.ssid
-        wifiData["BSSID"] = wifiInfo.bssid
         wifiData["RSSI"] = wifiInfo.rssi
-        wifiData["linkSpeed"] = wifiInfo.linkSpeed
         wifiData["ipAddress"] = formatIpAddress(wifiInfo.ipAddress)
 
         dataMap["wifi"] = wifiData
@@ -442,19 +544,43 @@ class BackgroundService : Service() {
 
         networkState["isConnected"] = activeNetwork != null
         if (networkCapabilities != null) {
-            networkState["hasTransportWifi"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-            networkState["hasTransportCellular"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-            networkState["hasTransportEthernet"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            val linkDownstreamKbps = networkCapabilities.linkDownstreamBandwidthKbps
+            val linkUpstreamKbps = networkCapabilities.linkUpstreamBandwidthKbps
 
-            networkState["linkDownstreamBandwidthKbps"] = networkCapabilities.linkDownstreamBandwidthKbps
-            networkState["linkUpstreamBandwidthKbps"] = networkCapabilities.linkUpstreamBandwidthKbps
+            val linkDownstreamMbps = (linkDownstreamKbps.toDouble() / 1024.0 / 0.1).roundToInt() * 0.1
+            val linkUpstreamMbps = (linkUpstreamKbps.toDouble() / 1024.0 / 0.1).roundToInt() * 0.1
+
+            networkState["linkDownstreamMbps"] = String.format(Locale.US, "%.1f", linkDownstreamMbps).toDouble()
+            networkState["linkUpstreamMbps"] = String.format(Locale.US, "%.1f", linkUpstreamMbps).toDouble()
         }
 
-        val totalRxBytes = TrafficStats.getTotalRxBytes()
-        val totalTxBytes = TrafficStats.getTotalTxBytes()
+        val currentRxBytes = TrafficStats.getTotalRxBytes()
+        val currentTxBytes = TrafficStats.getTotalTxBytes()
+        val currentTimestamp = System.currentTimeMillis()
 
-        networkState["totalDownloadBytes"] = totalRxBytes
-        networkState["totalUploadBytes"] = totalTxBytes
+        var downloadSpeedMbps = 0.0
+        var uploadSpeedMbps = 0.0
+
+        if (lastTrafficStatsTimestamp > 0 && currentTimestamp > lastTrafficStatsTimestamp) {
+            val deltaRxBytes = currentRxBytes - lastRxBytes
+            val deltaTxBytes = currentTxBytes - lastTxBytes
+            val deltaTimeSeconds = (currentTimestamp - lastTrafficStatsTimestamp) / 1000.0
+
+            if (deltaTimeSeconds > 0) {
+                downloadSpeedMbps = (deltaRxBytes * 8.0) / (1024 * 1024) / deltaTimeSeconds
+                uploadSpeedMbps = (deltaTxBytes * 8.0) / (1024 * 1024) / deltaTimeSeconds
+            }
+        }
+
+        lastRxBytes = currentRxBytes
+        lastTxBytes = currentTxBytes
+        lastTrafficStatsTimestamp = currentTimestamp
+
+        val roundedDownloadSpeedMbps = (downloadSpeedMbps / 0.1).roundToInt() * 0.1
+        val roundedUploadSpeedMbps = (uploadSpeedMbps / 0.1).roundToInt() * 0.1
+
+        networkState["downloadSpeedMbps"] = String.format(Locale.US, "%.1f", roundedDownloadSpeedMbps).toDouble()
+        networkState["uploadSpeedMbps"] = String.format(Locale.US, "%.1f", roundedUploadSpeedMbps).toDouble()
 
         dataMap["networkConnectivityState"] = networkState
 
@@ -486,17 +612,58 @@ class BackgroundService : Service() {
             urlConnection.readTimeout = 10000
 
             val outputStream = ByteArrayOutputStream()
-            val jsonBytes = jsonString.toByteArray(Charsets.UTF_8)
+            val jsonBytes = jsonString.toByteArray(StandardCharsets.UTF_8)
+
+            // Log the raw JSON data before compression
+            Log.d("HoarderService", "Sending raw JSON data: $jsonString")
 
             if (jsonBytes.isEmpty()) {
                 sendUploadStatus("Error", "JSON data is empty for compression.", totalUploadedBytes)
                 return
             }
 
-            GZIPOutputStream(outputStream, 8192).use { gzipOs ->
-                gzipOs.write(jsonBytes)
+            // Manually build GZIP header (simplified)
+            outputStream.write(byteArrayOf(
+                0x1f.toByte(), // Magic number 1
+                0x8b.toByte(), // Magic number 2
+                Deflater.DEFLATED.toByte(), // Compression method (8 = deflate)
+                0x00.toByte(), // Flags (no extra fields, comments, etc.)
+                0x00.toByte(), 0x00.toByte(), 0x00.toByte(), 0x00.toByte(), // MTIME (modification time)
+                0x00.toByte(), // Extra flags
+                0x03.toByte()  // OS (0x03 = Unix, common)
+            ))
+
+            // Create Deflater with compression level 7
+            val deflater = Deflater(7, true) // level 7, nowrap = true for raw deflate
+            DeflaterOutputStream(outputStream, deflater).use { deflaterOs ->
+                deflaterOs.write(jsonBytes)
             }
+            deflater.end() // Release native resources
+
+            // Calculate CRC32 and ISIZE for GZIP footer
+            val crc32 = CRC32()
+            crc32.update(jsonBytes)
+            val crcValue = crc32.value
+
+            outputStream.write(byteArrayOf(
+                (crcValue and 0xFF).toByte(),
+                ((crcValue shr 8) and 0xFF).toByte(),
+                ((crcValue shr 16) and 0xFF).toByte(),
+                ((crcValue shr 24) and 0xFF).toByte()
+            ))
+
+            val isize = jsonBytes.size.toLong()
+            outputStream.write(byteArrayOf(
+                (isize and 0xFF).toByte(),
+                ((isize shr 8) and 0xFF).toByte(),
+                ((isize shr 16) and 0xFF).toByte(),
+                ((isize shr 24) and 0xFF).toByte()
+            ))
+
             val compressedData = outputStream.toByteArray()
+
+            // Log the size of the compressed packet
+            Log.d("HoarderService", "Sent compressed packet size: ${compressedData.size} bytes")
 
             if (compressedData.isEmpty()) {
                 sendUploadStatus("Error", "Compressed data is empty after compression.", totalUploadedBytes)
@@ -532,16 +699,14 @@ class BackgroundService : Service() {
 
         var shouldSendFullUpdate = true
 
-        // Check for recurring Network Error for the *same serverIpAddress* within cooldown
-        if (status == "Network Error" && 
-            serverIpAddress.isNotBlank() && // Cooldown logic only applies if serverIpAddress is set
-            message.contains(serverIpAddress)) { // Current error is related to our target server
+        if (status == "Network Error" &&
+            serverIpAddress.isNotBlank() &&
+            message.contains(serverIpAddress)) {
 
             if (lastSentUploadStatus == "Network Error" &&
-                lastSentMessageContent?.first == "Network Error" && // Last status was also Network Error
-                lastSentMessageContent?.second?.contains(serverIpAddress) == true && // Last error was for the same server
+                lastSentMessageContent?.first == "Network Error" &&
+                lastSentMessageContent?.second?.contains(serverIpAddress) == true &&
                 currentTimeMs - lastNetworkErrorSentTimestampMs < NETWORK_ERROR_MESSAGE_COOLDOWN_MS) {
-                // Suppress full update if it's a recurring Network Error for the same server within cooldown
                 shouldSendFullUpdate = false
             }
         }
@@ -549,7 +714,6 @@ class BackgroundService : Service() {
         val contentChanged = (lastSentUploadStatus != status || lastSentMessageContent != currentMessagePair)
 
         if (shouldSendFullUpdate && contentChanged) {
-            // Send a full update (status, message, bytes)
             val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
                 putExtra("status", status)
                 putExtra("message", message)
@@ -559,32 +723,24 @@ class BackgroundService : Service() {
 
             lastSentUploadStatus = status
             lastSentMessageContent = currentMessagePair
-            // Update timestamp only when a Network Error *for the target server* is sent as a full update
             if (status == "Network Error" && serverIpAddress.isNotBlank() && message.contains(serverIpAddress)) {
                 lastNetworkErrorSentTimestampMs = currentTimeMs
             }
         } else if (!shouldSendFullUpdate && status == "Network Error") {
-            // Case: Network error for the same server, but new message details suppressed by cooldown.
-            // Send updated bytes, but keep the displayed status and message stable (using the last sent full error).
             val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
                 putExtra("totalUploadedBytes", uploadedBytes)
-                // Ensure UI continues to show "Network Error" and the *first message of this sequence*
                 if (lastSentUploadStatus == "Network Error" && lastSentMessageContent?.first == "Network Error") {
-                    putExtra("status", lastSentUploadStatus) // Should be "Network Error"
-                    putExtra("message", lastSentMessageContent?.second) // The message that initiated cooldown
+                    putExtra("status", lastSentUploadStatus)
+                    putExtra("message", lastSentMessageContent?.second)
                 }
             }
             LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
         } else if (lastSentUploadStatus == status && lastSentMessageContent == currentMessagePair) {
-            // Case: Status and message are identical to the last sent one (and not a suppressed Network Error).
-            // Send only bytes to update the counter without changing the message.
             val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
                 putExtra("totalUploadedBytes", uploadedBytes)
             }
             LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
         }
-        // If none of the above, no update is sent. This could happen if shouldSendFullUpdate is true but contentChanged is false,
-        // which is already covered by the third `else if` (as it implies full content is identical).
     }
 
     private fun formatBytes(bytes: Long): String {

@@ -18,7 +18,6 @@ import android.widget.TextView
 import android.widget.Switch
 import android.widget.EditText
 import android.widget.Button
-import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -395,7 +394,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateRawDataTitle(isActive: Boolean) {
         val statusText = if (isActive) "(Active)" else "(Inactive)"
-        rawDataTitleTextView.text = "Raw data $statusText"
+        rawDataTitleTextView.text = "Json data $statusText"
     }
 
     private fun updateServerUploadTitle(isUploading: Boolean) {
