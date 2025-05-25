@@ -17,11 +17,10 @@ import android.net.TrafficStats
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Bundle
+import android.os.Bundle // Added import for Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.Process
 import android.provider.Settings
 import android.telephony.CellInfo
 import android.telephony.TelephonyManager
@@ -34,11 +33,17 @@ import java.util.Locale
 import java.util.TimeZone
 import android.util.Log
 import android.content.SharedPreferences
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.zip.GZIPOutputStream
 
 class BackgroundService : Service() {
 
     private lateinit var handler: Handler
-    private lateinit var runnable: Runnable
+    private lateinit var dataCollectionRunnable: Runnable
+    private lateinit var uploadLoopRunnable: Runnable
     private lateinit var locationManager: LocationManager
     private lateinit var telephonyManager: TelephonyManager
     private lateinit var wifiManager: WifiManager
@@ -49,11 +54,24 @@ class BackgroundService : Service() {
     private var lastKnownLocation: Location? = null
     private var latestBatteryData: Map<String, Any>? = null
     private var isCollectionActive: Boolean = false
+    private var isUploadActive: Boolean = false
+    private var serverIpAddress: String = ""
+    private var serverPort: Int = 5000
+    private var latestJsonData: String? = null
+    private var totalUploadedBytes: Long = 0L
+    private var lastSentUploadStatus: String? = null
+    private var lastSentMessageContent: Pair<String, String>? = null
+    private var lastNetworkErrorSentTimestampMs: Long = 0L
+    private val NETWORK_ERROR_MESSAGE_COOLDOWN_MS = 5000L // 5 seconds
 
     private val PREFS_NAME = "HoarderServicePrefs"
+    private val MAIN_ACTIVITY_PREFS_NAME = "HoarderPrefs"
     private val KEY_TOGGLE_STATE = "dataCollectionToggleState"
+    private val KEY_UPLOAD_TOGGLE_STATE = "dataUploadToggleState"
+    private val KEY_SERVER_IP_PORT = "serverIpPortAddress"
 
     private val TRAFFIC_UPDATE_INTERVAL_MS = 1000L
+    private val UPLOAD_INTERVAL_MS = 1000L
 
 
     private val locationListener: LocationListener = object : LocationListener {
@@ -123,16 +141,41 @@ class BackgroundService : Service() {
             when (intent?.action) {
                 ACTION_START_COLLECTION -> {
                     if (!isCollectionActive) {
-                        Log.d("BackgroundService", "Received START_COLLECTION command.")
                         isCollectionActive = true
                         startDataCollectionLoop()
                     }
                 }
                 ACTION_STOP_COLLECTION -> {
                     if (isCollectionActive) {
-                        Log.d("BackgroundService", "Received STOP_COLLECTION command.")
                         isCollectionActive = false
-                        handler.removeCallbacks(runnable)
+                        handler.removeCallbacks(dataCollectionRunnable)
+                    }
+                }
+                ACTION_START_UPLOAD -> {
+                    val ipPort = intent?.getStringExtra("ipPort")
+                    val parts = ipPort?.split(":")
+                    if (parts != null && parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null && parts[1].toInt() > 0 && parts[1].toInt() <= 65535) {
+                        serverIpAddress = parts[0]
+                        serverPort = parts[1].toInt()
+
+                        isUploadActive = true
+                        lastSentUploadStatus = null
+                        totalUploadedBytes = 0L
+                        sendUploadStatus("Connecting", "Attempting to connect...", totalUploadedBytes)
+                        startUploadLoop()
+                    } else {
+                        isUploadActive = false
+                        handler.removeCallbacks(uploadLoopRunnable)
+                        sendUploadStatus("Error", "Invalid Server IP:Port for starting upload.", 0L)
+                    }
+                }
+                ACTION_STOP_UPLOAD -> {
+                    if (isUploadActive) {
+                        isUploadActive = false
+                        handler.removeCallbacks(uploadLoopRunnable)
+                        totalUploadedBytes = 0L
+                        lastSentUploadStatus = null
+                        sendUploadStatus("Paused", "Upload paused.", totalUploadedBytes)
                     }
                 }
             }
@@ -141,7 +184,6 @@ class BackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("BackgroundService", "Service onCreate")
         handler = Handler(Looper.getMainLooper())
         batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -150,19 +192,44 @@ class BackgroundService : Service() {
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        Log.d("BackgroundService", "ApplicationInfo: ${applicationContext.applicationInfo}")
-
         val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(batteryReceiver, batteryFilter)
 
-        val controlFilter = IntentFilter()
-        controlFilter.addAction(ACTION_START_COLLECTION)
-        controlFilter.addAction(ACTION_STOP_COLLECTION)
+        val controlFilter = IntentFilter().apply {
+            addAction(ACTION_START_COLLECTION)
+            addAction(ACTION_STOP_COLLECTION)
+            addAction(ACTION_START_UPLOAD)
+            addAction(ACTION_STOP_UPLOAD)
+        }
         LocalBroadcastManager.getInstance(this).registerReceiver(controlReceiver, controlFilter)
+
+        dataCollectionRunnable = object : Runnable {
+            override fun run() {
+                if (isCollectionActive) {
+                    collectAndSendAllData()
+                    handler.postDelayed(this, TRAFFIC_UPDATE_INTERVAL_MS)
+                }
+            }
+        }
+
+        uploadLoopRunnable = object : Runnable {
+            override fun run() {
+                if (isUploadActive && latestJsonData != null && serverIpAddress.isNotBlank() && serverPort > 0) {
+                    Thread {
+                        latestJsonData?.let { data -> uploadDataToServer(data) }
+                    }.start()
+                    if (isUploadActive) {
+                        handler.postDelayed(this, UPLOAD_INTERVAL_MS)
+                    }
+                } else if (isUploadActive && (serverIpAddress.isBlank() || serverPort <= 0)) {
+                    sendUploadStatus("Error", "Server IP or Port became invalid.", totalUploadedBytes)
+                    isUploadActive = false
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("BackgroundService", "Service onStartCommand called, attempting startForeground")
         createNotificationChannel()
 
         val notificationIntent = Intent(this, MainActivity::class.java)
@@ -181,24 +248,41 @@ class BackgroundService : Service() {
             .setContentIntent(pendingIntent)
             .build()
         startForeground(NOTIFICATION_ID, notification)
-        Log.d("BackgroundService", "startForeground called")
 
         startLocationUpdates()
 
-        // Check toggle state from MainActivity's preferences and start collection if needed
-        val mainActivityPrefs = applicationContext.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
-        val isToggleOn = mainActivityPrefs.getBoolean(KEY_TOGGLE_STATE, false)
+        val mainActivityPrefs = applicationContext.getSharedPreferences(MAIN_ACTIVITY_PREFS_NAME, Context.MODE_PRIVATE)
+        val isCollectionToggleOn = mainActivityPrefs.getBoolean(KEY_TOGGLE_STATE, true)
+        val isUploadToggleOn = mainActivityPrefs.getBoolean(KEY_UPLOAD_TOGGLE_STATE, false)
+        val savedServerIpPort = mainActivityPrefs.getString(KEY_SERVER_IP_PORT, "")
 
-        if (isToggleOn) {
+        val parts = savedServerIpPort?.split(":")
+        if (parts != null && parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null) {
+            serverIpAddress = parts[0]
+            serverPort = parts[1].toInt()
+        } else {
+            serverIpAddress = ""
+            serverPort = 0
+        }
+
+        if (isCollectionToggleOn) {
             if (!isCollectionActive) {
-                Log.d("BackgroundService", "onStartCommand: Toggle is ON, starting data collection loop.")
                 isCollectionActive = true
                 startDataCollectionLoop()
             }
         } else {
-            Log.d("BackgroundService", "onStartCommand: Toggle is OFF, not starting data collection loop.")
             isCollectionActive = false
-            handler.removeCallbacks(runnable)
+            handler.removeCallbacks(dataCollectionRunnable)
+        }
+
+        if (isUploadToggleOn && serverIpAddress.isNotBlank() && serverPort > 0) {
+            isUploadActive = true
+            lastSentUploadStatus = null
+            totalUploadedBytes = 0L
+            sendUploadStatus("Connecting", "Service (re)start, attempting to connect...", totalUploadedBytes)
+            startUploadLoop()
+        } else {
+            isUploadActive = false
         }
 
         return START_STICKY
@@ -206,8 +290,8 @@ class BackgroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d("BackgroundService", "Service onDestroy")
-        handler.removeCallbacks(runnable)
+        handler.removeCallbacks(dataCollectionRunnable)
+        handler.removeCallbacks(uploadLoopRunnable)
         locationManager.removeUpdates(locationListener)
         unregisterReceiver(batteryReceiver)
         LocalBroadcastManager.getInstance(this).unregisterReceiver(controlReceiver)
@@ -227,9 +311,6 @@ class BackgroundService : Service() {
             val manager = getSystemService(NotificationManager::class.java)
             if (manager != null) {
                 manager.createNotificationChannel(serviceChannel)
-                Log.d("BackgroundService", "Notification channel created with HIGH importance")
-            } else {
-                Log.e("BackgroundService", "NotificationManager is null, cannot create channel")
             }
         }
     }
@@ -248,35 +329,37 @@ class BackgroundService : Service() {
                 0f,
                 locationListener
             )
-            Log.d("BackgroundService", "Location updates requested")
         } catch (e: SecurityException) {
-            Log.e("BackgroundService", "Location permission denied: ${e.message}")
             e.printStackTrace()
         }
     }
 
     private fun startDataCollectionLoop() {
-        runnable = object : Runnable {
-            override fun run() {
-                if (isCollectionActive) {
-                    collectAndSendAllData()
-                    handler.postDelayed(this, TRAFFIC_UPDATE_INTERVAL_MS)
-                } else {
-                    Log.d("BackgroundService", "Data collection paused.")
-                }
-            }
+        handler.removeCallbacks(dataCollectionRunnable)
+        if (isCollectionActive) {
+            handler.post(dataCollectionRunnable)
         }
-        handler.post(runnable)
-        Log.d("BackgroundService", "Data collection loop started/resumed")
+    }
+
+    private fun startUploadLoop() {
+        handler.removeCallbacks(uploadLoopRunnable)
+        if (isUploadActive && serverIpAddress.isNotBlank() && serverPort > 0) {
+            handler.post(uploadLoopRunnable)
+        } else if (isUploadActive) {
+            isUploadActive = false
+            sendUploadStatus("Error", "Cannot start upload: Server IP or Port is invalid.", totalUploadedBytes)
+        }
     }
 
     private fun collectAndSendAllData() {
-        Log.d("BackgroundService", "collectAndSendAllData running at ${System.currentTimeMillis()}")
         val dataMap = mutableMapOf<String, Any>()
+
+        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        dataMap["device_id"] = deviceId
 
         val deviceInfo = mutableMapOf<String, Any>()
         deviceInfo["deviceName"] = Build.MODEL
-        deviceInfo["deviceId"] = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        deviceInfo["deviceId"] = deviceId
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault())
         dateFormat.timeZone = TimeZone.getDefault()
         deviceInfo["dateTime"] = dateFormat.format(Date())
@@ -341,7 +424,6 @@ class BackgroundService : Service() {
             dataMap["mobileNetwork"] = mobileNetworkData
         } catch (e: SecurityException) {
             dataMap["mobileNetwork"] = mapOf("status" to "No permission to read phone state or location")
-            Log.e("BackgroundService", "Mobile network data permission denied: ${e.message}")
         }
 
         val wifiData = mutableMapOf<String, Any>()
@@ -379,9 +461,137 @@ class BackgroundService : Service() {
         val gson = GsonBuilder().setPrettyPrinting().create()
         val jsonString = gson.toJson(dataMap)
 
+        latestJsonData = jsonString
         val dataIntent = Intent("com.example.hoarder.DATA_UPDATE")
         dataIntent.putExtra("jsonString", jsonString)
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(dataIntent)
+    }
+
+    private fun uploadDataToServer(jsonString: String) {
+        if (serverIpAddress.isBlank() || serverPort <= 0) {
+            sendUploadStatus("Error", "Server IP or Port not set.", totalUploadedBytes)
+            return
+        }
+
+        val urlString = "http://$serverIpAddress:$serverPort/api/telemetry"
+        var urlConnection: HttpURLConnection? = null
+        try {
+            val url = URL(urlString)
+            urlConnection = url.openConnection() as HttpURLConnection
+            urlConnection.requestMethod = "POST"
+            urlConnection.setRequestProperty("Content-Type", "application/json")
+            urlConnection.setRequestProperty("Content-Encoding", "gzip")
+            urlConnection.doOutput = true
+            urlConnection.connectTimeout = 10000
+            urlConnection.readTimeout = 10000
+
+            val outputStream = ByteArrayOutputStream()
+            val jsonBytes = jsonString.toByteArray(Charsets.UTF_8)
+
+            if (jsonBytes.isEmpty()) {
+                sendUploadStatus("Error", "JSON data is empty for compression.", totalUploadedBytes)
+                return
+            }
+
+            GZIPOutputStream(outputStream, 8192).use { gzipOs ->
+                gzipOs.write(jsonBytes)
+            }
+            val compressedData = outputStream.toByteArray()
+
+            if (compressedData.isEmpty()) {
+                sendUploadStatus("Error", "Compressed data is empty after compression.", totalUploadedBytes)
+                return
+            }
+
+            urlConnection.outputStream.write(compressedData)
+            urlConnection.outputStream.flush()
+
+            val responseCode = urlConnection.responseCode
+            val responseMessage = urlConnection.responseMessage
+
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val response = urlConnection.inputStream.bufferedReader().use { it.readText() }
+                totalUploadedBytes += compressedData.size.toLong()
+                sendUploadStatus("OK", "Uploaded successfully.", totalUploadedBytes)
+            } else {
+                val errorStream = urlConnection.errorStream
+                val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "No error response"
+                sendUploadStatus("HTTP Error", "$responseCode: $responseMessage. Server response: $errorResponse", totalUploadedBytes)
+            }
+
+        } catch (e: Exception) {
+            sendUploadStatus("Network Error", "Failed to connect: ${e.message}", totalUploadedBytes)
+        } finally {
+            urlConnection?.disconnect()
+        }
+    }
+
+    private fun sendUploadStatus(status: String, message: String, uploadedBytes: Long) {
+        val currentMessagePair = Pair(status, message)
+        val currentTimeMs = System.currentTimeMillis()
+
+        var shouldSendFullUpdate = true
+
+        // Check for recurring Network Error for the *same serverIpAddress* within cooldown
+        if (status == "Network Error" && 
+            serverIpAddress.isNotBlank() && // Cooldown logic only applies if serverIpAddress is set
+            message.contains(serverIpAddress)) { // Current error is related to our target server
+
+            if (lastSentUploadStatus == "Network Error" &&
+                lastSentMessageContent?.first == "Network Error" && // Last status was also Network Error
+                lastSentMessageContent?.second?.contains(serverIpAddress) == true && // Last error was for the same server
+                currentTimeMs - lastNetworkErrorSentTimestampMs < NETWORK_ERROR_MESSAGE_COOLDOWN_MS) {
+                // Suppress full update if it's a recurring Network Error for the same server within cooldown
+                shouldSendFullUpdate = false
+            }
+        }
+
+        val contentChanged = (lastSentUploadStatus != status || lastSentMessageContent != currentMessagePair)
+
+        if (shouldSendFullUpdate && contentChanged) {
+            // Send a full update (status, message, bytes)
+            val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
+                putExtra("status", status)
+                putExtra("message", message)
+                putExtra("totalUploadedBytes", uploadedBytes)
+            }
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+
+            lastSentUploadStatus = status
+            lastSentMessageContent = currentMessagePair
+            // Update timestamp only when a Network Error *for the target server* is sent as a full update
+            if (status == "Network Error" && serverIpAddress.isNotBlank() && message.contains(serverIpAddress)) {
+                lastNetworkErrorSentTimestampMs = currentTimeMs
+            }
+        } else if (!shouldSendFullUpdate && status == "Network Error") {
+            // Case: Network error for the same server, but new message details suppressed by cooldown.
+            // Send updated bytes, but keep the displayed status and message stable (using the last sent full error).
+            val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
+                putExtra("totalUploadedBytes", uploadedBytes)
+                // Ensure UI continues to show "Network Error" and the *first message of this sequence*
+                if (lastSentUploadStatus == "Network Error" && lastSentMessageContent?.first == "Network Error") {
+                    putExtra("status", lastSentUploadStatus) // Should be "Network Error"
+                    putExtra("message", lastSentMessageContent?.second) // The message that initiated cooldown
+                }
+            }
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+        } else if (lastSentUploadStatus == status && lastSentMessageContent == currentMessagePair) {
+            // Case: Status and message are identical to the last sent one (and not a suppressed Network Error).
+            // Send only bytes to update the counter without changing the message.
+            val intent = Intent("com.example.hoarder.UPLOAD_STATUS").apply {
+                putExtra("totalUploadedBytes", uploadedBytes)
+            }
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+        }
+        // If none of the above, no update is sent. This could happen if shouldSendFullUpdate is true but contentChanged is false,
+        // which is already covered by the third `else if` (as it implies full content is identical).
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+        val pre = "KMGTPE"[exp - 1]
+        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
     }
 
     private fun formatIpAddress(ipAddress: Int): String {
@@ -400,5 +610,7 @@ class BackgroundService : Service() {
         const val NOTIFICATION_ID = 1
         const val ACTION_START_COLLECTION = "com.example.hoarder.START_COLLECTION"
         const val ACTION_STOP_COLLECTION = "com.example.hoarder.STOP_COLLECTION"
+        const val ACTION_START_UPLOAD = "com.example.hoarder.START_UPLOAD"
+        const val ACTION_STOP_UPLOAD = "com.example.hoarder.STOP_UPLOAD"
     }
 }

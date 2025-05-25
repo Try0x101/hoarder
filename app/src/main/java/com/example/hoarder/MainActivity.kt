@@ -16,6 +16,9 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Switch
+import android.widget.EditText
+import android.widget.Button
+import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -23,10 +26,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.google.android.material.card.MaterialCardView
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import android.util.Log
 import android.content.SharedPreferences
+import android.widget.Toast
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,9 +45,19 @@ class MainActivity : AppCompatActivity() {
     private var latestJsonData: String? = null
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
+    private lateinit var serverUploadCard: com.google.android.material.card.MaterialCardView
+    private lateinit var serverUploadTitleTextView: TextView
+    private lateinit var serverUploadSwitch: Switch
+    private lateinit var uploadedBytesTextView: TextView
+    private lateinit var uploadMessageTextView: TextView
+    private lateinit var serverIpPortEditText: EditText
+    private lateinit var saveServerIpButton: Button
+
     private val PREFS_NAME = "HoarderPrefs"
     private val KEY_FIRST_LAUNCH = "isFirstLaunch"
-    private val KEY_TOGGLE_STATE = "dataCollectionToggleState"
+    private val KEY_COLLECTION_TOGGLE_STATE = "dataCollectionToggleState"
+    private val KEY_UPLOAD_TOGGLE_STATE = "dataUploadToggleState"
+    private val KEY_SERVER_IP_PORT = "serverIpPortAddress"
     private lateinit var sharedPrefs: SharedPreferences
 
     private val dataReceiver = object : BroadcastReceiver() {
@@ -51,6 +66,38 @@ class MainActivity : AppCompatActivity() {
                 latestJsonData = jsonString
                 if (rawDataContent.visibility == View.VISIBLE) {
                     displayRawPrettyPrintData(jsonString)
+                }
+            }
+        }
+    }
+
+    private val uploadStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val status = intent?.getStringExtra("status")
+            val message = intent?.getStringExtra("message")
+            val totalUploadedBytes = intent?.getLongExtra("totalUploadedBytes", 0L)
+
+            val formattedBytes = if (totalUploadedBytes != null) formatBytes(totalUploadedBytes) else "0 B"
+
+            uploadedBytesTextView.text = "Uploaded: $formattedBytes"
+
+            if (status != null || message != null) {
+                val newUploadMessage = if (status == "OK") {
+                    "Status: OK\n"
+                } else if (status == "Paused") {
+                    "Status: Paused\n"
+                } else if (status != null && message != null) {
+                    "Status: $status - $message\n"
+                } else {
+                    "\n"
+                }
+                uploadMessageTextView.text = newUploadMessage
+                if (status == "OK") {
+                    uploadMessageTextView.setTextColor(ContextCompat.getColor(context!!, R.color.amoled_green))
+                } else if (status == "Paused") {
+                    uploadMessageTextView.setTextColor(ContextCompat.getColor(context!!, R.color.amoled_light_gray))
+                } else {
+                    uploadMessageTextView.setTextColor(ContextCompat.getColor(context!!, R.color.amoled_red))
                 }
             }
         }
@@ -73,31 +120,62 @@ class MainActivity : AppCompatActivity() {
         switchAndIconContainer = findViewById(R.id.switchAndIconContainer)
         rawDataTitleTextView = rawDataHeader.findViewById(R.id.rawDataTitleTextView)
 
+        serverUploadCard = findViewById(R.id.serverUploadCard)
+        serverUploadTitleTextView = findViewById(R.id.serverUploadTitleTextView)
+        serverUploadSwitch = findViewById(R.id.serverUploadSwitch)
+        uploadedBytesTextView = findViewById(R.id.uploadedBytesTextView)
+        uploadMessageTextView = findViewById(R.id.uploadMessageTextView)
+        serverIpPortEditText = findViewById(R.id.serverIpPortEditText)
+        saveServerIpButton = findViewById(R.id.saveServerIpButton)
+
         sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         val isFirstLaunch = sharedPrefs.getBoolean(KEY_FIRST_LAUNCH, true)
 
         if (isFirstLaunch) {
             sharedPrefs.edit().putBoolean(KEY_FIRST_LAUNCH, false).apply()
-            dataCollectionSwitch.isChecked = true // Default to ON for first launch
-            // Service will start collection based on this state in its onStartCommand
+            dataCollectionSwitch.isChecked = true
+            serverUploadSwitch.isChecked = false
+            sharedPrefs.edit().putBoolean(KEY_COLLECTION_TOGGLE_STATE, true).apply()
+            sharedPrefs.edit().putBoolean(KEY_UPLOAD_TOGGLE_STATE, false).apply()
+            sharedPrefs.edit().putString(KEY_SERVER_IP_PORT, "").apply()
         } else {
-            dataCollectionSwitch.isChecked = sharedPrefs.getBoolean(KEY_TOGGLE_STATE, false)
+            dataCollectionSwitch.isChecked = sharedPrefs.getBoolean(KEY_COLLECTION_TOGGLE_STATE, true)
+            serverUploadSwitch.isChecked = sharedPrefs.getBoolean(KEY_UPLOAD_TOGGLE_STATE, false)
         }
 
-        updateSwitchTint(dataCollectionSwitch.isChecked)
+        updateSwitchTint(dataCollectionSwitch, dataCollectionSwitch.isChecked)
+        updateSwitchTint(serverUploadSwitch, serverUploadSwitch.isChecked)
+        updateServerUploadTitle(serverUploadSwitch.isChecked)
 
+        val savedServerIpPort = sharedPrefs.getString(KEY_SERVER_IP_PORT, "")
+        serverIpPortEditText.setText(savedServerIpPort)
+        if (!serverUploadSwitch.isChecked) {
+            uploadedBytesTextView.text = "Uploaded: 0 B"
+            uploadMessageTextView.text = "Status: Paused\n"
+            uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
+        }
 
-        // Increase touchable area for the switch
         switchAndIconContainer.post {
             val hitRect = Rect()
             dataCollectionSwitch.getHitRect(hitRect)
-            val expandAmount = 100 // pixels to expand the touch area
+            val expandAmount = 100
             hitRect.left -= expandAmount
             hitRect.top -= expandAmount
             hitRect.right += expandAmount
             hitRect.bottom += expandAmount
             switchAndIconContainer.touchDelegate = TouchDelegate(hitRect, dataCollectionSwitch)
+        }
+
+        findViewById<LinearLayout>(R.id.serverUploadSwitchContainer).post {
+            val hitRect = Rect()
+            serverUploadSwitch.getHitRect(hitRect)
+            val expandAmount = 100
+            hitRect.left -= expandAmount
+            hitRect.top -= expandAmount
+            hitRect.right += expandAmount
+            hitRect.bottom += expandAmount
+            findViewById<LinearLayout>(R.id.serverUploadSwitchContainer).touchDelegate = TouchDelegate(hitRect, serverUploadSwitch)
         }
 
 
@@ -116,8 +194,8 @@ class MainActivity : AppCompatActivity() {
 
         dataCollectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             updateRawDataTitle(isChecked)
-            sharedPrefs.edit().putBoolean(KEY_TOGGLE_STATE, isChecked).apply() // Save toggle state
-            updateSwitchTint(isChecked)
+            sharedPrefs.edit().putBoolean(KEY_COLLECTION_TOGGLE_STATE, isChecked).apply()
+            updateSwitchTint(dataCollectionSwitch, isChecked)
             if (isChecked) {
                 sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
                 if (rawDataContent.visibility == View.VISIBLE) {
@@ -131,7 +209,54 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        saveServerIpButton.setOnClickListener {
+            val ipPort = serverIpPortEditText.text.toString()
+            val parts = ipPort.split(":")
+            if (parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null && parts[1].toInt() > 0 && parts[1].toInt() <= 65535) {
+                sharedPrefs.edit()
+                    .putString(KEY_SERVER_IP_PORT, ipPort)
+                    .apply()
+                Toast.makeText(this, "Server IP:Port saved: $ipPort", Toast.LENGTH_SHORT).show()
+                serverIpPortEditText.clearFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.hideSoftInputFromWindow(serverIpPortEditText.windowToken, 0)
+
+                if (serverUploadSwitch.isChecked) {
+                    sendCommandToService(BackgroundService.ACTION_START_UPLOAD, ipPort)
+                }
+            } else {
+                Toast.makeText(this, "Invalid Server IP:Port format. Use e.g., 188.132.234.72:5000", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        serverUploadSwitch.setOnCheckedChangeListener { _, isChecked ->
+            updateServerUploadTitle(isChecked)
+            sharedPrefs.edit().putBoolean(KEY_UPLOAD_TOGGLE_STATE, isChecked).apply()
+            updateSwitchTint(serverUploadSwitch, isChecked)
+            if (isChecked) {
+                val ipPort = serverIpPortEditText.text.toString()
+                val parts = ipPort.split(":")
+                if (parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null && parts[1].toInt() > 0 && parts[1].toInt() <= 65535) {
+                    sendCommandToService(BackgroundService.ACTION_START_UPLOAD, ipPort)
+                    uploadMessageTextView.text = "Status: Connecting...\n"
+                    uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
+                } else {
+                    Toast.makeText(this, "Server IP:Port is invalid/empty. Cannot start upload.", Toast.LENGTH_LONG).show()
+                    serverUploadSwitch.isChecked = false
+                    uploadedBytesTextView.text = "Uploaded: 0 B"
+                    uploadMessageTextView.text = "Status: Error - Invalid IP:Port\n"
+                    uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_red))
+                }
+            } else {
+                sendCommandToService(BackgroundService.ACTION_STOP_UPLOAD)
+                uploadedBytesTextView.text = "Uploaded: 0 B"
+                uploadMessageTextView.text = "Status: Paused\n"
+                uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
+            }
+        }
+
         LocalBroadcastManager.getInstance(this).registerReceiver(dataReceiver, IntentFilter("com.example.hoarder.DATA_UPDATE"))
+        LocalBroadcastManager.getInstance(this).registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
 
         requestPermissions()
     }
@@ -139,6 +264,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateRawDataTitle(dataCollectionSwitch.isChecked)
+        updateServerUploadTitle(serverUploadSwitch.isChecked)
+        updateSwitchTint(dataCollectionSwitch, dataCollectionSwitch.isChecked)
+        updateSwitchTint(serverUploadSwitch, serverUploadSwitch.isChecked)
     }
 
     override fun onPause() {
@@ -148,6 +276,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(dataReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(uploadStatusReceiver)
     }
 
     private fun requestPermissions() {
@@ -157,7 +286,8 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_WIFI_STATE,
             Manifest.permission.CHANGE_WIFI_STATE,
-            Manifest.permission.ACCESS_NETWORK_STATE
+            Manifest.permission.ACCESS_NETWORK_STATE,
+            Manifest.permission.INTERNET
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -176,10 +306,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (permissionsToRequest.isNotEmpty()) {
-            Log.d("MainActivity", "Requesting permissions: ${permissionsToRequest.joinToString()}")
             ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
         } else {
-            Log.d("MainActivity", "All permissions already granted, handling permissions.")
             handlePermissionsGranted()
         }
     }
@@ -187,17 +315,6 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            val grantedPermissions = mutableListOf<String>()
-            val deniedPermissions = mutableListOf<String>()
-            for (i in permissions.indices) {
-                if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
-                    grantedPermissions.add(permissions[i])
-                } else {
-                    deniedPermissions.add(permissions[i])
-                }
-            }
-            Log.d("MainActivity", "Permissions granted: ${grantedPermissions.joinToString()}")
-            Log.d("MainActivity", "Permissions denied: ${deniedPermissions.joinToString()}")
             handlePermissionsGranted()
         }
     }
@@ -209,6 +326,7 @@ class MainActivity : AppCompatActivity() {
         val hasWifiState = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_WIFI_STATE) == PackageManager.PERMISSION_GRANTED
         val hasChangeWifiState = ContextCompat.checkSelfPermission(this, Manifest.permission.CHANGE_WIFI_STATE) == PackageManager.PERMISSION_GRANTED
         val hasNetworkState = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED
+        val hasInternet = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
         val hasNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         } else true
@@ -217,12 +335,10 @@ class MainActivity : AppCompatActivity() {
         } else true
 
 
-        val canStartService = (hasFineLocation || hasCoarseLocation) && hasPhoneState && hasWifiState && hasChangeWifiState && hasNotifications && hasForegroundServiceLocation && hasNetworkState
+        val canStartService = (hasFineLocation || hasCoarseLocation) && hasPhoneState && hasWifiState && hasChangeWifiState && hasNotifications && hasForegroundServiceLocation && hasNetworkState && hasInternet
 
         if (canStartService) {
             startBackgroundService()
-            // The toggle state and start command are now handled in onCreate based on SharedPreferences
-            // This method just ensures the service is started if permissions are granted.
 
             var displayMessage = ""
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -235,11 +351,13 @@ class MainActivity : AppCompatActivity() {
                 displayMessage = "Data collection enabled."
             }
             dataTextView.text = displayMessage
-            Log.d("MainActivity", "Service should be starting. Display message: $displayMessage")
         } else {
             dataCollectionSwitch.isChecked = false
-            updateRawDataTitle(false) // Update title for initial OFF state
-            updateSwitchTint(false) // Ensure tint is off if permissions are not granted
+            serverUploadSwitch.isChecked = false
+            updateRawDataTitle(false)
+            updateServerUploadTitle(false)
+            updateSwitchTint(dataCollectionSwitch, false)
+            updateSwitchTint(serverUploadSwitch, false)
 
             var errorMessage = "Not all required permissions are granted. Some data may be unavailable.\n"
             val missingCritical = mutableListOf<String>()
@@ -249,6 +367,7 @@ class MainActivity : AppCompatActivity() {
             if (!hasWifiState) missingCritical.add("Wi-Fi State")
             if (!hasChangeWifiState) missingCritical.add("Change Wi-Fi State")
             if (!hasNetworkState) missingCritical.add("Network State")
+            if (!hasInternet) missingCritical.add("Internet")
             if (!hasNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) missingCritical.add("Notifications")
             if (!hasForegroundServiceLocation && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) missingCritical.add("Background Location Service")
 
@@ -258,20 +377,20 @@ class MainActivity : AppCompatActivity() {
                 errorMessage += "Check permissions in app settings."
             }
             dataTextView.text = errorMessage
-            Log.w("MainActivity", "Cannot start service. Error: $errorMessage")
         }
     }
 
     private fun startBackgroundService() {
         val serviceIntent = Intent(this, BackgroundService::class.java)
         ContextCompat.startForegroundService(this, serviceIntent)
-        Log.d("MainActivity", "Attempted to start BackgroundService as foreground service.")
     }
 
-    private fun sendCommandToService(action: String) {
+    private fun sendCommandToService(action: String, ipPort: String? = null) {
         val intent = Intent(action)
+        ipPort?.let {
+            intent.putExtra("ipPort", it)
+        }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-        Log.d("MainActivity", "Sent command to service: $action")
     }
 
     private fun updateRawDataTitle(isActive: Boolean) {
@@ -279,13 +398,18 @@ class MainActivity : AppCompatActivity() {
         rawDataTitleTextView.text = "Raw data $statusText"
     }
 
-    private fun updateSwitchTint(isChecked: Boolean) {
+    private fun updateServerUploadTitle(isUploading: Boolean) {
+        val statusText = if (isUploading) "(Active)" else "(Inactive)"
+        serverUploadTitleTextView.text = "Server Upload $statusText"
+    }
+
+    private fun updateSwitchTint(switch: Switch, isChecked: Boolean) {
         if (isChecked) {
-            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
+            switch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
+            switch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
         } else {
-            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
+            switch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
+            switch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
         }
     }
 
@@ -299,7 +423,13 @@ class MainActivity : AppCompatActivity() {
             dataTextView.text = gson.toJson(parsedJson)
         } catch (e: Exception) {
             dataTextView.text = "Error parsing or pretty printing JSON: ${e.message}\nRaw JSON:\n$jsonString"
-            Log.e("MainActivity", "Error parsing or pretty printing JSON", e)
         }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+        val pre = "KMGTPE"[exp - 1]
+        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
     }
 }

@@ -1,19 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="amoled_black">#FF000000</color>
-    <color name="amoled_dark_gray">#FF121212</color>
-    <color name="amoled_medium_gray">#FF292929</color>
-    <color name="amoled_light_gray">#FFBBBBBB</color>
-    <color name="amoled_white">#FFFFFFFF</color>
-
-    <color name="amoled_primary">#FF00BCD4</color> <color name="amoled_primary_variant">#FF0097A7</color>
-    <color name="amoled_secondary">#FFFFEB3B</color> <color name="amoled_secondary_variant">#FFFBC02D</color>
-
-    <color name="amoled_true_blue">#FF2196F3</color> <color name="amoled_text_primary">#FFFFFFFF</color>
-    <color name="amoled_text_secondary">#FFBBBBBB</color>
-    <color name="amoled_text_on_primary">#FF000000</color>
-    <color name="amoled_text_on_secondary">#FF000000</color>
-
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -21,4 +7,27 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="amoled_black">#000000</color>
+    <color name="amoled_dark_gray">#1A1A1A</color>
+    <color name="amoled_medium_gray">#333333</color>
+    <color name="amoled_light_gray">#CCCCCC</color>
+    <color name="amoled_white">#FFFFFF</color>
+    <color name="amoled_true_blue">#007BFF</color> <color name="amoled_green">#28A745</color> <color name="amoled_red">#DC3545</color> <color name="amoled_primary">#212121</color>
+    <color name="amoled_primary_variant">#000000</color>
+    <color name="amoled_on_primary">#FFFFFF</color>
+    <color name="amoled_secondary">#03DAC5</color>
+    <color name="amoled_secondary_variant">#018786</color>
+    <color name="amoled_on_secondary">#000000</color>
+    <color name="amoled_background">#000000</color>
+    <color name="amoled_on_background">#FFFFFF</color>
+    <color name="amoled_surface">#1A1A1A</color>
+    <color name="amoled_on_surface">#FFFFFF</color>
+    <color name="amoled_error">#CF6679</color>
+    <color name="amoled_on_error">#000000</color>
+
+    <color name="amoled_text_primary">#FFFFFF</color>
+    <color name="amoled_text_secondary">#CCCCCC</color>
+    <color name="amoled_text_on_primary">#FFFFFF</color>
+    <color name="amoled_text_on_secondary">#000000</color>
 </resources>
