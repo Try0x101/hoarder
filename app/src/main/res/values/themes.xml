@@ -1,9 +1,23 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Hoarder" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
-    </style>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
 
-    <style name="Theme.Hoarder" parent="Base.Theme.Hoarder" />
+    <style name="Theme.Hoarder" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/amoled_primary</item>
+        <item name="colorPrimaryVariant">@color/amoled_primary_variant</item>
+        <item name="colorOnPrimary">@color/amoled_text_on_primary</item>
+        <item name="colorSecondary">@color/amoled_secondary</item>
+        <item name="colorSecondaryVariant">@color/amoled_secondary_variant</item>
+        <item name="colorOnSecondary">@color/amoled_text_on_secondary</item>
+        <item name="android:statusBarColor">@color/amoled_black</item>
+        <item name="android:windowBackground">@color/amoled_black</item>
+        <item name="android:textColorPrimary">@color/amoled_text_primary</item>
+        <item name="android:textColorSecondary">@color/amoled_text_secondary</item>
+        <item name="android:textColor">@color/amoled_white</item>
+        <item name="android:navigationBarColor">@color/amoled_black</item>
+
+        <item name="materialCardViewStyle">@style/Widget.MaterialComponents.CardView</item>
+        <item name="cardBackgroundColor">@color/amoled_dark_gray</item>
+        <item name="colorSurface">@color/amoled_dark_gray</item>
+        <item name="colorOnSurface">@color/amoled_light_gray</item>
+    </style>
 </resources>

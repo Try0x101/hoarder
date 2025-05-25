@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="amoled_black">#FF000000</color>
+    <color name="amoled_dark_gray">#FF121212</color>
+    <color name="amoled_medium_gray">#FF292929</color>
+    <color name="amoled_light_gray">#FFBBBBBB</color>
+    <color name="amoled_white">#FFFFFFFF</color>
+
+    <color name="amoled_primary">#FF00BCD4</color> <color name="amoled_primary_variant">#FF0097A7</color>
+    <color name="amoled_secondary">#FFFFEB3B</color> <color name="amoled_secondary_variant">#FFFBC02D</color>
+
+    <color name="amoled_true_blue">#FF2196F3</color> <color name="amoled_text_primary">#FFFFFFFF</color>
+    <color name="amoled_text_secondary">#FFBBBBBB</color>
+    <color name="amoled_text_on_primary">#FF000000</color>
+    <color name="amoled_text_on_secondary">#FF000000</color>
+
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>
