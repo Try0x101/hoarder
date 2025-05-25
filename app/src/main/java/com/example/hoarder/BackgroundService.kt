@@ -161,8 +161,8 @@ class BackgroundService : Service() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("") // Changed to empty string
-            .setContentText("")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText("Collecting device data in background...")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)

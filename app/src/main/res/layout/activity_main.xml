@@ -43,7 +43,6 @@
                         android:gravity="center_vertical"
                         android:clickable="true"
                         android:focusable="true"
-                        android:background="?attr/selectableItemBackground"
                         android:paddingVertical="12dp">
 
                         <TextView
@@ -57,7 +56,6 @@
                             android:textStyle="bold"
                             android:translationX="32px" />
 
-                        <!-- Container for Switch and Icon -->
                         <LinearLayout
                             android:id="@+id/switchAndIconContainer"
                             android:layout_width="wrap_content"

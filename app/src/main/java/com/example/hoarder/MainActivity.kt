@@ -6,11 +6,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.TouchDelegate
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -27,6 +29,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import android.util.Log
+import android.content.SharedPreferences
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +43,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rawDataTitleTextView: TextView
     private var latestJsonData: String? = null
     private val gson = GsonBuilder().setPrettyPrinting().create()
+
+    private val PREFS_NAME = "HoarderPrefs"
+    private val KEY_FIRST_LAUNCH = "isFirstLaunch"
+    private val KEY_TOGGLE_STATE = "dataCollectionToggleState"
+    private lateinit var sharedPrefs: SharedPreferences
 
     private val dataReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -70,9 +78,39 @@ class MainActivity : AppCompatActivity() {
         switchAndIconContainer = findViewById(R.id.switchAndIconContainer) // Corrected ID initialization
         rawDataTitleTextView = rawDataHeader.findViewById(R.id.rawDataTitleTextView)
 
-        // Set initial thumb and tint for OFF state
-        dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-        dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
+        sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        val isFirstLaunch = sharedPrefs.getBoolean(KEY_FIRST_LAUNCH, true)
+
+        if (isFirstLaunch) {
+            // For the very first launch, set toggle to ON by default and apply delay
+            sharedPrefs.edit().putBoolean(KEY_FIRST_LAUNCH, false).apply()
+            dataCollectionSwitch.isChecked = true
+            Handler(Looper.getMainLooper()).postDelayed({
+                sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
+            }, 1000) // 1 second delay
+        } else {
+            // For subsequent launches, restore toggle state from preferences
+            dataCollectionSwitch.isChecked = sharedPrefs.getBoolean(KEY_TOGGLE_STATE, false)
+            if (dataCollectionSwitch.isChecked) {
+                sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
+            }
+        }
+
+        // Set initial thumb and track tint based on the loaded state
+        updateSwitchTint(dataCollectionSwitch.isChecked)
+
+        // Increase touchable area for the switch
+        switchAndIconContainer.post {
+            val hitRect = Rect()
+            dataCollectionSwitch.getHitRect(hitRect)
+            val expandAmount = 100 // pixels to expand the touch area
+            hitRect.left -= expandAmount
+            hitRect.top -= expandAmount
+            hitRect.right += expandAmount
+            hitRect.bottom += expandAmount
+            switchAndIconContainer.touchDelegate = TouchDelegate(hitRect, dataCollectionSwitch)
+        }
 
 
         rawDataContent.visibility = View.GONE
@@ -90,10 +128,10 @@ class MainActivity : AppCompatActivity() {
 
         dataCollectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             updateRawDataTitle(isChecked)
+            sharedPrefs.edit().putBoolean(KEY_TOGGLE_STATE, isChecked).apply() // Save toggle state
+            updateSwitchTint(isChecked)
             if (isChecked) {
                 sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
-                dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-                dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
                 if (rawDataContent.visibility == View.VISIBLE) {
                     displayRawPrettyPrintData(latestJsonData)
                 } else {
@@ -101,8 +139,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 sendCommandToService(BackgroundService.ACTION_STOP_COLLECTION)
-                dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-                dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
                 dataTextView.text = "Data: Collection paused by switch."
             }
         }
@@ -119,7 +155,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        sendCommandToService(BackgroundService.ACTION_STOP_COLLECTION)
+        // sendCommandToService(BackgroundService.ACTION_STOP_COLLECTION) // Removed to allow continuous background collection
     }
 
     override fun onDestroy() {
@@ -198,11 +234,9 @@ class MainActivity : AppCompatActivity() {
 
         if (canStartService) {
             startBackgroundService()
-            dataCollectionSwitch.isChecked = true // Set initial state to ON
-            updateRawDataTitle(true) // Update title for initial ON state
 
-            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
+            // The toggle state and start command are now handled in onCreate based on SharedPreferences
+            // This method just ensures the service is started if permissions are granted.
 
             var displayMessage = ""
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -219,9 +253,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             dataCollectionSwitch.isChecked = false
             updateRawDataTitle(false) // Update title for initial OFF state
+            updateSwitchTint(false) // Ensure tint is off if permissions are not granted
 
-            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
             var errorMessage = "Not all required permissions are granted. Some data may be unavailable.\n"
             val missingCritical = mutableListOf<String>()
 
@@ -258,6 +291,16 @@ class MainActivity : AppCompatActivity() {
     private fun updateRawDataTitle(isActive: Boolean) {
         val statusText = if (isActive) "(Active)" else "(Inactive)"
         rawDataTitleTextView.text = "Raw data $statusText"
+    }
+
+    private fun updateSwitchTint(isChecked: Boolean) {
+        if (isChecked) {
+            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
+            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
+        } else {
+            dataCollectionSwitch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
+            dataCollectionSwitch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
+        }
     }
 
     private fun displayRawPrettyPrintData(jsonString: String?) {
