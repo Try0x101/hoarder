@@ -7,14 +7,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Rect
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.TouchDelegate
 import android.view.View
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Switch
@@ -27,7 +25,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import com.google.gson.reflect.TypeToken
 import android.util.Log
 import android.content.SharedPreferences
 
@@ -37,9 +34,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dataTextView: TextView
     private lateinit var rawDataHeader: LinearLayout
     private lateinit var rawDataContent: LinearLayout
-    // private lateinit var expandCollapseIcon: ImageView
     private lateinit var dataCollectionSwitch: Switch
-    private lateinit var switchAndIconContainer: LinearLayout // Corrected type and ID
+    private lateinit var switchAndIconContainer: LinearLayout
     private lateinit var rawDataTitleTextView: TextView
     private var latestJsonData: String? = null
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -73,9 +69,8 @@ class MainActivity : AppCompatActivity() {
         dataTextView = findViewById(R.id.dataTextView)
         rawDataHeader = findViewById(R.id.rawDataHeader)
         rawDataContent = findViewById(R.id.rawDataContent)
-        // expandCollapseIcon = findViewById(R.id.expandCollapseIcon)
         dataCollectionSwitch = findViewById(R.id.dataCollectionSwitch)
-        switchAndIconContainer = findViewById(R.id.switchAndIconContainer) // Corrected ID initialization
+        switchAndIconContainer = findViewById(R.id.switchAndIconContainer)
         rawDataTitleTextView = rawDataHeader.findViewById(R.id.rawDataTitleTextView)
 
         sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -83,22 +78,15 @@ class MainActivity : AppCompatActivity() {
         val isFirstLaunch = sharedPrefs.getBoolean(KEY_FIRST_LAUNCH, true)
 
         if (isFirstLaunch) {
-            // For the very first launch, set toggle to ON by default and apply delay
             sharedPrefs.edit().putBoolean(KEY_FIRST_LAUNCH, false).apply()
-            dataCollectionSwitch.isChecked = true
-            Handler(Looper.getMainLooper()).postDelayed({
-                sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
-            }, 1000) // 1 second delay
+            dataCollectionSwitch.isChecked = true // Default to ON for first launch
+            // Service will start collection based on this state in its onStartCommand
         } else {
-            // For subsequent launches, restore toggle state from preferences
             dataCollectionSwitch.isChecked = sharedPrefs.getBoolean(KEY_TOGGLE_STATE, false)
-            if (dataCollectionSwitch.isChecked) {
-                sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
-            }
         }
 
-        // Set initial thumb and track tint based on the loaded state
         updateSwitchTint(dataCollectionSwitch.isChecked)
+
 
         // Increase touchable area for the switch
         switchAndIconContainer.post {
@@ -155,7 +143,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // sendCommandToService(BackgroundService.ACTION_STOP_COLLECTION) // Removed to allow continuous background collection
     }
 
     override fun onDestroy() {
@@ -234,7 +221,6 @@ class MainActivity : AppCompatActivity() {
 
         if (canStartService) {
             startBackgroundService()
-
             // The toggle state and start command are now handled in onCreate based on SharedPreferences
             // This method just ensures the service is started if permissions are granted.
 

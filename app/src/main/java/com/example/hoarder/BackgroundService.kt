@@ -13,6 +13,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.TrafficStats
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
@@ -20,6 +21,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.provider.Settings
 import android.telephony.CellInfo
 import android.telephony.TelephonyManager
@@ -31,6 +33,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import android.util.Log
+import android.content.SharedPreferences
 
 class BackgroundService : Service() {
 
@@ -41,10 +44,17 @@ class BackgroundService : Service() {
     private lateinit var wifiManager: WifiManager
     private lateinit var batteryManager: BatteryManager
     private lateinit var connectivityManager: ConnectivityManager
+    private lateinit var sharedPrefs: SharedPreferences
 
     private var lastKnownLocation: Location? = null
     private var latestBatteryData: Map<String, Any>? = null
     private var isCollectionActive: Boolean = false
+
+    private val PREFS_NAME = "HoarderServicePrefs"
+    private val KEY_TOGGLE_STATE = "dataCollectionToggleState"
+
+    private val TRAFFIC_UPDATE_INTERVAL_MS = 1000L
+
 
     private val locationListener: LocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -138,6 +148,9 @@ class BackgroundService : Service() {
         telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        Log.d("BackgroundService", "ApplicationInfo: ${applicationContext.applicationInfo}")
 
         val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         registerReceiver(batteryReceiver, batteryFilter)
@@ -160,8 +173,8 @@ class BackgroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.app_name))
+        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setContentTitle(applicationContext.getString(R.string.app_name))
             .setContentText("Collecting device data in background...")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -171,6 +184,23 @@ class BackgroundService : Service() {
         Log.d("BackgroundService", "startForeground called")
 
         startLocationUpdates()
+
+        // Check toggle state from MainActivity's preferences and start collection if needed
+        val mainActivityPrefs = applicationContext.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+        val isToggleOn = mainActivityPrefs.getBoolean(KEY_TOGGLE_STATE, false)
+
+        if (isToggleOn) {
+            if (!isCollectionActive) {
+                Log.d("BackgroundService", "onStartCommand: Toggle is ON, starting data collection loop.")
+                isCollectionActive = true
+                startDataCollectionLoop()
+            }
+        } else {
+            Log.d("BackgroundService", "onStartCommand: Toggle is OFF, not starting data collection loop.")
+            isCollectionActive = false
+            handler.removeCallbacks(runnable)
+        }
+
         return START_STICKY
     }
 
@@ -230,7 +260,7 @@ class BackgroundService : Service() {
             override fun run() {
                 if (isCollectionActive) {
                     collectAndSendAllData()
-                    handler.postDelayed(this, 1000)
+                    handler.postDelayed(this, TRAFFIC_UPDATE_INTERVAL_MS)
                 } else {
                     Log.d("BackgroundService", "Data collection paused.")
                 }
@@ -244,12 +274,13 @@ class BackgroundService : Service() {
         Log.d("BackgroundService", "collectAndSendAllData running at ${System.currentTimeMillis()}")
         val dataMap = mutableMapOf<String, Any>()
 
-        dataMap["deviceName"] = Build.MODEL
-        dataMap["deviceId"] = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-
+        val deviceInfo = mutableMapOf<String, Any>()
+        deviceInfo["deviceName"] = Build.MODEL
+        deviceInfo["deviceId"] = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault())
         dateFormat.timeZone = TimeZone.getDefault()
-        dataMap["dateTime"] = dateFormat.format(Date())
+        deviceInfo["dateTime"] = dateFormat.format(Date())
+        dataMap["deviceInfo"] = deviceInfo
 
         latestBatteryData?.let {
             dataMap["batteryInfo"] = it
@@ -321,21 +352,6 @@ class BackgroundService : Service() {
         wifiData["linkSpeed"] = wifiInfo.linkSpeed
         wifiData["ipAddress"] = formatIpAddress(wifiInfo.ipAddress)
 
-        try {
-            val scanResults = wifiManager.scanResults
-            val scanResultsList = mutableListOf<Map<String, String>>()
-            scanResults.forEach { result ->
-                scanResultsList.add(mapOf(
-                    "SSID" to result.SSID,
-                    "BSSID" to result.BSSID,
-                    "Level" to result.level.toString()
-                ))
-            }
-            wifiData["scanResults"] = if (scanResultsList.isNotEmpty()) scanResultsList else "Wi-Fi scan results unavailable"
-        } catch (e: SecurityException) {
-            wifiData["scanStatus"] = "No permission to access location for Wi-Fi scanning"
-            Log.e("BackgroundService", "Wi-Fi scan permission denied: ${e.message}")
-        }
         dataMap["wifi"] = wifiData
 
         val activeNetwork = connectivityManager.activeNetwork
@@ -347,14 +363,17 @@ class BackgroundService : Service() {
             networkState["hasTransportWifi"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
             networkState["hasTransportCellular"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
             networkState["hasTransportEthernet"] = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-            networkState["signalStrength"] = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                networkCapabilities.signalStrength
-            } else {
-                "N/A"
-            }
+
             networkState["linkDownstreamBandwidthKbps"] = networkCapabilities.linkDownstreamBandwidthKbps
             networkState["linkUpstreamBandwidthKbps"] = networkCapabilities.linkUpstreamBandwidthKbps
         }
+
+        val totalRxBytes = TrafficStats.getTotalRxBytes()
+        val totalTxBytes = TrafficStats.getTotalTxBytes()
+
+        networkState["totalDownloadBytes"] = totalRxBytes
+        networkState["totalUploadBytes"] = totalTxBytes
+
         dataMap["networkConnectivityState"] = networkState
 
         val gson = GsonBuilder().setPrettyPrinting().create()
