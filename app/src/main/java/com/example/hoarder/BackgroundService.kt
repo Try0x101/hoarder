@@ -392,16 +392,15 @@ class BackgroundService : Service() {
         val shortId = deviceId.take(3)
         dataMap["id"] = shortId
 
-        val dev = mutableMapOf<String, Any>()
-        dev["n"] = Build.MODEL
+        // dev block
         val currentDateTime = Date()
         val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val cal = java.util.Calendar.getInstance()
         cal.time = currentDateTime
-        dev["dt"] = dateFormatter.format(currentDateTime)
-        dev["h"] = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        dev["m"] = cal.get(java.util.Calendar.MINUTE)
-
+        dataMap["n"] = Build.MODEL
+        dataMap["dt"] = dateFormatter.format(currentDateTime)
+        dataMap["h"] = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        dataMap["m"] = cal.get(java.util.Calendar.MINUTE)
         val timeZone = TimeZone.getDefault()
         val currentOffsetMillis = timeZone.getOffset(currentDateTime.time)
         val hoursOffset = currentOffsetMillis / (1000 * 60 * 60)
@@ -410,43 +409,37 @@ class BackgroundService : Service() {
         } else {
             "GMT$hoursOffset"
         }
-        dev["tz"] = gmtOffsetString
+        dataMap["tz"] = gmtOffsetString
 
-        dataMap["dev"] = dev
-
+        // bat block
         latestBatteryData?.let {
-            val bat = mutableMapOf<String, Any>()
-            it["percent"]?.let { v -> bat["perc"] = v }
-            it["status"]?.let { v -> bat["stat"] = v }
-            it["estimated_full_capacity_mAh"]?.let { v -> bat["cap"] = v }
-            dataMap["bat"] = bat
+            it["percent"]?.let { v -> dataMap["perc"] = v }
+            it["status"]?.let { v -> dataMap["stat"] = v }
+            it["estimated_full_capacity_mAh"]?.let { v -> dataMap["cap"] = v }
         } ?: run {
-            dataMap["bat"] = mapOf("stat" to "Battery data unavailable")
+            dataMap["stat"] = "Battery data unavailable"
         }
 
+        // gps block
         if (lastKnownLocation != null) {
             val it = lastKnownLocation!!
             val roundedAltitude = (it.altitude / 2).roundToInt() * 2
             val roundedAccuracy = (it.accuracy / 10).roundToInt() * 10
             val roundedBearing = it.bearing.roundToInt()
             val speedKmH = (it.speed * 3.6).roundToInt()
-
             val roundedLatitude = String.format(Locale.US, "%.4f", it.latitude).toDouble()
             val roundedLongitude = String.format(Locale.US, "%.4f", it.longitude).toDouble()
-
-            dataMap["gps"] = mapOf(
-                "lat" to roundedLatitude,
-                "lon" to roundedLongitude,
-                "alt" to roundedAltitude,
-                "acc" to roundedAccuracy,
-                "bear" to roundedBearing,
-                "spd" to speedKmH
-            )
+            dataMap["lat"] = roundedLatitude
+            dataMap["lon"] = roundedLongitude
+            dataMap["alt"] = roundedAltitude
+            dataMap["acc"] = roundedAccuracy
+            dataMap["bear"] = roundedBearing
+            dataMap["spd"] = speedKmH
         }
 
+        // net block (cell info)
         try {
-            val net = mutableMapOf<String, Any>()
-            net["op"] = telephonyManager.networkOperatorName
+            dataMap["op"] = telephonyManager.networkOperatorName
             val activeNetworkType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 when (telephonyManager.dataNetworkType) {
                     TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
@@ -473,153 +466,121 @@ class BackgroundService : Service() {
             } else {
                 "Unknown"
             }
-            net["nt"] = activeNetworkType
+            dataMap["nt"] = activeNetworkType
 
+            // --- Вытаскиваем только первую зарегистрированную ячейку ---
             val cellInfoList: List<CellInfo>? = telephonyManager.allCellInfo
-            val detailedCellInfo = mutableListOf<Map<String, Any>>()
-
+            var found = false
             cellInfoList?.forEach { cellInfo ->
-                if (cellInfo.isRegistered) {
-                    val cellMap = mutableMapOf<String, Any>()
+                if (cellInfo.isRegistered && !found) {
+                    found = true
                     when (cellInfo) {
                         is CellInfoLte -> {
-                            cellMap["ci"] = cellInfo.cellIdentity.ci
-                            cellMap["tac"] = cellInfo.cellIdentity.tac
-                            cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
-                            cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                            dataMap["ci"] = cellInfo.cellIdentity.ci
+                            dataMap["tac"] = cellInfo.cellIdentity.tac
+                            dataMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                            dataMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
                             val ssLte = cellInfo.cellSignalStrength
                             if (ssLte.dbm != Int.MAX_VALUE) {
-                                cellMap["ss"] = mapOf("rssi" to ssLte.dbm)
+                                dataMap["rssi"] = ssLte.dbm
                             }
                         }
                         is CellInfoWcdma -> {
-                            cellMap["ci"] = cellInfo.cellIdentity.cid
-                            cellMap["lac"] = cellInfo.cellIdentity.lac
-                            cellMap["psc"] = cellInfo.cellIdentity.psc
-                            cellMap["uarfcn"] = cellInfo.cellIdentity.uarfcn
-                            cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
-                            cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                            dataMap["ci"] = cellInfo.cellIdentity.cid
+                            dataMap["tac"] = cellInfo.cellIdentity.lac
+                            dataMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                            dataMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
                             val ssWcdma = cellInfo.cellSignalStrength
                             if (ssWcdma.dbm != Int.MAX_VALUE) {
-                                cellMap["ss"] = mapOf("rssi" to ssWcdma.dbm)
+                                dataMap["rssi"] = ssWcdma.dbm
                             }
                         }
                         is CellInfoGsm -> {
-                            cellMap["ci"] = cellInfo.cellIdentity.cid
-                            cellMap["lac"] = cellInfo.cellIdentity.lac
-                            cellMap["arfcn"] = cellInfo.cellIdentity.arfcn
-                            cellMap["bsic"] = cellInfo.cellIdentity.bsic
-                            cellMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
-                            cellMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
+                            dataMap["ci"] = cellInfo.cellIdentity.cid
+                            dataMap["tac"] = cellInfo.cellIdentity.lac
+                            dataMap["mcc"] = cellInfo.cellIdentity.mccString ?: "N/A"
+                            dataMap["mnc"] = cellInfo.cellIdentity.mncString ?: "N/A"
                             val ssGsm = cellInfo.cellSignalStrength
                             if (ssGsm.dbm != Int.MAX_VALUE) {
-                                cellMap["ss"] = mapOf("rssi" to ssGsm.dbm)
+                                dataMap["rssi"] = ssGsm.dbm
                             }
                         }
                         is CellInfoNr -> {
                             val cellIdentityNr = cellInfo.cellIdentity as? android.telephony.CellIdentityNr
-                            cellMap["nci"] = cellIdentityNr?.nci ?: "N/A"
-                            cellMap["tac"] = cellIdentityNr?.tac ?: -1
-                            cellMap["mcc"] = cellIdentityNr?.mccString ?: "N/A"
-                            cellMap["mnc"] = cellIdentityNr?.mncString ?: "N/A"
+                            dataMap["ci"] = cellIdentityNr?.nci ?: "N/A"
+                            dataMap["tac"] = cellIdentityNr?.tac ?: -1
+                            dataMap["mcc"] = cellIdentityNr?.mccString ?: "N/A"
+                            dataMap["mnc"] = cellIdentityNr?.mncString ?: "N/A"
                             val ssNr = cellInfo.cellSignalStrength as? android.telephony.CellSignalStrengthNr
-                            val nrMap = mutableMapOf<String, Int>()
-                            ssNr?.let {
-                                if (it.csiRsrp != Int.MIN_VALUE) nrMap["csiRsrp"] = it.csiRsrp
-                                if (it.csiRsrq != Int.MIN_VALUE) nrMap["csiRsrq"] = it.csiRsrq
-                                if (it.csiSinr != Int.MIN_VALUE) nrMap["csiSinr"] = it.csiSinr
-                                if (it.ssRsrp != Int.MIN_VALUE) nrMap["ssRsrp"] = it.ssRsrp
-                                if (it.ssRsrq != Int.MIN_VALUE) nrMap["ssRsrq"] = it.ssRsrq
-                                if (it.ssSinr != Int.MIN_VALUE) nrMap["ssSinr"] = it.ssSinr
-                            }
-                            if (nrMap.isNotEmpty()) {
-                                cellMap["ss"] = nrMap
+                            if (ssNr != null && ssNr.ssRsrp != Int.MIN_VALUE) {
+                                dataMap["rssi"] = ssNr.ssRsrp
                             }
                         }
-                        else -> {
-                            cellMap["d"] = cellInfo.toString()
-                        }
+                        else -> { /* ignore */ }
                     }
-                    detailedCellInfo.add(cellMap)
                 }
             }
-            net["ci"] = if (detailedCellInfo.isNotEmpty()) detailedCellInfo else "unavail"
-            dataMap["net"] = net
+            if (!found) {
+                dataMap["ci"] = "unavail"
+                dataMap["tac"] = "unavail"
+                dataMap["mcc"] = "unavail"
+                dataMap["mnc"] = "unavail"
+                dataMap["rssi"] = "unavail"
+            }
         } catch (e: SecurityException) {
-            dataMap["net"] = mapOf("stat" to "No permission")
+            dataMap["stat"] = "No permission"
         }
 
-        val wifi = mutableMapOf<String, Any>()
+        // wifi block
         val wifiInfo = wifiManager.connectionInfo
-        wifi["ssid"] = wifiInfo.ssid
-        dataMap["wifi"] = wifi
+        val ssid = wifiInfo.ssid
+        dataMap["ssid"] = if (ssid == null || ssid == "<unknown ssid>" || ssid == "0x" || ssid.isBlank()) 0 else ssid
 
-        val activeNetwork = connectivityManager.activeNetwork
-        val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
-        val ncs = mutableMapOf<String, Any>()
-
-        ncs["conn"] = activeNetwork != null
-        if (networkCapabilities != null) {
-            val linkDownstreamKbps = networkCapabilities.linkDownstreamBandwidthKbps
-            val linkUpstreamKbps = networkCapabilities.linkUpstreamBandwidthKbps
-
-            val linkDownstreamMbps = kotlin.math.ceil(linkDownstreamKbps.toDouble() / 1024.0).toInt()
-            val linkUpstreamMbps = kotlin.math.ceil(linkUpstreamKbps.toDouble() / 1024.0).toInt()
-
-            ncs["dn"] = linkDownstreamMbps
-            ncs["up"] = linkUpstreamMbps
-        }
-
+        // ds/us (network speed) block
         val currentRxBytes = TrafficStats.getTotalRxBytes()
         val currentTxBytes = TrafficStats.getTotalTxBytes()
         val currentTimestamp = System.currentTimeMillis()
-
         var downloadSpeedMbps = 0.0
         var uploadSpeedMbps = 0.0
-
         if (lastTrafficStatsTimestamp > 0 && currentTimestamp > lastTrafficStatsTimestamp) {
             val deltaRxBytes = currentRxBytes - lastRxBytes
             val deltaTxBytes = currentTxBytes - lastTxBytes
             val deltaTimeSeconds = (currentTimestamp - lastTrafficStatsTimestamp) / 1000.0
-
             if (deltaTimeSeconds > 0) {
                 downloadSpeedMbps = (deltaRxBytes * 8.0) / (1024 * 1024) / deltaTimeSeconds
                 uploadSpeedMbps = (deltaTxBytes * 8.0) / (1024 * 1024) / deltaTimeSeconds
             }
         }
-
         lastRxBytes = currentRxBytes
         lastTxBytes = currentTxBytes
         lastTrafficStatsTimestamp = currentTimestamp
-
         val roundedDownloadSpeedMbps = (downloadSpeedMbps / 0.1).roundToInt() * 0.1
         val roundedUploadSpeedMbps = (uploadSpeedMbps / 0.1).roundToInt() * 0.1
+        dataMap["ds"] = String.format(Locale.US, "%.1f", roundedDownloadSpeedMbps).toDouble()
+        dataMap["us"] = String.format(Locale.US, "%.1f", roundedUploadSpeedMbps).toDouble()
 
-        // Для интерфейса всегда отображаем ds и us
-        ncs["ds"] = String.format(Locale.US, "%.1f", roundedDownloadSpeedMbps).toDouble()
-        ncs["us"] = String.format(Locale.US, "%.1f", roundedUploadSpeedMbps).toDouble()
-
-        dataMap["ncs"] = ncs
+        // ncs block (только dn, up)
+        val activeNetwork = connectivityManager.activeNetwork
+        val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+        if (networkCapabilities != null) {
+            val linkDownstreamKbps = networkCapabilities.linkDownstreamBandwidthKbps
+            val linkUpstreamKbps = networkCapabilities.linkUpstreamBandwidthKbps
+            val linkDownstreamMbps = kotlin.math.ceil(linkDownstreamKbps.toDouble() / 1024.0).toInt()
+            val linkUpstreamMbps = kotlin.math.ceil(linkUpstreamKbps.toDouble() / 1024.0).toInt()
+            dataMap["dn"] = linkDownstreamMbps
+            dataMap["up"] = linkUpstreamMbps
+        }
 
         val gsonPretty = GsonBuilder().setPrettyPrinting().create()
         val jsonString = gsonPretty.toJson(dataMap)
-
         latestJsonData = jsonString
         val dataIntent = Intent("com.example.hoarder.DATA_UPDATE")
         dataIntent.putExtra("jsonString", jsonString)
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(dataIntent)
     }
 
-    private fun isSignificantlyChanged(current: Double?, previous: Double?, threshold: Double): Boolean {
-        if (current == null && previous == null) return false
-        if (current == null || previous == null) return true
-        if (previous == 0.0) return current != 0.0
-        return kotlin.math.abs((current - previous) / previous) > threshold
-    }
-
     private fun generateJsonToSend(currentFullJson: String): Pair<String?, Boolean> {
         val currentTimeMs = System.currentTimeMillis()
-
         if (lastSuccessfullyUploadedJson == null) {
             Log.d("HoarderService", "Sending full JSON data: $currentFullJson")
             lastTimeDrivenDeviceInfoSentMs = currentTimeMs
@@ -630,144 +591,101 @@ class BackgroundService : Service() {
             lastTimeDrivenDownloadSpeedSentMs = currentTimeMs
             return Pair(currentFullJson.replace("\"device_id\"", "\"id\""), false)
         }
-
         val currentDataTree = com.google.gson.JsonParser.parseString(currentFullJson.replace("\"device_id\"", "\"id\"")).asJsonObject
         val lastDataTree = com.google.gson.JsonParser.parseString(lastSuccessfullyUploadedJson?.replace("\"device_id\"", "\"id\"")).asJsonObject
-
         if (currentDataTree == lastDataTree) {
             Log.d("HoarderService", "Data is identical to last successful upload, skipping.")
             return Pair(null, false)
         }
-
         val delta = com.google.gson.JsonObject()
         var significantChangeMadeToDelta = false
 
         // id всегда отправляется
         currentDataTree.get("id")?.let { delta.add("id", it) }
 
-        // DEV (device info) - только изменившиеся поля
-        val currentDeviceInfo = currentDataTree.getAsJsonObject("dev")
-        val lastDeviceInfo = lastDataTree.getAsJsonObject("dev")
-        if (currentDeviceInfo != null) {
-            val devDelta = com.google.gson.JsonObject()
-            val fields = listOf("h", "m", "dt", "n", "tz")
-            for (field in fields) {
-                val cur = currentDeviceInfo.get(field)
-                val prev = lastDeviceInfo?.get(field)
-                if (cur != prev) {
-                    devDelta.add(field, cur)
-                }
-            }
-            if (devDelta.size() > 0) {
-                delta.add("dev", devDelta)
-                significantChangeMadeToDelta = true
-                lastTimeDrivenDeviceInfoSentMs = currentTimeMs
-            }
-        }
-
-        // BAT (battery info) - только изменившиеся поля
-        val currentBatteryInfo = currentDataTree.getAsJsonObject("bat")
-        val lastBatteryInfo = lastDataTree.getAsJsonObject("bat")
-        if (currentBatteryInfo != null) {
-            val batDelta = com.google.gson.JsonObject()
-            val fields = listOf("perc", "stat", "cap")
-            for (field in fields) {
-                val cur = currentBatteryInfo.get(field)
-                val prev = lastBatteryInfo?.get(field)
-                if (cur != prev) {
-                    batDelta.add(field, cur)
-                }
-            }
-            if (batDelta.size() > 0) {
-                delta.add("bat", batDelta)
-                significantChangeMadeToDelta = true
-                lastTimeDrivenBatteryInfoSentMs = currentTimeMs
-            }
-        }
-
-        // GPS - только изменившиеся поля
-        val currentGps = currentDataTree.getAsJsonObject("gps")
-        val lastGps = lastDataTree.getAsJsonObject("gps")
-        if (currentGps != null) {
-            val gpsDelta = com.google.gson.JsonObject()
-            val fields = listOf("lat", "lon", "alt", "acc", "bear", "spd")
-            for (field in fields) {
-                val cur = currentGps.get(field)
-                val prev = lastGps?.get(field)
-                if (cur != prev) {
-                    gpsDelta.add(field, cur)
-                }
-            }
-            if (gpsDelta.size() > 0) {
-                delta.add("gps", gpsDelta)
+        // dev fields
+        for (field in listOf("n", "dt", "h", "m", "tz")) {
+            val cur = currentDataTree.get(field)
+            val prev = lastDataTree.get(field)
+            if (cur != prev) {
+                delta.add(field, cur)
                 significantChangeMadeToDelta = true
             }
         }
 
-        // WIFI - только изменившиеся поля
-        val currentWifi = currentDataTree.getAsJsonObject("wifi")
-        val lastWifi = lastDataTree.getAsJsonObject("wifi")
-        if (currentWifi != null) {
-            val wifiDelta = com.google.gson.JsonObject()
-            val fields = listOf("ssid")
-            for (field in fields) {
-                val cur = currentWifi.get(field)
-                val prev = lastWifi?.get(field)
-                if (cur != prev) {
-                    wifiDelta.add(field, cur)
-                }
-            }
-            if (wifiDelta.size() > 0) {
-                delta.add("wifi", wifiDelta)
+        // bat fields
+        for (field in listOf("perc", "stat", "cap")) {
+            val cur = currentDataTree.get(field)
+            val prev = lastDataTree.get(field)
+            if (cur != prev) {
+                delta.add(field, cur)
                 significantChangeMadeToDelta = true
             }
         }
 
-        // NET (mobile/cell info) - только изменившиеся поля, все изменённые вместе, но не весь блок
-        val currentMobile = currentDataTree.getAsJsonObject("net")
-        val lastMobile = lastDataTree.getAsJsonObject("net")
-        if (currentMobile != null) {
-            val netDelta = com.google.gson.JsonObject()
-            val fields = listOf("op", "nt", "ci")
-            for (field in fields) {
-                val cur = currentMobile.get(field)
-                val prev = lastMobile?.get(field)
-                if (cur != prev) {
-                    netDelta.add(field, cur)
-                }
-            }
-            if (netDelta.size() > 0) {
-                delta.add("net", netDelta)
+        // gps fields
+        for (field in listOf("lat", "lon", "alt", "acc", "bear", "spd")) {
+            val cur = currentDataTree.get(field)
+            val prev = lastDataTree.get(field)
+            if (cur != prev) {
+                delta.add(field, cur)
                 significantChangeMadeToDelta = true
             }
         }
 
-        // NCS (network connectivity state) - только изменившиеся поля
-        val currentNetState = currentDataTree.getAsJsonObject("ncs")
-        val lastNetState = lastDataTree.getAsJsonObject("ncs")
-        if (currentNetState != null) {
-            val ncsDelta = com.google.gson.JsonObject()
-            val fields = listOf("conn", "dn", "up", "ds", "us")
-            for (field in fields) {
-                var cur = currentNetState.get(field)
-                val prev = lastNetState?.get(field)
-                // Если ds/us < 0.3, отправлять дельту 0
-                if ((field == "ds" || field == "us") && cur != null && cur.isJsonPrimitive && cur.asDouble < 0.3) {
-                    cur = com.google.gson.JsonPrimitive(0.0)
-                }
-                if (cur != prev) {
-                    ncsDelta.add(field, cur)
-                }
+        // net fields (cell info) - каждый отдельно
+        for (field in listOf("op", "nt", "ci", "tac", "mcc", "mnc", "rssi")) {
+            val cur = currentDataTree.get(field)
+            val prev = lastDataTree.get(field)
+            if (cur != prev) {
+                delta.add(field, cur)
+                significantChangeMadeToDelta = true
             }
-            if (ncsDelta.size() > 0) {
-                delta.add("ncs", ncsDelta)
+        }
+
+        // wifi ssid
+        val curSsid = currentDataTree.get("ssid")
+        val prevSsid = lastDataTree.get("ssid")
+        if (curSsid != prevSsid) {
+            delta.add("ssid", curSsid)
+            significantChangeMadeToDelta = true
+        }
+
+        // ds/us
+        val dsCur = currentDataTree.get("ds")
+        val dsPrev = lastDataTree.get("ds")
+        var dsSend = dsCur
+        if (dsCur != null && dsCur.isJsonPrimitive && dsCur.asDouble < 0.3) {
+            dsSend = com.google.gson.JsonPrimitive(0.0)
+        }
+        if (dsSend != dsPrev) {
+            delta.add("ds", dsSend)
+            significantChangeMadeToDelta = true
+        }
+        val usCur = currentDataTree.get("us")
+        val usPrev = lastDataTree.get("us")
+        var usSend = usCur
+        if (usCur != null && usCur.isJsonPrimitive && usCur.asDouble < 0.3) {
+            usSend = com.google.gson.JsonPrimitive(0.0)
+        }
+        if (usSend != usPrev) {
+            delta.add("us", usSend)
+            significantChangeMadeToDelta = true
+        }
+
+        // ncs fields (dn, up)
+        for (field in listOf("dn", "up")) {
+            val cur = currentDataTree.get(field)
+            val prev = lastDataTree.get(field)
+            if (cur != prev) {
+                delta.add(field, cur)
                 significantChangeMadeToDelta = true
             }
         }
 
         // Прочие ключи верхнего уровня (если есть)
         for (key in currentDataTree.keySet()) {
-            if (key == "id" || key == "dev" || key == "bat" || key == "gps" || key == "wifi" || key == "net" || key == "ncs") continue
+            if (key in listOf("id", "n", "dt", "h", "m", "tz", "perc", "stat", "cap", "lat", "lon", "alt", "acc", "bear", "spd", "op", "nt", "ci", "tac", "mcc", "mnc", "rssi", "ssid", "ds", "us", "dn", "up")) continue
             val currentValue = currentDataTree.get(key)
             val lastValue = lastDataTree.get(key)
             if (currentValue != lastValue) {
@@ -775,7 +693,6 @@ class BackgroundService : Service() {
                 significantChangeMadeToDelta = true
             }
         }
-
         // Удалённые ключи (если что-то исчезло)
         for (key in lastDataTree.keySet()) {
             if (!currentDataTree.has(key) && key != "id") {
@@ -783,7 +700,6 @@ class BackgroundService : Service() {
                 significantChangeMadeToDelta = true
             }
         }
-
         if (!significantChangeMadeToDelta && delta.size() <= 1) {
             Log.d("HoarderService", "Delta effectively empty after throttling. Skipping.")
             return Pair(null, false)
