@@ -407,11 +407,14 @@ class BackgroundService : Service() {
         dataMap["dt"] = dtString // <-- всегда строка!
         val timeZone = TimeZone.getDefault()
         val currentOffsetMillis = timeZone.getOffset(currentDateTime.time)
-        val hoursOffset = currentOffsetMillis / (1000 * 60 * 60)
-        val gmtOffsetString = if (hoursOffset >= 0) {
-            "GMT+$hoursOffset"
+        val totalMinutes = currentOffsetMillis / (1000 * 60)
+        val hoursOffset = totalMinutes / 60
+        val minutesOffset = kotlin.math.abs(totalMinutes % 60)
+        val gmtOffsetString = if (minutesOffset == 0) {
+            if (hoursOffset >= 0) "GMT+$hoursOffset" else "GMT$hoursOffset"
         } else {
-            "GMT$hoursOffset"
+            val sign = if (hoursOffset >= 0) "+" else "-"
+            "GMT$sign${kotlin.math.abs(hoursOffset)}:${String.format("%02d", minutesOffset)}"
         }
         dataMap["tz"] = gmtOffsetString
 
