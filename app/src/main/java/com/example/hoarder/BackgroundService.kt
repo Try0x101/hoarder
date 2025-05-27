@@ -394,13 +394,17 @@ class BackgroundService : Service() {
 
         // dev block
         val currentDateTime = Date()
-        val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val cal = java.util.Calendar.getInstance()
         cal.time = currentDateTime
         dataMap["n"] = Build.MODEL
-        dataMap["dt"] = dateFormatter.format(currentDateTime)
-        dataMap["h"] = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        dataMap["m"] = cal.get(java.util.Calendar.MINUTE)
+        // dt как строка DD.MM.YYYY
+        val dtString = String.format(
+            "%02d.%02d.%04d",
+            cal.get(java.util.Calendar.DAY_OF_MONTH),
+            cal.get(java.util.Calendar.MONTH) + 1,
+            cal.get(java.util.Calendar.YEAR)
+        )
+        dataMap["dt"] = dtString // <-- всегда строка!
         val timeZone = TimeZone.getDefault()
         val currentOffsetMillis = timeZone.getOffset(currentDateTime.time)
         val hoursOffset = currentOffsetMillis / (1000 * 60 * 60)
@@ -521,11 +525,11 @@ class BackgroundService : Service() {
                 }
             }
             if (!found) {
-                dataMap["ci"] = "unavail"
-                dataMap["tac"] = "unavail"
-                dataMap["mcc"] = "unavail"
-                dataMap["mnc"] = "unavail"
-                dataMap["rssi"] = "unavail"
+                dataMap["ci"] = "N/A"
+                dataMap["tac"] = "N/A"
+                dataMap["mcc"] = "N/A"
+                dataMap["mnc"] = "N/A"
+                dataMap["rssi"] = "N/A"
             }
         } catch (e: SecurityException) {
             dataMap["stat"] = "No permission"
@@ -580,132 +584,84 @@ class BackgroundService : Service() {
     }
 
     private fun generateJsonToSend(currentFullJson: String): Pair<String?, Boolean> {
-        val currentTimeMs = System.currentTimeMillis()
         if (lastSuccessfullyUploadedJson == null) {
-            Log.d("HoarderService", "Sending full JSON data: $currentFullJson")
-            lastTimeDrivenDeviceInfoSentMs = currentTimeMs
-            lastTimeDrivenBatteryInfoSentMs = currentTimeMs
-            lastTimeDrivenWifiRssiSentMs = currentTimeMs
-            lastTimeDrivenMobileRssiSentMs = currentTimeMs
-            lastTimeDrivenLinkRatesSentMs = currentTimeMs
-            lastTimeDrivenDownloadSpeedSentMs = currentTimeMs
-            return Pair(currentFullJson.replace("\"device_id\"", "\"id\""), false)
+            return Pair(currentFullJson, false)
         }
-        val currentDataTree = com.google.gson.JsonParser.parseString(currentFullJson.replace("\"device_id\"", "\"id\"")).asJsonObject
-        val lastDataTree = com.google.gson.JsonParser.parseString(lastSuccessfullyUploadedJson?.replace("\"device_id\"", "\"id\"")).asJsonObject
-        if (currentDataTree == lastDataTree) {
-            Log.d("HoarderService", "Data is identical to last successful upload, skipping.")
-            return Pair(null, false)
-        }
-        val delta = com.google.gson.JsonObject()
-        var significantChangeMadeToDelta = false
+        try {
+            val type = object : com.google.gson.reflect.TypeToken<Map<String, Any?>>() {}.type
+            val prev = gson.fromJson<Map<String, Any?>>(lastSuccessfullyUploadedJson, type)
+            val curr = gson.fromJson<Map<String, Any?>>(currentFullJson, type)
+            val delta = mutableMapOf<String, Any?>()
 
-        // id всегда отправляется
-        currentDataTree.get("id")?.let { delta.add("id", it) }
-
-        // dev fields
-        for (field in listOf("n", "dt", "h", "m", "tz")) {
-            val cur = currentDataTree.get(field)
-            val prev = lastDataTree.get(field)
-            if (cur != prev) {
-                delta.add(field, cur)
-                significantChangeMadeToDelta = true
+            // Жёстко контролируем формат dt: всегда строка DD.MM.YYYY
+            fun normalizeDt(dt: Any?): String {
+                return when (dt) {
+                    is String -> {
+                        val regex = Regex("""\d{2}\.\d{2}\.\d{4}""")
+                        if (regex.matches(dt)) dt
+                        else try {
+                            val longVal = dt.toLongOrNull()
+                            if (longVal != null) {
+                                val cal = java.util.Calendar.getInstance()
+                                cal.timeInMillis = longVal
+                                String.format(
+                                    "%02d.%02d.%04d",
+                                    cal.get(java.util.Calendar.DAY_OF_MONTH),
+                                    cal.get(java.util.Calendar.MONTH) + 1,
+                                    cal.get(java.util.Calendar.YEAR)
+                                )
+                            } else dt
+                        } catch (_: Exception) { dt }
+                    }
+                    is Number -> {
+                        val cal = java.util.Calendar.getInstance()
+                        cal.timeInMillis = dt.toLong()
+                        String.format(
+                            "%02d.%02d.%04d",
+                            cal.get(java.util.Calendar.DAY_OF_MONTH),
+                            cal.get(java.util.Calendar.MONTH) + 1,
+                            cal.get(java.util.Calendar.YEAR)
+                        )
+                    }
+                    else -> ""
+                }
             }
-        }
 
-        // bat fields
-        for (field in listOf("perc", "stat", "cap")) {
-            val cur = currentDataTree.get(field)
-            val prev = lastDataTree.get(field)
-            if (cur != prev) {
-                delta.add(field, cur)
-                significantChangeMadeToDelta = true
+            for ((k, v) in curr) {
+                if (k == "dt") {
+                    val currDt = normalizeDt(v)
+                    val prevDt = normalizeDt(prev[k])
+                    if (currDt != prevDt) {
+                        delta[k] = currDt
+                    }
+                } else if (k == "ds" || k == "us") {
+                    val currVal = (v as? Number)?.toDouble() ?: 0.0
+                    val prevVal = (prev[k] as? Number)?.toDouble() ?: 0.0
+                    val currNorm = if (currVal < 0.3) 0.0 else currVal
+                    val prevNorm = if (prevVal < 0.3) 0.0 else prevVal
+                    if (currNorm != prevNorm) {
+                        delta[k] = currNorm
+                    }
+                } else {
+                    if (!prev.containsKey(k) || prev[k] != v) {
+                        delta[k] = v
+                    }
+                }
             }
-        }
 
-        // gps fields
-        for (field in listOf("lat", "lon", "alt", "acc", "bear", "spd")) {
-            val cur = currentDataTree.get(field)
-            val prev = lastDataTree.get(field)
-            if (cur != prev) {
-                delta.add(field, cur)
-                significantChangeMadeToDelta = true
+            // Всегда добавляем id из текущего JSON, даже если не изменился
+            if (curr.containsKey("id")) {
+                delta["id"] = curr["id"]
             }
-        }
 
-        // net fields (cell info) - каждый отдельно
-        for (field in listOf("op", "nt", "ci", "tac", "mcc", "mnc", "rssi")) {
-            val cur = currentDataTree.get(field)
-            val prev = lastDataTree.get(field)
-            if (cur != prev) {
-                delta.add(field, cur)
-                significantChangeMadeToDelta = true
-            }
+            // Если изменений нет (только id) — ничего не отправлять
+            if (delta.keys == setOf("id")) return Pair(null, true)
+            if (delta.isEmpty()) return Pair(null, true)
+            val deltaJson = gson.toJson(delta)
+            return Pair(deltaJson, true)
+        } catch (e: Exception) {
+            return Pair(currentFullJson, false)
         }
-
-        // wifi ssid
-        val curSsid = currentDataTree.get("ssid")
-        val prevSsid = lastDataTree.get("ssid")
-        if (curSsid != prevSsid) {
-            delta.add("ssid", curSsid)
-            significantChangeMadeToDelta = true
-        }
-
-        // ds/us
-        val dsCur = currentDataTree.get("ds")
-        val dsPrev = lastDataTree.get("ds")
-        var dsSend = dsCur
-        if (dsCur != null && dsCur.isJsonPrimitive && dsCur.asDouble < 0.3) {
-            dsSend = com.google.gson.JsonPrimitive(0.0)
-        }
-        if (dsSend != dsPrev) {
-            delta.add("ds", dsSend)
-            significantChangeMadeToDelta = true
-        }
-        val usCur = currentDataTree.get("us")
-        val usPrev = lastDataTree.get("us")
-        var usSend = usCur
-        if (usCur != null && usCur.isJsonPrimitive && usCur.asDouble < 0.3) {
-            usSend = com.google.gson.JsonPrimitive(0.0)
-        }
-        if (usSend != usPrev) {
-            delta.add("us", usSend)
-            significantChangeMadeToDelta = true
-        }
-
-        // ncs fields (dn, up)
-        for (field in listOf("dn", "up")) {
-            val cur = currentDataTree.get(field)
-            val prev = lastDataTree.get(field)
-            if (cur != prev) {
-                delta.add(field, cur)
-                significantChangeMadeToDelta = true
-            }
-        }
-
-        // Прочие ключи верхнего уровня (если есть)
-        for (key in currentDataTree.keySet()) {
-            if (key in listOf("id", "n", "dt", "h", "m", "tz", "perc", "stat", "cap", "lat", "lon", "alt", "acc", "bear", "spd", "op", "nt", "ci", "tac", "mcc", "mnc", "rssi", "ssid", "ds", "us", "dn", "up")) continue
-            val currentValue = currentDataTree.get(key)
-            val lastValue = lastDataTree.get(key)
-            if (currentValue != lastValue) {
-                delta.add(key, currentValue)
-                significantChangeMadeToDelta = true
-            }
-        }
-        // Удалённые ключи (если что-то исчезло)
-        for (key in lastDataTree.keySet()) {
-            if (!currentDataTree.has(key) && key != "id") {
-                delta.add(key, com.google.gson.JsonNull.INSTANCE)
-                significantChangeMadeToDelta = true
-            }
-        }
-        if (!significantChangeMadeToDelta && delta.size() <= 1) {
-            Log.d("HoarderService", "Delta effectively empty after throttling. Skipping.")
-            return Pair(null, false)
-        }
-        Log.d("HoarderService", "Sending delta JSON data: ${delta.toString()}")
-        return Pair(delta.toString(), true)
     }
 
     private fun uploadDataToServer(jsonStringToSend: String, originalFullJson: String, isDelta: Boolean) {
