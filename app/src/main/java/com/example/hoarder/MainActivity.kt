@@ -51,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var uploadMessageTextView: TextView
     private lateinit var serverIpPortEditText: EditText
     private lateinit var saveServerIpButton: Button
+    private lateinit var serverUploadHeader: LinearLayout
+    private lateinit var serverUploadContent: LinearLayout
 
     private val PREFS_NAME = "HoarderPrefs"
     private val KEY_FIRST_LAUNCH = "isFirstLaunch"
@@ -102,6 +104,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun displayRawPrettyPrintData(jsonString: String) {
+        try {
+            val jsonElement = JsonParser.parseString(jsonString)
+            val prettyJson = gson.toJson(jsonElement)
+            dataTextView.text = prettyJson
+        } catch (e: Exception) {
+            dataTextView.text = "Error formatting JSON: ${e.message}"
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+        val pre = "KMGTPE"[exp - 1]
+        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -126,309 +145,189 @@ class MainActivity : AppCompatActivity() {
         uploadMessageTextView = findViewById(R.id.uploadMessageTextView)
         serverIpPortEditText = findViewById(R.id.serverIpPortEditText)
         saveServerIpButton = findViewById(R.id.saveServerIpButton)
+        serverUploadHeader = findViewById(R.id.serverUploadHeader)
+        serverUploadContent = findViewById(R.id.serverUploadContent)
 
         sharedPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        val isFirstLaunch = sharedPrefs.getBoolean(KEY_FIRST_LAUNCH, true)
+        // Initialize switches and UI state
+        setupUIComponents()
+        setupClickListeners()
+        checkAndRequestPermissions()
+        startBackgroundService()
 
-        if (isFirstLaunch) {
-            sharedPrefs.edit().putBoolean(KEY_FIRST_LAUNCH, false).apply()
-            dataCollectionSwitch.isChecked = true
-            serverUploadSwitch.isChecked = false
-            sharedPrefs.edit().putBoolean(KEY_COLLECTION_TOGGLE_STATE, true).apply()
-            sharedPrefs.edit().putBoolean(KEY_UPLOAD_TOGGLE_STATE, false).apply()
-            sharedPrefs.edit().putString(KEY_SERVER_IP_PORT, "").apply()
-        } else {
-            dataCollectionSwitch.isChecked = sharedPrefs.getBoolean(KEY_COLLECTION_TOGGLE_STATE, true)
-            serverUploadSwitch.isChecked = sharedPrefs.getBoolean(KEY_UPLOAD_TOGGLE_STATE, false)
+        // Register broadcast receivers
+        LocalBroadcastManager.getInstance(this).apply {
+            registerReceiver(dataReceiver, IntentFilter("com.example.hoarder.DATA_UPDATE"))
+            registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
         }
+    }
 
-        updateSwitchTint(dataCollectionSwitch, dataCollectionSwitch.isChecked)
-        updateSwitchTint(serverUploadSwitch, serverUploadSwitch.isChecked)
-        updateServerUploadTitle(serverUploadSwitch.isChecked)
-
-        val savedServerIpPort = sharedPrefs.getString(KEY_SERVER_IP_PORT, "")
-        serverIpPortEditText.setText(savedServerIpPort)
-        if (!serverUploadSwitch.isChecked) {
-            uploadedBytesTextView.text = "Uploaded: 0 B"
-            uploadMessageTextView.text = "Status: Paused\n"
-            uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
-        }
-
+    private fun setupUIComponents() {
+        // Expand touch area for switches
+        val touchRect = Rect()
         switchAndIconContainer.post {
-            val hitRect = Rect()
-            dataCollectionSwitch.getHitRect(hitRect)
-            val expandAmount = 100
-            hitRect.left -= expandAmount
-            hitRect.top -= expandAmount
-            hitRect.right += expandAmount
-            hitRect.bottom += expandAmount
-            switchAndIconContainer.touchDelegate = TouchDelegate(hitRect, dataCollectionSwitch)
+            switchAndIconContainer.getHitRect(touchRect)
+            touchRect.top -= 100
+            touchRect.bottom += 100
+            touchRect.left -= 100
+            touchRect.right += 100
+            (switchAndIconContainer.parent as View).touchDelegate = TouchDelegate(touchRect, switchAndIconContainer)
         }
 
-        findViewById<LinearLayout>(R.id.serverUploadSwitchContainer).post {
-            val hitRect = Rect()
-            serverUploadSwitch.getHitRect(hitRect)
-            val expandAmount = 100
-            hitRect.left -= expandAmount
-            hitRect.top -= expandAmount
-            hitRect.right += expandAmount
-            hitRect.bottom += expandAmount
-            findViewById<LinearLayout>(R.id.serverUploadSwitchContainer).touchDelegate = TouchDelegate(hitRect, serverUploadSwitch)
-        }
+        // Load saved states
+        val isCollectionEnabled = sharedPrefs.getBoolean(KEY_COLLECTION_TOGGLE_STATE, true)
+        val isUploadEnabled = sharedPrefs.getBoolean(KEY_UPLOAD_TOGGLE_STATE, false)
+        val savedServerIpPort = sharedPrefs.getString(KEY_SERVER_IP_PORT, "")
 
-
+        dataCollectionSwitch.isChecked = isCollectionEnabled
+        serverUploadSwitch.isChecked = isUploadEnabled
+        serverIpPortEditText.setText(savedServerIpPort)
+        
+        // Set initial active/inactive status
+        rawDataTitleTextView.text = if (isCollectionEnabled) "Json data (Active)" else "Json data (Inactive)"
+        serverUploadTitleTextView.text = if (isUploadEnabled) "Server Upload (Active)" else "Server Upload (Inactive)"
+        
+        // Initially hide content sections
         rawDataContent.visibility = View.GONE
-        dataTextView.text = "Data: Collapsed to save resources."
+        serverUploadContent.visibility = View.GONE
+    }
 
+    private fun setupClickListeners() {
         rawDataHeader.setOnClickListener {
             if (rawDataContent.visibility == View.GONE) {
                 rawDataContent.visibility = View.VISIBLE
-                displayRawPrettyPrintData(latestJsonData)
+                latestJsonData?.let { jsonString -> displayRawPrettyPrintData(jsonString) }
             } else {
                 rawDataContent.visibility = View.GONE
-                dataTextView.text = "Data: Collapsed to save resources."
+            }
+        }
+
+        serverUploadHeader.setOnClickListener {
+            if (serverUploadContent.visibility == View.GONE) {
+                serverUploadContent.visibility = View.VISIBLE
+            } else {
+                serverUploadContent.visibility = View.GONE
             }
         }
 
         dataCollectionSwitch.setOnCheckedChangeListener { _, isChecked ->
-            updateRawDataTitle(isChecked)
             sharedPrefs.edit().putBoolean(KEY_COLLECTION_TOGGLE_STATE, isChecked).apply()
-            updateSwitchTint(dataCollectionSwitch, isChecked)
+            rawDataTitleTextView.text = if (isChecked) "Json data (Active)" else "Json data (Inactive)"
             if (isChecked) {
-                sendCommandToService(BackgroundService.ACTION_START_COLLECTION)
-                if (rawDataContent.visibility == View.VISIBLE) {
-                    displayRawPrettyPrintData(latestJsonData)
-                } else {
-                    dataTextView.text = "Data: Collecting in background (card collapsed)."
-                }
+                LocalBroadcastManager.getInstance(this)
+                    .sendBroadcast(Intent(BackgroundService.ACTION_START_COLLECTION))
             } else {
-                sendCommandToService(BackgroundService.ACTION_STOP_COLLECTION)
-                dataTextView.text = "Data: Collection paused by switch."
-            }
-        }
-
-        saveServerIpButton.setOnClickListener {
-            val ipPort = serverIpPortEditText.text.toString()
-            val parts = ipPort.split(":")
-            if (parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null && parts[1].toInt() > 0 && parts[1].toInt() <= 65535) {
-                sharedPrefs.edit()
-                    .putString(KEY_SERVER_IP_PORT, ipPort)
-                    .apply()
-                Toast.makeText(this, "Server IP:Port saved: $ipPort", Toast.LENGTH_SHORT).show()
-                serverIpPortEditText.clearFocus()
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-                imm.hideSoftInputFromWindow(serverIpPortEditText.windowToken, 0)
-
-                if (serverUploadSwitch.isChecked) {
-                    sendCommandToService(BackgroundService.ACTION_START_UPLOAD, ipPort)
-                }
-            } else {
-                Toast.makeText(this, "Invalid Server IP:Port format. Use e.g., 188.132.234.72:5000", Toast.LENGTH_LONG).show()
+                // Clear data when disabled
+                dataTextView.text = ""
+                latestJsonData = null
+                LocalBroadcastManager.getInstance(this)
+                    .sendBroadcast(Intent(BackgroundService.ACTION_STOP_COLLECTION))
             }
         }
 
         serverUploadSwitch.setOnCheckedChangeListener { _, isChecked ->
-            updateServerUploadTitle(isChecked)
             sharedPrefs.edit().putBoolean(KEY_UPLOAD_TOGGLE_STATE, isChecked).apply()
-            updateSwitchTint(serverUploadSwitch, isChecked)
             if (isChecked) {
-                val ipPort = serverIpPortEditText.text.toString()
-                val parts = ipPort.split(":")
-                if (parts.size == 2 && parts[0].isNotBlank() && parts[1].toIntOrNull() != null && parts[1].toInt() > 0 && parts[1].toInt() <= 65535) {
-                    sendCommandToService(BackgroundService.ACTION_START_UPLOAD, ipPort)
-                    uploadMessageTextView.text = "Status: Connecting...\n"
-                    uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
+                val serverIpPort = serverIpPortEditText.text.toString()
+                if (validateServerIpPort(serverIpPort)) {
+                    serverUploadTitleTextView.text = "Server Upload (Active)"
+                    val intent = Intent(BackgroundService.ACTION_START_UPLOAD).apply {
+                        putExtra("ipPort", serverIpPort)
+                    }
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
                 } else {
-                    Toast.makeText(this, "Server IP:Port is invalid/empty. Cannot start upload.", Toast.LENGTH_LONG).show()
                     serverUploadSwitch.isChecked = false
-                    uploadedBytesTextView.text = "Uploaded: 0 B"
-                    uploadMessageTextView.text = "Status: Error - Invalid IP:Port\n"
-                    uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_red))
+                    serverUploadTitleTextView.text = "Server Upload (Inactive)"
+                    Toast.makeText(this, "Invalid server IP:Port", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                sendCommandToService(BackgroundService.ACTION_STOP_UPLOAD)
-                uploadedBytesTextView.text = "Uploaded: 0 B"
-                uploadMessageTextView.text = "Status: Paused\n"
-                uploadMessageTextView.setTextColor(ContextCompat.getColor(this, R.color.amoled_light_gray))
+                serverUploadTitleTextView.text = "Server Upload (Inactive)"
+                LocalBroadcastManager.getInstance(this)
+                    .sendBroadcast(Intent(BackgroundService.ACTION_STOP_UPLOAD))
             }
         }
 
-        LocalBroadcastManager.getInstance(this).registerReceiver(dataReceiver, IntentFilter("com.example.hoarder.DATA_UPDATE"))
-        LocalBroadcastManager.getInstance(this).registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
-
-        requestPermissions()
+        saveServerIpButton.setOnClickListener {
+            val serverIpPort = serverIpPortEditText.text.toString()
+            if (validateServerIpPort(serverIpPort)) {
+                sharedPrefs.edit().putString(KEY_SERVER_IP_PORT, serverIpPort).apply()
+                Toast.makeText(this, "Server address saved", Toast.LENGTH_SHORT).show()
+                if (serverUploadSwitch.isChecked) {
+                    val intent = Intent(BackgroundService.ACTION_START_UPLOAD).apply {
+                        putExtra("ipPort", serverIpPort)
+                    }
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+                }
+            } else {
+                Toast.makeText(this, "Invalid server IP:Port format", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
-    override fun onResume() {
-        super.onResume()
-        updateRawDataTitle(dataCollectionSwitch.isChecked)
-        updateServerUploadTitle(serverUploadSwitch.isChecked)
-        updateSwitchTint(dataCollectionSwitch, dataCollectionSwitch.isChecked)
-        updateSwitchTint(serverUploadSwitch, serverUploadSwitch.isChecked)
-    }
-
-    override fun onPause() {
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(dataReceiver)
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(uploadStatusReceiver)
-    }
-
-    private fun requestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.READ_PHONE_STATE,
+    private fun checkAndRequestPermissions() {
+        val permissions = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.CHANGE_WIFI_STATE,
-            Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.INTERNET
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.POST_NOTIFICATIONS
         )
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            permissions.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            permissions.add(Manifest.permission.FOREGROUND_SERVICE_LOCATION)
-        }
-
-
-        val permissionsToRequest = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        val permissionsToRequest = mutableListOf<String>()
+        for (permission in permissions) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(permission)
+            }
         }
 
         if (permissionsToRequest.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSION_REQUEST_CODE)
-        } else {
-            handlePermissionsGranted()
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            handlePermissionsGranted()
-        }
-    }
-
-    private fun handlePermissionsGranted() {
-        val hasFineLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val hasCoarseLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val hasPhoneState = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
-        val hasWifiState = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_WIFI_STATE) == PackageManager.PERMISSION_GRANTED
-        val hasChangeWifiState = ContextCompat.checkSelfPermission(this, Manifest.permission.CHANGE_WIFI_STATE) == PackageManager.PERMISSION_GRANTED
-        val hasNetworkState = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED
-        val hasInternet = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
-        val hasNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        } else true
-        val hasForegroundServiceLocation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        } else true
-
-
-        val canStartService = (hasFineLocation || hasCoarseLocation) && hasPhoneState && hasWifiState && hasChangeWifiState && hasNotifications && hasForegroundServiceLocation && hasNetworkState && hasInternet
-
-        if (canStartService) {
-            startBackgroundService()
-
-            var displayMessage = ""
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val hasBackgroundLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-                if (!hasBackgroundLocation) {
-                    displayMessage += "For full location data collection, please go to App Settings -> Permissions -> Location and select 'Allow all the time'.\n"
-                }
-            }
-            if (displayMessage.isEmpty()) {
-                displayMessage = "Data collection enabled."
-            }
-            dataTextView.text = displayMessage
-        } else {
-            dataCollectionSwitch.isChecked = false
-            serverUploadSwitch.isChecked = false
-            updateRawDataTitle(false)
-            updateServerUploadTitle(false)
-            updateSwitchTint(dataCollectionSwitch, false)
-            updateSwitchTint(serverUploadSwitch, false)
-
-            var errorMessage = "Not all required permissions are granted. Some data may be unavailable.\n"
-            val missingCritical = mutableListOf<String>()
-
-            if (!(hasFineLocation || hasCoarseLocation)) missingCritical.add("Location (fine or coarse)")
-            if (!hasPhoneState) missingCritical.add("Phone State")
-            if (!hasWifiState) missingCritical.add("Wi-Fi State")
-            if (!hasChangeWifiState) missingCritical.add("Change Wi-Fi State")
-            if (!hasNetworkState) missingCritical.add("Network State")
-            if (!hasInternet) missingCritical.add("Internet")
-            if (!hasNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) missingCritical.add("Notifications")
-            if (!hasForegroundServiceLocation && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) missingCritical.add("Background Location Service")
-
-            if (missingCritical.isNotEmpty()) {
-                errorMessage += "Missing critical permissions: ${missingCritical.joinToString(", ")}"
-            } else {
-                errorMessage += "Check permissions in app settings."
-            }
-            dataTextView.text = errorMessage
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsToRequest.toTypedArray(),
+                PERMISSION_REQUEST_CODE
+            )
         }
     }
 
     private fun startBackgroundService() {
         val serviceIntent = Intent(this, BackgroundService::class.java)
-        ContextCompat.startForegroundService(this, serviceIntent)
-    }
-
-    private fun sendCommandToService(action: String, ipPort: String? = null) {
-        val intent = Intent(action)
-        ipPort?.let {
-            intent.putExtra("ipPort", it)
-        }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
-
-    private fun updateRawDataTitle(isActive: Boolean) {
-        val statusText = if (isActive) "(Active)" else "(Inactive)"
-        rawDataTitleTextView.text = "Json data $statusText"
-    }
-
-    private fun updateServerUploadTitle(isUploading: Boolean) {
-        val statusText = if (isUploading) "(Active)" else "(Inactive)"
-        serverUploadTitleTextView.text = "Server Upload $statusText"
-    }
-
-    private fun updateSwitchTint(switch: Switch, isChecked: Boolean) {
-        if (isChecked) {
-            switch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            switch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_true_blue)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
         } else {
-            switch.thumbTintList = ContextCompat.getColorStateList(this, R.color.amoled_white)
-            switch.trackTintList = ContextCompat.getColorStateList(this, R.color.amoled_medium_gray)
+            startService(serviceIntent)
         }
     }
 
-    private fun displayRawPrettyPrintData(jsonString: String?) {
-        if (jsonString == null) {
-            dataTextView.text = "Data: No data available yet."
-            return
+    private fun validateServerIpPort(ipPort: String): Boolean {
+        if (ipPort.isBlank()) return false
+        
+        val parts = ipPort.split(":")
+        if (parts.size != 2) return false
+
+        val ip = parts[0]
+        val port = parts[1].toIntOrNull()
+
+        // Basic IP address validation
+        val ipParts = ip.split(".")
+        if (ipParts.size != 4) return false
+
+        for (part in ipParts) {
+            val num = part.toIntOrNull()
+            if (num == null || num < 0 || num > 255) return false
         }
-        try {
-            val parsedJson = JsonParser.parseString(jsonString)
-            dataTextView.text = gson.toJson(parsedJson)
-        } catch (e: Exception) {
-            dataTextView.text = "Error parsing or pretty printing JSON: ${e.message}\nRaw JSON:\n$jsonString"
-        }
+
+        // Port validation
+        if (port == null || port <= 0 || port > 65535) return false
+
+        return true
     }
 
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024) return "$bytes B"
-        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
-        val pre = "KMGTPE"[exp - 1]
-        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
+    override fun onDestroy() {
+        super.onDestroy()
+        LocalBroadcastManager.getInstance(this).apply {
+            unregisterReceiver(dataReceiver)
+            unregisterReceiver(uploadStatusReceiver)
+        }
     }
 }

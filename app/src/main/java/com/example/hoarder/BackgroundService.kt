@@ -172,6 +172,12 @@ class BackgroundService : Service() {
                     if (isCollectionActive) {
                         isCollectionActive = false
                         handler.removeCallbacks(dataCollectionRunnable)
+                        // Clear the latest JSON data when collection is stopped
+                        latestJsonData = null
+                        // Send empty data update to clear the UI
+                        val dataIntent = Intent("com.example.hoarder.DATA_UPDATE")
+                        dataIntent.putExtra("jsonString", "")
+                        LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(dataIntent)
                     }
                 }
                 ACTION_START_UPLOAD -> {
@@ -386,10 +392,14 @@ class BackgroundService : Service() {
     }
 
     private fun collectAndSendAllData() {
+        if (!isCollectionActive) {
+            return
+        }
+
         val dataMap = mutableMapOf<String, Any>()
 
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        val shortId = deviceId.take(3)
+        val shortId = deviceId.take(4) // changed from take(3) to take(4)
         dataMap["id"] = shortId
 
         // dev block
@@ -563,7 +573,10 @@ class BackgroundService : Service() {
         lastTrafficStatsTimestamp = currentTimestamp
         val roundedDownloadSpeedMbps = (downloadSpeedMbps / 0.1).roundToInt() * 0.1
         val roundedUploadSpeedMbps = (uploadSpeedMbps / 0.1).roundToInt() * 0.1
-        dataMap["ds"] = String.format(Locale.US, "%.1f", roundedDownloadSpeedMbps).toDouble()
+
+        // Only include ds if it's more than 0.5, otherwise set to 0
+        val finalDownloadSpeed = if (roundedDownloadSpeedMbps > 0.5) roundedDownloadSpeedMbps else 0.0
+        dataMap["ds"] = String.format(Locale.US, "%.1f", finalDownloadSpeed).toDouble()
         dataMap["us"] = String.format(Locale.US, "%.1f", roundedUploadSpeedMbps).toDouble()
 
         // ncs block (только dn, up)
