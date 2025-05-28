@@ -214,7 +214,8 @@ class BackgroundService : Service() {
     }
 
     override fun onCreate() {
-        super.onCreate()
+        super.onCreate(
+        )
         handler = Handler(Looper.getMainLooper())
         batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -403,30 +404,7 @@ class BackgroundService : Service() {
         dataMap["id"] = shortId
 
         // dev block
-        val currentDateTime = Date()
-        val cal = java.util.Calendar.getInstance()
-        cal.time = currentDateTime
         dataMap["n"] = Build.MODEL
-        // dt как строка DD.MM.YYYY
-        val dtString = String.format(
-            "%02d.%02d.%04d",
-            cal.get(java.util.Calendar.DAY_OF_MONTH),
-            cal.get(java.util.Calendar.MONTH) + 1,
-            cal.get(java.util.Calendar.YEAR)
-        )
-        dataMap["dt"] = dtString // <-- всегда строка!
-        val timeZone = TimeZone.getDefault()
-        val currentOffsetMillis = timeZone.getOffset(currentDateTime.time)
-        val totalMinutes = currentOffsetMillis / (1000 * 60)
-        val hoursOffset = totalMinutes / 60
-        val minutesOffset = kotlin.math.abs(totalMinutes % 60)
-        val gmtOffsetString = if (minutesOffset == 0) {
-            if (hoursOffset >= 0) "GMT+$hoursOffset" else "GMT$hoursOffset"
-        } else {
-            val sign = if (hoursOffset >= 0) "+" else "-"
-            "GMT$sign${kotlin.math.abs(hoursOffset)}:${String.format("%02d", minutesOffset)}"
-        }
-        dataMap["tz"] = gmtOffsetString
 
         // bat block
         latestBatteryData?.let {
@@ -609,48 +587,8 @@ class BackgroundService : Service() {
             val curr = gson.fromJson<Map<String, Any?>>(currentFullJson, type)
             val delta = mutableMapOf<String, Any?>()
 
-            // Жёстко контролируем формат dt: всегда строка DD.MM.YYYY
-            fun normalizeDt(dt: Any?): String {
-                return when (dt) {
-                    is String -> {
-                        val regex = Regex("""\d{2}\.\d{2}\.\d{4}""")
-                        if (regex.matches(dt)) dt
-                        else try {
-                            val longVal = dt.toLongOrNull()
-                            if (longVal != null) {
-                                val cal = java.util.Calendar.getInstance()
-                                cal.timeInMillis = longVal
-                                String.format(
-                                    "%02d.%02d.%04d",
-                                    cal.get(java.util.Calendar.DAY_OF_MONTH),
-                                    cal.get(java.util.Calendar.MONTH) + 1,
-                                    cal.get(java.util.Calendar.YEAR)
-                                )
-                            } else dt
-                        } catch (_: Exception) { dt }
-                    }
-                    is Number -> {
-                        val cal = java.util.Calendar.getInstance()
-                        cal.timeInMillis = dt.toLong()
-                        String.format(
-                            "%02d.%02d.%04d",
-                            cal.get(java.util.Calendar.DAY_OF_MONTH),
-                            cal.get(java.util.Calendar.MONTH) + 1,
-                            cal.get(java.util.Calendar.YEAR)
-                        )
-                    }
-                    else -> ""
-                }
-            }
-
             for ((k, v) in curr) {
-                if (k == "dt") {
-                    val currDt = normalizeDt(v)
-                    val prevDt = normalizeDt(prev[k])
-                    if (currDt != prevDt) {
-                        delta[k] = currDt
-                    }
-                } else if (k == "ds" || k == "us") {
+                if (k == "ds" || k == "us") {
                     val currVal = (v as? Number)?.toDouble() ?: 0.0
                     val prevVal = (prev[k] as? Number)?.toDouble() ?: 0.0
                     val currNorm = if (currVal < 0.3) 0.0 else currVal
