@@ -7,13 +7,15 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-
     <color name="amoled_black">#000000</color>
     <color name="amoled_dark_gray">#1A1A1A</color>
     <color name="amoled_medium_gray">#333333</color>
     <color name="amoled_light_gray">#CCCCCC</color>
     <color name="amoled_white">#FFFFFF</color>
-    <color name="amoled_true_blue">#007BFF</color> <color name="amoled_green">#28A745</color> <color name="amoled_red">#DC3545</color> <color name="amoled_primary">#212121</color>
+    <color name="amoled_true_blue">#007BFF</color>
+    <color name="amoled_green">#28A745</color>
+    <color name="amoled_red">#DC3545</color>
+    <color name="amoled_primary">#212121</color>
     <color name="amoled_primary_variant">#000000</color>
     <color name="amoled_on_primary">#FFFFFF</color>
     <color name="amoled_secondary">#03DAC5</color>
@@ -25,7 +27,6 @@
     <color name="amoled_on_surface">#FFFFFF</color>
     <color name="amoled_error">#CF6679</color>
     <color name="amoled_on_error">#000000</color>
-
     <color name="amoled_text_primary">#FFFFFF</color>
     <color name="amoled_text_secondary">#CCCCCC</color>
     <color name="amoled_text_on_primary">#FFFFFF</color>

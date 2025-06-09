@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <style name="Theme.Hoarder" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/amoled_primary</item>
         <item name="colorPrimaryVariant">@color/amoled_primary_variant</item>
@@ -14,7 +13,6 @@
         <item name="android:textColorSecondary">@color/amoled_text_secondary</item>
         <item name="android:textColor">@color/amoled_white</item>
         <item name="android:navigationBarColor">@color/amoled_black</item>
-
         <item name="materialCardViewStyle">@style/Widget.MaterialComponents.CardView</item>
         <item name="cardBackgroundColor">@color/amoled_dark_gray</item>
         <item name="colorSurface">@color/amoled_dark_gray</item>
