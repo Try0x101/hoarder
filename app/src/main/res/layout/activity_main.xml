@@ -30,7 +30,6 @@
                         </LinearLayout>
                         <TextView android:id="@+id/uploadedBytesTextView" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Uploaded: 0 B" android:textSize="14sp" android:fontFamily="monospace" android:textColor="@color/amoled_light_gray" android:layout_marginBottom="4dp"/>
                         <TextView android:id="@+id/uploadMessageTextView" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="" android:textSize="14sp" android:fontFamily="monospace" android:textColor="@color/amoled_red" android:layout_marginBottom="4dp"/>
-                        <TextView android:id="@+id/queueStatsTextView" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Queue: checking..." android:textSize="12sp" android:fontFamily="monospace" android:textColor="@color/amoled_true_blue" android:clickable="true" android:focusable="true" android:background="?android:attr/selectableItemBackground" android:padding="4dp"/>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
