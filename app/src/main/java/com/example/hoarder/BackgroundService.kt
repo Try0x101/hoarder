@@ -106,11 +106,11 @@ class BackgroundService:Service(){
                 "com.example.hoarder.START_UPLOAD"->{
                     val ip2=i?.getStringExtra("ipPort")?.split(":")
                     if(ip2!=null&&ip2.size==2&&ip2[0].isNotBlank()&&ip2[1].toIntOrNull()!=null&&ip2[1].toInt()>0&&ip2[1].toInt()<=65535){
-                        ip=ip2[0];port=ip2[1].toInt();ua=true;lu=null;ls=null;tb=0L;su("Connecting","Attempting to connect...",tb);su2()
+                        ip=ip2[0];port=ip2[1].toInt();ua=true;lu=null;ls=null;su("Connecting","Attempting to connect...",tb);su2()
                     }else{ua=false;h.removeCallbacks(ur);su("Error","Invalid Server IP:Port for starting upload.",0L)}
                 }
                 "com.example.hoarder.STOP_UPLOAD"->{
-                    if(ua){ua=false;h.removeCallbacks(ur);tb=0L;lu=null;ls=null;su("Paused","Upload paused.",tb)}
+                    if(ua){ua=false;h.removeCallbacks(ur);tb=0L;sp.edit().putLong("totalUploadedBytes",0L).apply();lu=null;ls=null;su("Paused","Upload paused.",tb)}
                 }
             }
         }
@@ -150,9 +150,10 @@ class BackgroundService:Service(){
         val ct=mp.getBoolean("dataCollectionToggleState",true)
         val ut=mp.getBoolean("dataUploadToggleState",false)
         val sp2=mp.getString("serverIpPortAddress","")?.split(":")
+        tb=sp.getLong("totalUploadedBytes",0L)
         if(sp2!=null&&sp2.size==2&&sp2[0].isNotBlank()&&sp2[1].toIntOrNull()!=null){ip=sp2[0];port=sp2[1].toInt()}else{ip="";port=0}
         if(ct){if(!ca){ca=true;sd()}}else{ca=false;h.removeCallbacks(dr)}
-        if(ut&&ip.isNotBlank()&&port>0){ua=true;lu=null;ls=null;tb=0L;su("Connecting","Service (re)start, attempting to connect...",tb);su2()}else ua=false
+        if(ut&&ip.isNotBlank()&&port>0){ua=true;lu=null;ls=null;su("Connecting","Service (re)start, attempting to connect...",tb);su2()}else ua=false
         return START_STICKY
     }
     override fun onDestroy(){
@@ -312,6 +313,7 @@ class BackgroundService:Service(){
             if(rc==HttpURLConnection.HTTP_OK){
                 val r=uc.inputStream.bufferedReader().use{it.readText()}
                 tb+=cb.size.toLong()
+                sp.edit().putLong("totalUploadedBytes",tb).apply()
                 lu=of
                 su(if(id)"OK (Delta)"else"OK (Full)","Uploaded successfully.",tb)
                 Log.d("HoarderService","Sent compressed packet size: ${cb.size} bytes")
