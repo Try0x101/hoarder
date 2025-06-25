@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/hoarder/MainActivity.kt
 package com.example.hoarder
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -8,6 +9,8 @@ import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.TouchDelegate
 import android.view.View
 import android.widget.LinearLayout
@@ -57,6 +60,8 @@ class MainActivity:AppCompatActivity(){
     private lateinit var spd:Spinner
     private lateinit var spdInfo:TextView
     private lateinit var netInfo:TextView
+    private val handler = Handler(Looper.getMainLooper())
+
     private val dr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             i?.getStringExtra("jsonString")?.let{js->ld=js;if(rc.visibility==View.VISIBLE)dp(js)}
@@ -78,6 +83,20 @@ class MainActivity:AppCompatActivity(){
             }
         }
     }
+
+    private val permissionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i?.action == "com.example.hoarder.PERMISSIONS_REQUIRED") {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Location permissions required for this app to function properly",
+                    Toast.LENGTH_LONG
+                ).show()
+                cp()
+            }
+        }
+    }
+
     private fun dp(js:String){
         try{val je=JsonParser.parseString(js);val pj=g.toJson(je);dt.text=pj}catch(e:Exception){dt.text="Error formatting JSON: "+e.message}
     }
@@ -124,11 +143,67 @@ class MainActivity:AppCompatActivity(){
         scl()
         cp()
         ss()
+
         LocalBroadcastManager.getInstance(this).apply{
             registerReceiver(dr,IntentFilter("com.example.hoarder.DATA_UPDATE"))
             registerReceiver(usr,IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+            registerReceiver(permissionReceiver, IntentFilter("com.example.hoarder.PERMISSIONS_REQUIRED"))
+        }
+
+        // Run first install logic after everything is set up
+        handleFirstInstall()
+    }
+
+    private fun handleFirstInstall() {
+        val isFirstRun = sp.getBoolean("isFirstRun", true)
+
+        if (isFirstRun) {
+            // Set the flag to false so this won't run again
+            sp.edit().putBoolean("isFirstRun", false).apply()
+
+            // Make sure initial state of both toggles is off (regardless of saved preference)
+            if (ds.isChecked) {
+                ds.isChecked = false
+                sp.edit().putBoolean("dataCollectionToggleState", false).apply()
+                rt.text = "Json data (Inactive)"
+                LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_COLLECTION"))
+            }
+
+            if (us.isChecked) {
+                us.isChecked = false
+                sp.edit().putBoolean("dataUploadToggleState", false).apply()
+                ut.text = "Server Upload (Inactive)"
+                LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_UPLOAD"))
+            }
+
+            // After 2 seconds, enable data collection
+            handler.postDelayed({
+                if (!ds.isChecked) {
+                    ds.isChecked = true
+                    // The toggle change listener will handle the rest
+
+                    // After data collection is enabled, enable server upload if we have a valid IP
+                    handler.postDelayed({
+                        val ipPort = ue.text.toString()
+                        if (!us.isChecked && ipPort.isNotEmpty() && vip(ipPort)) {
+                            us.isChecked = true
+                            // The toggle change listener will handle the rest
+                        } else if (ipPort.isEmpty() || !vip(ipPort)) {
+                            // If we don't have a valid IP, set a default one
+                            val defaultIp = "127.0.0.1:5000"
+                            ue.setText(defaultIp)
+                            sp.edit().putString("serverIpPortAddress", defaultIp).apply()
+                            Toast.makeText(this@MainActivity, "Using default server address", Toast.LENGTH_SHORT).show()
+
+                            // Now enable the server upload
+                            us.isChecked = true
+                        }
+                    }, 1000) // 1 second after data collection
+                }
+            }, 2000) // 2 seconds after start
         }
     }
+
     private fun sgs(){
         val po=arrayOf("Maximum precision","20 m","50 m","100 m","500 m","1 km","10 km")
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
@@ -186,7 +261,6 @@ class MainActivity:AppCompatActivity(){
         val ps=when(cp){0->0;1->1;2->2;5->3;else->0}
         net.setSelection(ps)
 
-        // Set the initial information text
         updateNetworkInfoText(ps)
 
         net.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
@@ -194,7 +268,6 @@ class MainActivity:AppCompatActivity(){
                 val nv=when(pos){0->0;1->1;2->2;3->5;else->0}
                 sp.edit().putInt("networkPrecision",nv).apply()
 
-                // Update the information text
                 updateNetworkInfoText(pos)
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
@@ -220,7 +293,6 @@ class MainActivity:AppCompatActivity(){
         val ps = when(cp) {-1->0; 0->1; 1->2; 3->3; 5->4; 10->5; else->0}
         spd.setSelection(ps)
 
-        // Set the initial information text
         updateSpeedInfoText(ps)
 
         spd.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -228,7 +300,6 @@ class MainActivity:AppCompatActivity(){
                 val nv = when(pos) {0->-1; 1->0; 2->1; 3->3; 4->5; 5->10; else->-1}
                 sp.edit().putInt("speedPrecision", nv).apply()
 
-                // Update the information text
                 updateSpeedInfoText(pos)
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
@@ -286,7 +357,14 @@ class MainActivity:AppCompatActivity(){
         }
     }
     private fun cp(){
-        val p=arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.READ_PHONE_STATE,Manifest.permission.FOREGROUND_SERVICE,Manifest.permission.POST_NOTIFICATIONS)
+        val p=arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.FOREGROUND_SERVICE,
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.FOREGROUND_SERVICE_LOCATION
+        )
         val ptr=mutableListOf<String>()
         for(pe in p)if(ContextCompat.checkSelfPermission(this,pe)!=PackageManager.PERMISSION_GRANTED)ptr.add(pe)
         if(ptr.isNotEmpty())ActivityCompat.requestPermissions(this,ptr.toTypedArray(),100)
@@ -309,6 +387,11 @@ class MainActivity:AppCompatActivity(){
     }
     override fun onDestroy(){
         super.onDestroy()
-        LocalBroadcastManager.getInstance(this).apply{unregisterReceiver(dr);unregisterReceiver(usr)}
+        LocalBroadcastManager.getInstance(this).apply{
+            unregisterReceiver(dr)
+            unregisterReceiver(usr)
+            unregisterReceiver(permissionReceiver)
+        }
+        handler.removeCallbacksAndMessages(null)
     }
 }

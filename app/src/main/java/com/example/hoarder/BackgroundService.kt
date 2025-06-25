@@ -1,4 +1,6 @@
+// app/src/main/java/com/example/hoarder/BackgroundService.kt
 package com.example.hoarder
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.BroadcastReceiver
+import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -32,6 +35,7 @@ import com.google.gson.GsonBuilder
 import java.util.Locale
 import android.util.Log
 import android.content.SharedPreferences
+import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -40,6 +44,7 @@ import java.util.zip.DeflaterOutputStream
 import java.nio.charset.StandardCharsets
 import kotlin.math.roundToInt
 import kotlin.math.*
+
 class BackgroundService:Service(){
     private lateinit var h:Handler
     private lateinit var dr:Runnable
@@ -139,11 +144,30 @@ class BackgroundService:Service(){
     }
     override fun onStartCommand(i:Intent?,f:Int,s:Int):Int{
         cn()
+
+        val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasForegroundLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
         val ni=Intent(this,MainActivity::class.java)
         val pi=PendingIntent.getActivity(this,0,ni,PendingIntent.FLAG_IMMUTABLE)
-        val n=NotificationCompat.Builder(applicationContext,"HoarderServiceChannel").setContentTitle(applicationContext.getString(R.string.app_name)).setContentText("Collecting device data in background...").setSmallIcon(R.mipmap.ic_launcher).setPriority(NotificationCompat.PRIORITY_HIGH).setContentIntent(pi).build()
-        startForeground(1,n)
-        sl()
+        val n=NotificationCompat.Builder(applicationContext,"HoarderServiceChannel")
+            .setContentTitle(applicationContext.getString(R.string.app_name))
+            .setContentText("Collecting device data in background...")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi)
+            .build()
+
+        if (hasLocationPermission && hasForegroundLocationPermission) {
+            startForeground(1,n)
+            sl()
+        } else {
+            Log.e("HoarderService", "Missing required permissions. Cannot start foreground service.")
+            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            return START_NOT_STICKY
+        }
+
         val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
         val ct=mp.getBoolean("dataCollectionToggleState",true)
         val ut=mp.getBoolean("dataUploadToggleState",false)
