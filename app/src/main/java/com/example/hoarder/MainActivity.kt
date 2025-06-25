@@ -33,6 +33,10 @@ import com.google.gson.JsonParser
 import android.content.SharedPreferences
 import android.widget.Toast
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import android.app.NotificationManager
+import android.app.NotificationChannel
+import androidx.core.app.NotificationCompat
 
 class MainActivity:AppCompatActivity(){
     private lateinit var dt:TextView
@@ -60,7 +64,21 @@ class MainActivity:AppCompatActivity(){
     private lateinit var spd:Spinner
     private lateinit var spdInfo:TextView
     private lateinit var netInfo:TextView
+    private lateinit var rssiInfo:TextView
+    private lateinit var battInfo:TextView
+    private lateinit var gpsInfo:TextView
     private val handler = Handler(Looper.getMainLooper())
+    private var pendingFirstRunInit = false
+    private var permissionsDialogActive = AtomicBoolean(false)
+
+    private val requiredPermissions = arrayOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.READ_PHONE_STATE,
+        Manifest.permission.FOREGROUND_SERVICE,
+        Manifest.permission.POST_NOTIFICATIONS,
+        Manifest.permission.FOREGROUND_SERVICE_LOCATION
+    )
 
     private val dr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
@@ -92,7 +110,7 @@ class MainActivity:AppCompatActivity(){
                     "Location permissions required for this app to function properly",
                     Toast.LENGTH_LONG
                 ).show()
-                cp()
+                requestNextPermission()
             }
         }
     }
@@ -133,7 +151,14 @@ class MainActivity:AppCompatActivity(){
         spd=findViewById(R.id.speedPrecisionSpinner)
         spdInfo=findViewById(R.id.speedPrecisionInfo)
         netInfo=findViewById(R.id.networkPrecisionInfo)
+        rssiInfo=findViewById(R.id.rssiPrecisionInfo)
+        battInfo=findViewById(R.id.batteryPrecisionInfo)
+        gpsInfo=findViewById(R.id.gpsPrecisionInfo)
         sp=getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
+
+        // Create silent notification channel immediately
+        createSilentNotificationChannel()
+
         sgs()
         srs()
         sbs()
@@ -141,8 +166,6 @@ class MainActivity:AppCompatActivity(){
         sss()
         su()
         scl()
-        cp()
-        ss()
 
         LocalBroadcastManager.getInstance(this).apply{
             registerReceiver(dr,IntentFilter("com.example.hoarder.DATA_UPDATE"))
@@ -150,108 +173,242 @@ class MainActivity:AppCompatActivity(){
             registerReceiver(permissionReceiver, IntentFilter("com.example.hoarder.PERMISSIONS_REQUIRED"))
         }
 
-        // Run first install logic after everything is set up
-        handleFirstInstall()
+        val isFirstRun = sp.getBoolean("isFirstRun", true)
+        if (isFirstRun) {
+            pendingFirstRunInit = true
+            if (areAllPermissionsGranted()) {
+                pendingFirstRunInit = false
+                handleFirstInstall()
+            } else {
+                requestNextPermission()
+            }
+        } else {
+            if (areAllPermissionsGranted()) {
+                ss()
+            } else {
+                requestNextPermission()
+            }
+        }
+    }
+
+    private fun createSilentNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            // Check if channel exists first
+            val existingChannel = notificationManager.getNotificationChannel("HoarderServiceChannel")
+
+            // Create or update the channel with silent settings
+            val channel = existingChannel ?: NotificationChannel(
+                "HoarderServiceChannel",
+                "Hoarder Service Channel",
+                NotificationManager.IMPORTANCE_MIN
+            )
+
+            // Configure for silent operation
+            channel.apply {
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
+                setSound(null, null)
+                description = "Silent background operation"
+            }
+
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun areAllPermissionsGranted(): Boolean {
+        for (permission in requiredPermissions) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun requestNextPermission() {
+        if (permissionsDialogActive.get()) {
+            return
+        }
+
+        val pendingPermissions = mutableListOf<String>()
+        for (permission in requiredPermissions) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                pendingPermissions.add(permission)
+            }
+        }
+
+        if (pendingPermissions.isEmpty()) {
+            if (pendingFirstRunInit) {
+                pendingFirstRunInit = false
+                handleFirstInstall()
+            } else {
+                ss()
+            }
+            return
+        }
+
+        permissionsDialogActive.set(true)
+        ActivityCompat.requestPermissions(this, pendingPermissions.toTypedArray(), 100)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        permissionsDialogActive.set(false)
+
+        if (requestCode == 100) {
+            if (areAllPermissionsGranted()) {
+                if (pendingFirstRunInit) {
+                    pendingFirstRunInit = false
+                    handleFirstInstall()
+                } else {
+                    ss()
+                }
+            } else {
+                Toast.makeText(this, "App requires all permissions to function properly", Toast.LENGTH_LONG).show()
+                handler.postDelayed({ requestNextPermission() }, 1000)
+            }
+        }
     }
 
     private fun handleFirstInstall() {
-        val isFirstRun = sp.getBoolean("isFirstRun", true)
+        sp.edit().putBoolean("isFirstRun", false).apply()
 
-        if (isFirstRun) {
-            // Set the flag to false so this won't run again
-            sp.edit().putBoolean("isFirstRun", false).apply()
+        // Force data collection to be ON by default
+        sp.edit().putBoolean("dataCollectionToggleState", true).apply()
+        ds.isChecked = true
+        rt.text = "Json data (Active)"
 
-            // Make sure initial state of both toggles is off (regardless of saved preference)
-            if (ds.isChecked) {
-                ds.isChecked = false
-                sp.edit().putBoolean("dataCollectionToggleState", false).apply()
-                rt.text = "Json data (Inactive)"
-                LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_COLLECTION"))
-            }
-
-            if (us.isChecked) {
-                us.isChecked = false
-                sp.edit().putBoolean("dataUploadToggleState", false).apply()
-                ut.text = "Server Upload (Inactive)"
-                LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_UPLOAD"))
-            }
-
-            // After 2 seconds, enable data collection
-            handler.postDelayed({
-                if (!ds.isChecked) {
-                    ds.isChecked = true
-                    // The toggle change listener will handle the rest
-
-                    // After data collection is enabled, enable server upload if we have a valid IP
-                    handler.postDelayed({
-                        val ipPort = ue.text.toString()
-                        if (!us.isChecked && ipPort.isNotEmpty() && vip(ipPort)) {
-                            us.isChecked = true
-                            // The toggle change listener will handle the rest
-                        } else if (ipPort.isEmpty() || !vip(ipPort)) {
-                            // If we don't have a valid IP, set a default one
-                            val defaultIp = "127.0.0.1:5000"
-                            ue.setText(defaultIp)
-                            sp.edit().putString("serverIpPortAddress", defaultIp).apply()
-                            Toast.makeText(this@MainActivity, "Using default server address", Toast.LENGTH_SHORT).show()
-
-                            // Now enable the server upload
-                            us.isChecked = true
-                        }
-                    }, 1000) // 1 second after data collection
-                }
-            }, 2000) // 2 seconds after start
+        // Set a default server if not already set
+        val currentIp = sp.getString("serverIpPortAddress", "")
+        if (currentIp.isNullOrBlank() || !vip(currentIp)) {
+            val defaultIp = "127.0.0.1:5000"
+            ue.setText(defaultIp)
+            sp.edit().putString("serverIpPortAddress", defaultIp).apply()
         }
+
+        // Force upload to be ON by default
+        sp.edit().putBoolean("dataUploadToggleState", true).apply()
+        us.isChecked = true
+        ut.text = "Server Upload (Active)"
+
+        // Ensure notification channel is silent
+        createSilentNotificationChannel()
+
+        // Start the service immediately
+        ss()
+
+        // Send broadcast to start collection and upload
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
+        LocalBroadcastManager.getInstance(this).sendBroadcast(
+            Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", ue.text.toString())
+        )
+
+        // Show a toast to let the user know the app is configured and closing
+        Toast.makeText(
+            this,
+            "Setup complete. App will run in background.",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        // Close the app after a short delay to allow the toast to be seen
+        handler.postDelayed({
+            finishAffinity() // This will close all activities in the app
+        }, 2000) // 2 second delay
     }
 
     private fun sgs(){
-        val po=arrayOf("Maximum precision","20 m","50 m","100 m","500 m","1 km","10 km")
+        val po=arrayOf("Smart GPS Precision", "Maximum precision","20 m","100 m","1 km","10 km")
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         gps.adapter=ad
-        val cp=sp.getInt("gpsPrecision",100)
-        val ps=when(cp){0->0;20->1;50->2;100->3;500->4;1000->5;10000->6;else->3}
+        val cp=sp.getInt("gpsPrecision",-1)
+        val ps=when(cp){-1->0; 0->1; 20->2; 100->3; 1000->4; 10000->5; else->0}
         gps.setSelection(ps)
+
+        updateGPSInfoText(ps)
+
         gps.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
             override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
-                val nv=when(pos){0->0;1->20;2->50;3->100;4->500;5->1000;6->10000;else->100}
+                val nv=when(pos){0->-1; 1->0; 2->20; 3->100; 4->1000; 5->10000; else->-1}
                 sp.edit().putInt("gpsPrecision",nv).apply()
+                updateGPSInfoText(pos)
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
         }
     }
+
+    private fun updateGPSInfoText(position: Int) {
+        if (position == 0) {
+            gpsInfo.text = "• If speed <4 km/h → round up to 1 km\n• If speed 4-40 km/h → round up to 20 m\n• If speed 40-140 km/h → round up to 100 m\n• If speed >140 km/h → round up to 1 km"
+            gpsInfo.visibility = View.VISIBLE
+        } else {
+            gpsInfo.visibility = View.GONE
+        }
+    }
+
     private fun srs(){
-        val po=arrayOf("Maximum precision","3 dBm","5 dBm","10 dBm")
+        val po=arrayOf("Smart RSSI Precision", "Maximum precision","3 dBm","5 dBm","10 dBm")
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         rssi.adapter=ad
-        val cp=sp.getInt("rssiPrecision",5)
-        val ps=when(cp){0->0;3->1;5->2;10->3;else->2}
+        val cp=sp.getInt("rssiPrecision",-1)
+        val ps=when(cp){-1->0; 0->1; 3->2; 5->3; 10->4; else->0}
         rssi.setSelection(ps)
+
+        updateRSSIInfoText(ps)
+
         rssi.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
             override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
-                val nv=when(pos){0->0;1->3;2->5;3->10;else->5}
+                val nv=when(pos){0->-1; 1->0; 2->3; 3->5; 4->10; else->-1}
                 sp.edit().putInt("rssiPrecision",nv).apply()
+                updateRSSIInfoText(pos)
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
         }
     }
+
+    private fun updateRSSIInfoText(position: Int) {
+        if (position == 0) {
+            rssiInfo.text = "• If signal worse than -110 dBm → show precise value\n• If signal worse than -90 dBm → round to nearest 5\n• If signal better than -90 dBm → round to nearest 10"
+            rssiInfo.visibility = View.VISIBLE
+        } else {
+            rssiInfo.visibility = View.GONE
+        }
+    }
+
     private fun sbs(){
-        val po=arrayOf("Maximum precision","1%","5%","10%")
+        val po=arrayOf("Smart Battery Precision", "Maximum precision","2%","5%","10%")
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         batt.adapter=ad
-        val cp=sp.getInt("batteryPrecision",5)
-        val ps=when(cp){0->0;1->1;5->2;10->3;else->2}
+        val cp=sp.getInt("batteryPrecision",-1)
+        val ps=when(cp){-1->0; 0->1; 2->2; 5->3; 10->4; else->0}
         batt.setSelection(ps)
+
+        updateBatteryInfoText(ps)
+
         batt.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
             override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
-                val nv=when(pos){0->0;1->1;2->5;3->10;else->5}
+                val nv=when(pos){0->-1; 1->0; 2->2; 3->5; 4->10; else->-1}
                 sp.edit().putInt("batteryPrecision",nv).apply()
+                updateBatteryInfoText(pos)
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
         }
     }
+
+    private fun updateBatteryInfoText(position: Int) {
+        if (position == 0) {
+            battInfo.text = "• If battery below 10% → show precise value\n• If battery 10-50% → round to nearest 5%\n• If battery above 50% → round to nearest 10%"
+            battInfo.visibility = View.VISIBLE
+        } else {
+            battInfo.visibility = View.GONE
+        }
+    }
+
     private fun sns(){
         val po=arrayOf("Smart Network Rounding","Round to 1 Mbps","Round to 2 Mbps","Round to 5 Mbps")
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
@@ -329,6 +486,7 @@ class MainActivity:AppCompatActivity(){
         rc.visibility=View.GONE
         uc2.visibility=View.GONE
     }
+
     private fun scl(){
         rh.setOnClickListener{
             if(rc.visibility==View.GONE){rc.visibility=View.VISIBLE;ld?.let{js->dp(js)}}else rc.visibility=View.GONE
@@ -356,23 +514,12 @@ class MainActivity:AppCompatActivity(){
             else Toast.makeText(this,"Invalid server IP:Port format",Toast.LENGTH_SHORT).show()
         }
     }
-    private fun cp(){
-        val p=arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.FOREGROUND_SERVICE,
-            Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.FOREGROUND_SERVICE_LOCATION
-        )
-        val ptr=mutableListOf<String>()
-        for(pe in p)if(ContextCompat.checkSelfPermission(this,pe)!=PackageManager.PERMISSION_GRANTED)ptr.add(pe)
-        if(ptr.isNotEmpty())ActivityCompat.requestPermissions(this,ptr.toTypedArray(),100)
-    }
+
     private fun ss(){
         val si=Intent(this,BackgroundService::class.java)
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)startForegroundService(si)else startService(si)
     }
+
     private fun vip(ip:String):Boolean{
         if(ip.isBlank())return false
         val p=ip.split(":")
@@ -385,6 +532,46 @@ class MainActivity:AppCompatActivity(){
         if(po==null||po<=0||po>65535)return false
         return true
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Ensure notification channel is still silent (some devices reset this)
+        createSilentNotificationChannel()
+
+        // If service is not running, restart it
+        if (areAllPermissionsGranted()) {
+            val serviceRunning = isServiceRunning(BackgroundService::class.java)
+            if (!serviceRunning) {
+                ss()
+                // Restore toggle states if needed
+                val dataCollectionEnabled = sp.getBoolean("dataCollectionToggleState", true)
+                val uploadEnabled = sp.getBoolean("dataUploadToggleState", true)
+
+                if (dataCollectionEnabled) {
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
+                }
+
+                if (uploadEnabled) {
+                    val ipPort = sp.getString("serverIpPortAddress", "127.0.0.1:5000") ?: "127.0.0.1:5000"
+                    if (vip(ipPort)) {
+                        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", ipPort))
+                    }
+                }
+            }
+        }
+    }
+
+    // Add this method to check if service is running
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
+    }
+
     override fun onDestroy(){
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).apply{

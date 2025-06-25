@@ -153,10 +153,13 @@ class BackgroundService:Service(){
         val pi=PendingIntent.getActivity(this,0,ni,PendingIntent.FLAG_IMMUTABLE)
         val n=NotificationCompat.Builder(applicationContext,"HoarderServiceChannel")
             .setContentTitle(applicationContext.getString(R.string.app_name))
-            .setContentText("Collecting device data in background...")
+            .setContentText("Running in background")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(pi)
+            .setOngoing(true)
+            .setSilent(true)
             .build()
 
         if (hasLocationPermission && hasForegroundLocationPermission) {
@@ -189,7 +192,16 @@ class BackgroundService:Service(){
     override fun onBind(i:Intent?):IBinder?=null
     private fun cn(){
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
-            val sc=NotificationChannel("HoarderServiceChannel","Hoarder Service Channel",NotificationManager.IMPORTANCE_HIGH)
+            val sc=NotificationChannel(
+                "HoarderServiceChannel",
+                "Hoarder Service Channel",
+                NotificationManager.IMPORTANCE_MIN
+            ).apply {
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
+            }
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(sc)
         }
     }
@@ -201,23 +213,43 @@ class BackgroundService:Service(){
     }
     private fun sd(){h.removeCallbacks(dr);if(ca)h.post(dr)}
     private fun su2(){h.removeCallbacks(ur);if(ua&&ip.isNotBlank()&&port>0)h.post(ur)else if(ua){ua=false;su("Error","Cannot start upload: Server IP or Port is invalid.",tb)}}
+
     private fun rs(rv:Int,rp:Int):Int{
         return when(rp){
             0->rv
             else->(rv/rp)*rp
         }
     }
+
+    private fun smartRSSI(value: Int): Int {
+        return when {
+            value < -110 -> value
+            value < -90 -> (value / 5) * 5
+            else -> (value / 10) * 10
+        }
+    }
+
+    private fun smartBattery(perc: Int): Int {
+        return when {
+            perc < 10 -> perc
+            perc < 50 -> (perc / 5) * 5
+            else -> (perc / 10) * 10
+        }
+    }
+
     private fun rb(p:Int,precision:Int):Int{
         if(precision==0)return p
         if(p<10&&precision>1)return p
         return (p/precision)*precision
     }
+
     private fun rn(v:Int,precision:Int):Int{
         if(precision==0){
             return if(v<7)v else(v/5)*5
         }
         return (v/precision)*precision
     }
+
     private fun rsp(s:Int,precision:Int):Int{
         if(precision==-1) {
             return when {
@@ -229,6 +261,17 @@ class BackgroundService:Service(){
         if(precision==0)return s
         return (s/precision)*precision
     }
+
+    private fun smartGPSPrecision(speed: Float): Pair<Int, Int> {
+        val speedKmh = (speed * 3.6).toInt()
+        return when {
+            speedKmh < 4 -> Pair(1000, 1000)
+            speedKmh < 40 -> Pair(20, 20)
+            speedKmh < 140 -> Pair(100, 100)
+            else -> Pair(1000, 1000)
+        }
+    }
+
     private fun c(){
         if(!ca)return
         val dm=mutableMapOf<String,Any>()
@@ -237,24 +280,34 @@ class BackgroundService:Service(){
         dm["n"]=Build.MODEL
 
         val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
-        val bp=mp.getInt("batteryPrecision",5)
+        val batteryPrecision = mp.getInt("batteryPrecision", 5)
 
         bd?.let{
             it["perc"]?.let{v->
                 when(v){
-                    is Int->dm["perc"]=rb(v,bp)
+                    is Int-> {
+                        if (batteryPrecision == -1) {
+                            dm["perc"] = smartBattery(v)
+                        } else {
+                            dm["perc"] = rb(v, batteryPrecision)
+                        }
+                    }
                     else->dm["perc"]=v
                 }
             }
             it["cap"]?.let{v->dm["cap"]=v}
         }
+
         ll?.let{
-            val pr=mp.getInt("gpsPrecision",100)
-            val sp=mp.getInt("speedPrecision",-1)
-            val ra=(it.altitude/2).roundToInt()*2
-            val sk=(it.speed*3.6).roundToInt()
-            val rs=rsp(sk,sp)
-            val(rl,rlo,ac)=when(pr){
+            val gpsPrecision = mp.getInt("gpsPrecision", 100)
+            val speedPrecision = mp.getInt("speedPrecision", -1)
+            val ra = (it.altitude/2).roundToInt()*2
+            val sk = (it.speed*3.6).roundToInt()
+            val rs = rsp(sk, speedPrecision)
+
+            val (prec, acc2) = if (gpsPrecision == -1) smartGPSPrecision(it.speed) else Pair(gpsPrecision, gpsPrecision)
+
+            val(rl,rlo,ac)=when(prec){
                 0->{
                     val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
                     val ln=String.format(Locale.US,"%.6f",it.longitude).toDouble()
@@ -267,22 +320,10 @@ class BackgroundService:Service(){
                     val ac2=maxOf(20,(it.accuracy/20).roundToInt()*20)
                     Triple(lt,ln,ac2)
                 }
-                50->{
-                    val lt=(it.latitude*1000).roundToInt()/1000.0
-                    val ln=(it.longitude*1000).roundToInt()/1000.0
-                    val ac2=maxOf(50,(it.accuracy/50).roundToInt()*50)
-                    Triple(lt,ln,ac2)
-                }
                 100->{
                     val lt=(it.latitude*1000).roundToInt()/1000.0
                     val ln=(it.longitude*1000).roundToInt()/1000.0
                     val ac2=maxOf(100,(it.accuracy/100).roundToInt()*100)
-                    Triple(lt,ln,ac2)
-                }
-                500->{
-                    val lt=(it.latitude*100).roundToInt()/100.0
-                    val ln=(it.longitude*100).roundToInt()/100.0
-                    val ac2=maxOf(500,(it.accuracy/500).roundToInt()*500)
                     Triple(lt,ln,ac2)
                 }
                 1000->{
@@ -305,6 +346,7 @@ class BackgroundService:Service(){
                 }
             }
             dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=rs
+            dm["rawSpd"] = sk
         }
         try{
             dm["op"]=tm.networkOperatorName
@@ -335,28 +377,55 @@ class BackgroundService:Service(){
             dm["nt"]=ant
             val cl:List<CellInfo>?=tm.allCellInfo
             var fo=false
-            val rp=mp.getInt("rssiPrecision",5)
+            val rssiPrecision = mp.getInt("rssiPrecision", 5)
             cl?.forEach{ci->
                 if(ci.isRegistered&&!fo){
                     fo=true
                     when(ci){
                         is CellInfoLte->{
                             dm["ci"]=ci.cellIdentity.ci;dm["tac"]=ci.cellIdentity.tac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
+                            val ss=ci.cellSignalStrength
+                            if(ss.dbm!=Int.MAX_VALUE) {
+                                if (rssiPrecision == -1) {
+                                    dm["rssi"] = smartRSSI(ss.dbm)
+                                } else {
+                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
+                                }
+                            }
                         }
                         is CellInfoWcdma->{
                             dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
+                            val ss=ci.cellSignalStrength
+                            if(ss.dbm!=Int.MAX_VALUE) {
+                                if (rssiPrecision == -1) {
+                                    dm["rssi"] = smartRSSI(ss.dbm)
+                                } else {
+                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
+                                }
+                            }
                         }
                         is CellInfoGsm->{
                             dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
+                            val ss=ci.cellSignalStrength
+                            if(ss.dbm!=Int.MAX_VALUE) {
+                                if (rssiPrecision == -1) {
+                                    dm["rssi"] = smartRSSI(ss.dbm)
+                                } else {
+                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
+                                }
+                            }
                         }
                         is CellInfoNr->{
                             val cin=ci.cellIdentity as?android.telephony.CellIdentityNr
                             dm["ci"]=cin?.nci?:"N/A";dm["tac"]=cin?.tac?:-1;dm["mcc"]=cin?.mccString?:"N/A";dm["mnc"]=cin?.mncString?:"N/A"
                             val ss=ci.cellSignalStrength as?android.telephony.CellSignalStrengthNr
-                            if(ss!=null&&ss.ssRsrp!=Int.MIN_VALUE)dm["rssi"]=rs(ss.ssRsrp,rp)
+                            if(ss!=null&&ss.ssRsrp!=Int.MIN_VALUE) {
+                                if (rssiPrecision == -1) {
+                                    dm["rssi"] = smartRSSI(ss.ssRsrp)
+                                } else {
+                                    dm["rssi"] = rs(ss.ssRsrp, rssiPrecision)
+                                }
+                            }
                         }
                     }
                 }
