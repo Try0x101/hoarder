@@ -1,48 +1,27 @@
-// app/src/main/java/com/example/hoarder/BackgroundService.kt
 package com.example.hoarder
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.BroadcastReceiver
+import android.app.*
+import android.content.*
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import android.location.*
+import android.net.*
 import android.net.wifi.WifiManager
-import android.os.BatteryManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.os.*
 import android.provider.Settings
-import android.telephony.CellInfo
-import android.telephony.CellInfoGsm
-import android.telephony.CellInfoLte
-import android.telephony.CellInfoWcdma
-import android.telephony.CellInfoNr
-import android.telephony.TelephonyManager
+import android.telephony.*
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.gson.GsonBuilder
-import java.util.Locale
-import android.util.Log
-import android.content.SharedPreferences
-import androidx.core.content.ContextCompat
+import com.google.gson.reflect.TypeToken
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.util.*
 import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
-import java.nio.charset.StandardCharsets
-import kotlin.math.roundToInt
 import kotlin.math.*
 
 class BackgroundService:Service(){
@@ -69,12 +48,14 @@ class BackgroundService:Service(){
     private var lm2:Pair<String,String>?=null
     private var lt=0L
     private val cd=5000L
+
     private val ll2=object:LocationListener{
         override fun onLocationChanged(l:Location){ll=l}
         override fun onStatusChanged(p:String?,s:Int,e:Bundle?){}
         override fun onProviderEnabled(p:String){}
         override fun onProviderDisabled(p:String){}
     }
+
     private val br=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             if(i?.action==Intent.ACTION_BATTERY_CHANGED){
@@ -85,24 +66,17 @@ class BackgroundService:Service(){
                 if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.LOLLIPOP){
                     val cc=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
                     val cp=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                    if(cc>0&&cp>0){
-                        val rc=(cc/1000*100)/cp
-                        c2=(rc/100)*100
-                    }
+                    if(cc>0&&cp>0){c2=(cc/1000*100)/cp}
                 }
-                bd=buildMap{
-                    put("perc",p.toInt())
-                    if(c2!=null)put("cap",c2)
-                }
+                bd=buildMap{put("perc",p.toInt());if(c2!=null)put("cap",c2)}
             }
         }
     }
+
     private val cr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             when(i?.action){
-                "com.example.hoarder.START_COLLECTION"->{
-                    if(!ca){ca=true;sd()}
-                }
+                "com.example.hoarder.START_COLLECTION"->{if(!ca){ca=true;sd()}}
                 "com.example.hoarder.STOP_COLLECTION"->{
                     if(ca){ca=false;h.removeCallbacks(dr);ld=null;LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",""))}
                 }
@@ -118,6 +92,7 @@ class BackgroundService:Service(){
             }
         }
     }
+
     override fun onCreate(){
         super.onCreate()
         h=Handler(Looper.getMainLooper())
@@ -142,12 +117,25 @@ class BackgroundService:Service(){
             }else if(ua&&(ip.isBlank()||port<=0)){su("Error","Server IP or Port became invalid.",tb);ua=false}
         }}
     }
-    override fun onStartCommand(i:Intent?,f:Int,s:Int):Int{
-        cn()
 
+    override fun onStartCommand(i:Intent?,f:Int,s:Int):Int{
+        val startedFromBoot = i?.getBooleanExtra("startedFromBoot", false) ?: false
+        cn()
+        if(startedFromBoot){h.postDelayed({initializeService()},3000)}else{initializeService()}
+        return START_STICKY
+    }
+
+    private fun initializeService() {
         val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val hasForegroundLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasLocationPermission || !hasForegroundLocationPermission) {
+            Log.e("HoarderService", "Missing required permissions. Cannot start foreground service.")
+            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            stopSelf() // Stop the service gracefully instead of crashing
+            return
+        }
 
         val ni=Intent(this,MainActivity::class.java)
         val pi=PendingIntent.getActivity(this,0,ni,PendingIntent.FLAG_IMMUTABLE)
@@ -162,13 +150,14 @@ class BackgroundService:Service(){
             .setSilent(true)
             .build()
 
-        if (hasLocationPermission && hasForegroundLocationPermission) {
+        try {
             startForeground(1,n)
             sl()
-        } else {
-            Log.e("HoarderService", "Missing required permissions. Cannot start foreground service.")
+        } catch (e: SecurityException) {
+            Log.e("HoarderService", "Security exception: ${e.message}")
             LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
-            return START_NOT_STICKY
+            stopSelf() // Stop the service if we can't start it in the foreground
+            return
         }
 
         val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
@@ -179,8 +168,8 @@ class BackgroundService:Service(){
         if(sp2!=null&&sp2.size==2&&sp2[0].isNotBlank()&&sp2[1].toIntOrNull()!=null){ip=sp2[0];port=sp2[1].toInt()}else{ip="";port=0}
         if(ct){if(!ca){ca=true;sd()}}else{ca=false;h.removeCallbacks(dr)}
         if(ut&&ip.isNotBlank()&&port>0){ua=true;lu=null;ls=null;su("Connecting","Service (re)start, attempting to connect...",tb);su2()}else ua=false
-        return START_STICKY
     }
+
     override fun onDestroy(){
         super.onDestroy()
         h.removeCallbacks(dr)
@@ -188,88 +177,71 @@ class BackgroundService:Service(){
         lm.removeUpdates(ll2)
         unregisterReceiver(br)
         LocalBroadcastManager.getInstance(this).unregisterReceiver(cr)
+        restartService()
     }
+
+    private fun restartService() {
+        val restartIntent = Intent(applicationContext, BackgroundService::class.java)
+        try {
+            Log.d("HoarderService", "Attempting to restart service after destruction")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                applicationContext.startForegroundService(restartIntent)
+            } else {
+                applicationContext.startService(restartIntent)
+            }
+        } catch (e: Exception) {
+            Log.e("HoarderService", "Failed to restart service: ${e.message}")
+            val restartServicePendingIntent = PendingIntent.getService(
+                applicationContext, 1, restartIntent, PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 1000, restartServicePendingIntent)
+        }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d("HoarderService", "Task removed, scheduling service restart")
+        val restartServiceIntent = Intent(applicationContext, BackgroundService::class.java)
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartServiceIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 1000, restartServicePendingIntent)
+    }
+
     override fun onBind(i:Intent?):IBinder?=null
+
     private fun cn(){
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
-            val sc=NotificationChannel(
-                "HoarderServiceChannel",
-                "Hoarder Service Channel",
-                NotificationManager.IMPORTANCE_MIN
-            ).apply {
-                setShowBadge(false)
-                enableLights(false)
-                enableVibration(false)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET
-            }
+            val sc=NotificationChannel("HoarderServiceChannel", "Hoarder Service Channel", NotificationManager.IMPORTANCE_MIN)
+                .apply {setShowBadge(false);enableLights(false);enableVibration(false);lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET}
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(sc)
         }
     }
+
     private fun sl(){
         try{
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0f,ll2)
             lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,1000,0f,ll2)
         }catch(e:SecurityException){e.printStackTrace()}
     }
+
     private fun sd(){h.removeCallbacks(dr);if(ca)h.post(dr)}
     private fun su2(){h.removeCallbacks(ur);if(ua&&ip.isNotBlank()&&port>0)h.post(ur)else if(ua){ua=false;su("Error","Cannot start upload: Server IP or Port is invalid.",tb)}}
-
-    private fun rs(rv:Int,rp:Int):Int{
-        return when(rp){
-            0->rv
-            else->(rv/rp)*rp
-        }
+    private fun rs(rv:Int,rp:Int):Int=when(rp){0->rv;else->(rv/rp)*rp}
+    private fun smartRSSI(v:Int):Int=when{v<-110->v;v<-90->(v/5)*5;else->(v/10)*10}
+    private fun smartBattery(p:Int):Int=when{p<10->p;p<50->(p/5)*5;else->(p/10)*10}
+    private fun rb(p:Int,pr:Int):Int{if(pr==0)return p;if(p<10&&pr>1)return p;return(p/pr)*pr}
+    private fun rn(v:Int,pr:Int):Int{if(pr==0)return if(v<7)v else(v/5)*5;return(v/pr)*pr}
+    private fun rsp(s:Int,pr:Int):Int{
+        if(pr==-1)return when{s<2->0;s<10->(s/3)*3;else->(s/10)*10}
+        if(pr==0)return s
+        return(s/pr)*pr
     }
-
-    private fun smartRSSI(value: Int): Int {
-        return when {
-            value < -110 -> value
-            value < -90 -> (value / 5) * 5
-            else -> (value / 10) * 10
-        }
-    }
-
-    private fun smartBattery(perc: Int): Int {
-        return when {
-            perc < 10 -> perc
-            perc < 50 -> (perc / 5) * 5
-            else -> (perc / 10) * 10
-        }
-    }
-
-    private fun rb(p:Int,precision:Int):Int{
-        if(precision==0)return p
-        if(p<10&&precision>1)return p
-        return (p/precision)*precision
-    }
-
-    private fun rn(v:Int,precision:Int):Int{
-        if(precision==0){
-            return if(v<7)v else(v/5)*5
-        }
-        return (v/precision)*precision
-    }
-
-    private fun rsp(s:Int,precision:Int):Int{
-        if(precision==-1) {
-            return when {
-                s < 2 -> 0
-                s < 10 -> (s/3)*3
-                else -> (s/10)*10
-            }
-        }
-        if(precision==0)return s
-        return (s/precision)*precision
-    }
-
-    private fun smartGPSPrecision(speed: Float): Pair<Int, Int> {
-        val speedKmh = (speed * 3.6).toInt()
-        return when {
-            speedKmh < 4 -> Pair(1000, 1000)
-            speedKmh < 40 -> Pair(20, 20)
-            speedKmh < 140 -> Pair(100, 100)
-            else -> Pair(1000, 1000)
-        }
+    private fun smartGPSPrecision(s:Float):Pair<Int,Int>{
+        val sk=(s*3.6).toInt()
+        return when{sk<4->Pair(1000,1000);sk<40->Pair(20,20);sk<140->Pair(100,100);else->Pair(1000,1000)}
     }
 
     private fun c(){
@@ -285,13 +257,7 @@ class BackgroundService:Service(){
         bd?.let{
             it["perc"]?.let{v->
                 when(v){
-                    is Int-> {
-                        if (batteryPrecision == -1) {
-                            dm["perc"] = smartBattery(v)
-                        } else {
-                            dm["perc"] = rb(v, batteryPrecision)
-                        }
-                    }
+                    is Int-> {dm["perc"] = if(batteryPrecision == -1) smartBattery(v) else rb(v, batteryPrecision)}
                     else->dm["perc"]=v
                 }
             }
@@ -304,77 +270,60 @@ class BackgroundService:Service(){
             val ra = (it.altitude/2).roundToInt()*2
             val sk = (it.speed*3.6).roundToInt()
             val rs = rsp(sk, speedPrecision)
-
-            val (prec, acc2) = if (gpsPrecision == -1) smartGPSPrecision(it.speed) else Pair(gpsPrecision, gpsPrecision)
-
+            val (prec, acc2) = if(gpsPrecision == -1) smartGPSPrecision(it.speed) else Pair(gpsPrecision, gpsPrecision)
             val(rl,rlo,ac)=when(prec){
                 0->{
                     val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
                     val ln=String.format(Locale.US,"%.6f",it.longitude).toDouble()
-                    val ac2=(it.accuracy/1).roundToInt()*1
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,(it.accuracy/1).roundToInt()*1)
                 }
                 20->{
                     val lt=(it.latitude*10000).roundToInt()/10000.0
                     val ln=(it.longitude*10000).roundToInt()/10000.0
-                    val ac2=maxOf(20,(it.accuracy/20).roundToInt()*20)
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,maxOf(20,(it.accuracy/20).roundToInt()*20))
                 }
                 100->{
                     val lt=(it.latitude*1000).roundToInt()/1000.0
                     val ln=(it.longitude*1000).roundToInt()/1000.0
-                    val ac2=maxOf(100,(it.accuracy/100).roundToInt()*100)
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,maxOf(100,(it.accuracy/100).roundToInt()*100))
                 }
                 1000->{
                     val lt=(it.latitude*100).roundToInt()/100.0
                     val ln=(it.longitude*100).roundToInt()/100.0
-                    val ac2=maxOf(1000,(it.accuracy/1000).roundToInt()*1000)
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,maxOf(1000,(it.accuracy/1000).roundToInt()*1000))
                 }
                 10000->{
                     val lt=(it.latitude*10).roundToInt()/10.0
                     val ln=(it.longitude*10).roundToInt()/10.0
-                    val ac2=maxOf(10000,(it.accuracy/10000).roundToInt()*10000)
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,maxOf(10000,(it.accuracy/10000).roundToInt()*10000))
                 }
                 else->{
                     val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
                     val ln=String.format(Locale.US,"%.6f",it.longitude).toDouble()
-                    val ac2=(it.accuracy/1).roundToInt()*1
-                    Triple(lt,ln,ac2)
+                    Triple(lt,ln,(it.accuracy/1).roundToInt()*1)
                 }
             }
             dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=rs
-            dm["rawSpd"] = sk
         }
+
         try{
             dm["op"]=tm.networkOperatorName
             val ant=if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.N){
                 when(tm.dataNetworkType){
-                    TelephonyManager.NETWORK_TYPE_GPRS->"GPRS"
-                    TelephonyManager.NETWORK_TYPE_EDGE->"EDGE"
-                    TelephonyManager.NETWORK_TYPE_UMTS->"UMTS"
-                    TelephonyManager.NETWORK_TYPE_CDMA->"CDMA"
-                    TelephonyManager.NETWORK_TYPE_EVDO_0->"EVDO_0"
-                    TelephonyManager.NETWORK_TYPE_EVDO_A->"EVDO_A"
-                    TelephonyManager.NETWORK_TYPE_1xRTT->"1xRTT"
-                    TelephonyManager.NETWORK_TYPE_HSDPA->"HSDPA"
-                    TelephonyManager.NETWORK_TYPE_HSUPA->"HSUPA"
-                    TelephonyManager.NETWORK_TYPE_HSPA->"HSPA"
-                    TelephonyManager.NETWORK_TYPE_IDEN->"IDEN"
-                    TelephonyManager.NETWORK_TYPE_EVDO_B->"EVDO_B"
-                    TelephonyManager.NETWORK_TYPE_LTE->"LTE"
-                    TelephonyManager.NETWORK_TYPE_EHRPD->"EHRPD"
-                    TelephonyManager.NETWORK_TYPE_HSPAP->"HSPAP"
-                    TelephonyManager.NETWORK_TYPE_GSM->"GSM"
-                    TelephonyManager.NETWORK_TYPE_TD_SCDMA->"TD_SCDMA"
-                    TelephonyManager.NETWORK_TYPE_IWLAN->"IWLAN"
-                    TelephonyManager.NETWORK_TYPE_NR->"5G NR"
-                    else->"Unknown"
+                    TelephonyManager.NETWORK_TYPE_GPRS->"GPRS";TelephonyManager.NETWORK_TYPE_EDGE->"EDGE"
+                    TelephonyManager.NETWORK_TYPE_UMTS->"UMTS";TelephonyManager.NETWORK_TYPE_CDMA->"CDMA"
+                    TelephonyManager.NETWORK_TYPE_EVDO_0->"EVDO_0";TelephonyManager.NETWORK_TYPE_EVDO_A->"EVDO_A"
+                    TelephonyManager.NETWORK_TYPE_1xRTT->"1xRTT";TelephonyManager.NETWORK_TYPE_HSDPA->"HSDPA"
+                    TelephonyManager.NETWORK_TYPE_HSUPA->"HSUPA";TelephonyManager.NETWORK_TYPE_HSPA->"HSPA"
+                    TelephonyManager.NETWORK_TYPE_IDEN->"IDEN";TelephonyManager.NETWORK_TYPE_EVDO_B->"EVDO_B"
+                    TelephonyManager.NETWORK_TYPE_LTE->"LTE";TelephonyManager.NETWORK_TYPE_EHRPD->"EHRPD"
+                    TelephonyManager.NETWORK_TYPE_HSPAP->"HSPAP";TelephonyManager.NETWORK_TYPE_GSM->"GSM"
+                    TelephonyManager.NETWORK_TYPE_TD_SCDMA->"TD_SCDMA";TelephonyManager.NETWORK_TYPE_IWLAN->"IWLAN"
+                    TelephonyManager.NETWORK_TYPE_NR->"5G NR";else->"Unknown"
                 }
             }else"Unknown"
             dm["nt"]=ant
+
             val cl:List<CellInfo>?=tm.allCellInfo
             var fo=false
             val rssiPrecision = mp.getInt("rssiPrecision", 5)
@@ -383,48 +332,36 @@ class BackgroundService:Service(){
                     fo=true
                     when(ci){
                         is CellInfoLte->{
-                            dm["ci"]=ci.cellIdentity.ci;dm["tac"]=ci.cellIdentity.tac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
+                            dm["ci"]=ci.cellIdentity.ci;dm["tac"]=ci.cellIdentity.tac
+                            dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
                             val ss=ci.cellSignalStrength
                             if(ss.dbm!=Int.MAX_VALUE) {
-                                if (rssiPrecision == -1) {
-                                    dm["rssi"] = smartRSSI(ss.dbm)
-                                } else {
-                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
-                                }
+                                dm["rssi"] = if(rssiPrecision == -1) smartRSSI(ss.dbm) else rs(ss.dbm, rssiPrecision)
                             }
                         }
                         is CellInfoWcdma->{
-                            dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
+                            dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac
+                            dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
                             val ss=ci.cellSignalStrength
                             if(ss.dbm!=Int.MAX_VALUE) {
-                                if (rssiPrecision == -1) {
-                                    dm["rssi"] = smartRSSI(ss.dbm)
-                                } else {
-                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
-                                }
+                                dm["rssi"] = if(rssiPrecision == -1) smartRSSI(ss.dbm) else rs(ss.dbm, rssiPrecision)
                             }
                         }
                         is CellInfoGsm->{
-                            dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
+                            dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac
+                            dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
                             val ss=ci.cellSignalStrength
                             if(ss.dbm!=Int.MAX_VALUE) {
-                                if (rssiPrecision == -1) {
-                                    dm["rssi"] = smartRSSI(ss.dbm)
-                                } else {
-                                    dm["rssi"] = rs(ss.dbm, rssiPrecision)
-                                }
+                                dm["rssi"] = if(rssiPrecision == -1) smartRSSI(ss.dbm) else rs(ss.dbm, rssiPrecision)
                             }
                         }
                         is CellInfoNr->{
                             val cin=ci.cellIdentity as?android.telephony.CellIdentityNr
-                            dm["ci"]=cin?.nci?:"N/A";dm["tac"]=cin?.tac?:-1;dm["mcc"]=cin?.mccString?:"N/A";dm["mnc"]=cin?.mncString?:"N/A"
+                            dm["ci"]=cin?.nci?:"N/A";dm["tac"]=cin?.tac?:-1
+                            dm["mcc"]=cin?.mccString?:"N/A";dm["mnc"]=cin?.mncString?:"N/A"
                             val ss=ci.cellSignalStrength as?android.telephony.CellSignalStrengthNr
                             if(ss!=null&&ss.ssRsrp!=Int.MIN_VALUE) {
-                                if (rssiPrecision == -1) {
-                                    dm["rssi"] = smartRSSI(ss.ssRsrp)
-                                } else {
-                                    dm["rssi"] = rs(ss.ssRsrp, rssiPrecision)
-                                }
+                                dm["rssi"] = if(rssiPrecision == -1) smartRSSI(ss.ssRsrp) else rs(ss.ssRsrp, rssiPrecision)
                             }
                         }
                     }
@@ -432,10 +369,12 @@ class BackgroundService:Service(){
             }
             if(!fo){dm["ci"]="N/A";dm["tac"]="N/A";dm["mcc"]="N/A";dm["mnc"]="N/A";dm["rssi"]="N/A"}
         }catch(e:SecurityException){}
+
         val wi=wm.connectionInfo
         val rs=wi.ssid
         val cs=when{rs==null||rs=="<unknown ssid>"||rs=="0x"||rs.isBlank()->0;rs.startsWith("\"")&&rs.endsWith("\"")->rs.substring(1,rs.length-1);else->rs}
         dm["ssid"]=cs
+
         val an=cm.activeNetwork
         val nc=cm.getNetworkCapabilities(an)
         if(nc!=null){
@@ -446,25 +385,26 @@ class BackgroundService:Service(){
             val lum=kotlin.math.ceil(lu2.toDouble()/1024.0).toInt()
             dm["dn"]=rn(ldm,np);dm["up"]=rn(lum,np)
         }
-        val gp=GsonBuilder().setPrettyPrinting().create()
-        val js=gp.toJson(dm)
+
+        val js=GsonBuilder().setPrettyPrinting().create().toJson(dm)
         ld=js
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",js))
     }
+
     private fun gj(cf:String):Pair<String?,Boolean>{
         if(lu==null)return Pair(cf,false)
         try{
-            val t=object:com.google.gson.reflect.TypeToken<Map<String,Any?>>(){}.type
-            val p=g.fromJson<Map<String,Any?>>(lu,t)
-            val c=g.fromJson<Map<String,Any?>>(cf,t)
-            val d=mutableMapOf<String,Any?>()
-            for((k,v)in c)if(!p.containsKey(k)||p[k]!=v)d[k]=v
-            if(c.containsKey("id"))d["id"]=c["id"]
-            if(d.keys==setOf("id"))return Pair(null,true)
-            if(d.isEmpty())return Pair(null,true)
+            val t = object : TypeToken<Map<String, Any?>>() {}.type
+            val p = g.fromJson(lu, t) as Map<String, Any?>
+            val c = g.fromJson(cf, t) as Map<String, Any?>
+            val d = mutableMapOf<String, Any?>()
+            for((k,v) in c.entries) if (!p.containsKey(k) || p[k] != v) d[k]=v
+            if (c.containsKey("id")) d["id"] = c["id"]
+            if (d.keys == setOf("id") || d.isEmpty()) return Pair(null,true)
             return Pair(g.toJson(d),true)
         }catch(e:Exception){return Pair(cf,false)}
     }
+
     private fun u(js:String,of:String,id:Boolean){
         if(ip.isBlank()||port<=0){su("Error","Server IP or Port not set.",tb);return}
         val us="http://$ip:$port/api/telemetry"
@@ -483,25 +423,21 @@ class BackgroundService:Service(){
             val co=ByteArrayOutputStream()
             DeflaterOutputStream(co,d).use{it.write(jb)}
             val cb=co.toByteArray()
-            Log.d("HoarderService","${if(id)"Sending delta"else"Sending full"} JSON data: $js")
             uc.outputStream.write(cb)
             uc.outputStream.flush()
             val rc=uc.responseCode
-            val rm=uc.responseMessage
             if(rc==HttpURLConnection.HTTP_OK){
-                val r=uc.inputStream.bufferedReader().use{it.readText()}
                 tb+=cb.size.toLong()
                 sp.edit().putLong("totalUploadedBytes",tb).apply()
                 lu=of
                 su(if(id)"OK (Delta)"else"OK (Full)","Uploaded successfully.",tb)
-                Log.d("HoarderService","Sent compressed packet size: ${cb.size} bytes")
             }else{
-                val es=uc.errorStream
-                val er=es?.bufferedReader()?.use{it.readText()}?:"No error response"
-                su("HTTP Error","$rc: $rm. Server response: $er",tb)
+                val er=uc.errorStream?.bufferedReader()?.use{it.readText()}?:"No error response"
+                su("HTTP Error","$rc: ${uc.responseMessage}. Server response: $er",tb)
             }
         }catch(e:Exception){su("Network Error","Failed to connect: ${e.message}",tb)}finally{uc?.disconnect()}
     }
+
     private fun su(s:String,m:String,ub:Long){
         val cm2=Pair(s,m)
         val ct=System.currentTimeMillis()
@@ -511,17 +447,15 @@ class BackgroundService:Service(){
         }
         val cc=(ls!=s||lm2!=cm2)
         if(sf&&cc){
-            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{putExtra("status",s);putExtra("message",m);putExtra("totalUploadedBytes",ub)})
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{
+                putExtra("status",s);putExtra("message",m);putExtra("totalUploadedBytes",ub)
+            })
             ls=s;lm2=cm2
             if(s=="Network Error"&&ip.isNotBlank()&&m.contains(ip))lt=ct
-        }else if(!sf&&s=="Network Error"){
-            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{putExtra("totalUploadedBytes",ub)})
-        }else if(ls==s&&lm2==cm2){
-            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{putExtra("totalUploadedBytes",ub)})
+        }else if(!sf&&s=="Network Error"||ls==s&&lm2==cm2){
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{
+                putExtra("totalUploadedBytes",ub)
+            })
         }
-    }
-    companion object{
-        const val CHANNEL_ID="HoarderServiceChannel"
-        const val NOTIFICATION_ID=1
     }
 }

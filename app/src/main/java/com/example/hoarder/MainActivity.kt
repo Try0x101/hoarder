@@ -1,5 +1,5 @@
-// app/src/main/java/com/example/hoarder/MainActivity.kt
 package com.example.hoarder
+import android.util.Log
 import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -538,10 +538,33 @@ class MainActivity:AppCompatActivity(){
         // Ensure notification channel is still silent (some devices reset this)
         createSilentNotificationChannel()
 
-        // If service is not running, restart it
-        if (areAllPermissionsGranted()) {
+        // Check if we have a pending service start from boot
+        val pendingServiceStart = sp.getBoolean("pendingServiceStart", false)
+        if (pendingServiceStart && areAllPermissionsGranted()) {
+            Log.d("MainActivity", "Handling deferred service start from boot")
+            sp.edit().putBoolean("pendingServiceStart", false).apply()
+            ss() // Start the service now that we have permissions
+
+            // Restore toggle states
+            val dataCollectionEnabled = sp.getBoolean("dataCollectionToggleState", true)
+            val uploadEnabled = sp.getBoolean("dataUploadToggleState", true)
+
+            if (dataCollectionEnabled) {
+                LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
+            }
+
+            if (uploadEnabled) {
+                val ipPort = sp.getString("serverIpPortAddress", "127.0.0.1:5000") ?: "127.0.0.1:5000"
+                if (vip(ipPort)) {
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", ipPort))
+                }
+            }
+        }
+        // If no pending start, check if service is running and restart if needed
+        else if (areAllPermissionsGranted()) {
             val serviceRunning = isServiceRunning(BackgroundService::class.java)
             if (!serviceRunning) {
+                Log.d("MainActivity", "Service not running, restarting it")
                 ss()
                 // Restore toggle states if needed
                 val dataCollectionEnabled = sp.getBoolean("dataCollectionToggleState", true)
