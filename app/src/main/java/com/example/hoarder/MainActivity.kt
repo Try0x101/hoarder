@@ -30,6 +30,7 @@ import com.google.gson.JsonParser
 import android.content.SharedPreferences
 import android.widget.Toast
 import java.util.Locale
+
 class MainActivity:AppCompatActivity(){
     private lateinit var dt:TextView
     private lateinit var rh:LinearLayout
@@ -51,6 +52,11 @@ class MainActivity:AppCompatActivity(){
     private lateinit var sp:SharedPreferences
     private lateinit var gps:Spinner
     private lateinit var rssi:Spinner
+    private lateinit var batt:Spinner
+    private lateinit var net:Spinner
+    private lateinit var spd:Spinner
+    private lateinit var spdInfo:TextView
+    private lateinit var netInfo:TextView
     private val dr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             i?.getStringExtra("jsonString")?.let{js->ld=js;if(rc.visibility==View.VISIBLE)dp(js)}
@@ -103,9 +109,17 @@ class MainActivity:AppCompatActivity(){
         uc2=findViewById(R.id.serverUploadContent)
         gps=findViewById(R.id.gpsPrecisionSpinner)
         rssi=findViewById(R.id.rssiPrecisionSpinner)
+        batt=findViewById(R.id.batteryPrecisionSpinner)
+        net=findViewById(R.id.networkPrecisionSpinner)
+        spd=findViewById(R.id.speedPrecisionSpinner)
+        spdInfo=findViewById(R.id.speedPrecisionInfo)
+        netInfo=findViewById(R.id.networkPrecisionInfo)
         sp=getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
         sgs()
         srs()
+        sbs()
+        sns()
+        sss()
         su()
         scl()
         cp()
@@ -120,12 +134,12 @@ class MainActivity:AppCompatActivity(){
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         gps.adapter=ad
-        val cp=sp.getInt("gpsPrecision",0)
-        val ps=when(cp){0->0;20->1;50->2;100->3;500->4;1000->5;10000->6;else->0}
+        val cp=sp.getInt("gpsPrecision",100)
+        val ps=when(cp){0->0;20->1;50->2;100->3;500->4;1000->5;10000->6;else->3}
         gps.setSelection(ps)
         gps.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
             override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
-                val nv=when(pos){0->0;1->20;2->50;3->100;4->500;5->1000;6->10000;else->0}
+                val nv=when(pos){0->0;1->20;2->50;3->100;4->500;5->1000;6->10000;else->100}
                 sp.edit().putInt("gpsPrecision",nv).apply()
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
@@ -136,17 +150,100 @@ class MainActivity:AppCompatActivity(){
         val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         rssi.adapter=ad
-        val cp=sp.getInt("rssiPrecision",0)
-        val ps=when(cp){0->0;3->1;5->2;10->3;else->0}
+        val cp=sp.getInt("rssiPrecision",5)
+        val ps=when(cp){0->0;3->1;5->2;10->3;else->2}
         rssi.setSelection(ps)
         rssi.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
             override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
-                val nv=when(pos){0->0;1->3;2->5;3->10;else->0}
+                val nv=when(pos){0->0;1->3;2->5;3->10;else->5}
                 sp.edit().putInt("rssiPrecision",nv).apply()
             }
             override fun onNothingSelected(p:AdapterView<*>?){}
         }
     }
+    private fun sbs(){
+        val po=arrayOf("Maximum precision","1%","5%","10%")
+        val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        batt.adapter=ad
+        val cp=sp.getInt("batteryPrecision",5)
+        val ps=when(cp){0->0;1->1;5->2;10->3;else->2}
+        batt.setSelection(ps)
+        batt.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
+            override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
+                val nv=when(pos){0->0;1->1;2->5;3->10;else->5}
+                sp.edit().putInt("batteryPrecision",nv).apply()
+            }
+            override fun onNothingSelected(p:AdapterView<*>?){}
+        }
+    }
+    private fun sns(){
+        val po=arrayOf("Smart Network Rounding","Round to 1 Mbps","Round to 2 Mbps","Round to 5 Mbps")
+        val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        net.adapter=ad
+        val cp=sp.getInt("networkPrecision",0)
+        val ps=when(cp){0->0;1->1;2->2;5->3;else->0}
+        net.setSelection(ps)
+
+        // Set the initial information text
+        updateNetworkInfoText(ps)
+
+        net.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
+            override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
+                val nv=when(pos){0->0;1->1;2->2;3->5;else->0}
+                sp.edit().putInt("networkPrecision",nv).apply()
+
+                // Update the information text
+                updateNetworkInfoText(pos)
+            }
+            override fun onNothingSelected(p:AdapterView<*>?){}
+        }
+    }
+
+    private fun updateNetworkInfoText(position: Int) {
+        if (position == 0) {
+            netInfo.text = "• If speed <7 Mbps → show precise value\n• If speed ≥7 Mbps → round to nearest 5 Mbps"
+            netInfo.visibility = View.VISIBLE
+        } else {
+            netInfo.visibility = View.GONE
+        }
+    }
+
+    private fun sss(){
+        val po = arrayOf("Smart Speed Rounding", "Maximum precision", "1 km/h", "3 km/h", "5 km/h", "10 km/h")
+        val ad = ArrayAdapter(this, android.R.layout.simple_spinner_item, po)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spd.adapter = ad
+
+        val cp = sp.getInt("speedPrecision", -1)
+        val ps = when(cp) {-1->0; 0->1; 1->2; 3->3; 5->4; 10->5; else->0}
+        spd.setSelection(ps)
+
+        // Set the initial information text
+        updateSpeedInfoText(ps)
+
+        spd.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                val nv = when(pos) {0->-1; 1->0; 2->1; 3->3; 4->5; 5->10; else->-1}
+                sp.edit().putInt("speedPrecision", nv).apply()
+
+                // Update the information text
+                updateSpeedInfoText(pos)
+            }
+            override fun onNothingSelected(p: AdapterView<*>?) {}
+        }
+    }
+
+    private fun updateSpeedInfoText(position: Int) {
+        if (position == 0) {
+            spdInfo.text = "• If speed <2 km/h → show 0\n• If speed <10 km/h → round to nearest 3 km/h\n• If speed ≥10 km/h → round to nearest 10 km/h"
+            spdInfo.visibility = View.VISIBLE
+        } else {
+            spdInfo.visibility = View.GONE
+        }
+    }
+
     private fun su(){
         val tr=Rect()
         sc.post{sc.getHitRect(tr);tr.top-=100;tr.bottom+=100;tr.left-=100;tr.right+=100;(sc.parent as View).touchDelegate=TouchDelegate(tr,sc)}

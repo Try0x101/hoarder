@@ -183,21 +183,53 @@ class BackgroundService:Service(){
             else->(rv/rp)*rp
         }
     }
+    private fun rb(p:Int,precision:Int):Int{
+        if(precision==0)return p
+        if(p<10&&precision>1)return p
+        return (p/precision)*precision
+    }
+    private fun rn(v:Int,precision:Int):Int{
+        if(precision==0){
+            return if(v<7)v else(v/5)*5
+        }
+        return (v/precision)*precision
+    }
+    private fun rsp(s:Int,precision:Int):Int{
+        if(precision==-1) {
+            return when {
+                s < 2 -> 0
+                s < 10 -> (s/3)*3
+                else -> (s/10)*10
+            }
+        }
+        if(precision==0)return s
+        return (s/precision)*precision
+    }
     private fun c(){
         if(!ca)return
         val dm=mutableMapOf<String,Any>()
         val di=Settings.Secure.getString(contentResolver,Settings.Secure.ANDROID_ID)
         dm["id"]=di.take(4)
         dm["n"]=Build.MODEL
+
+        val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
+        val bp=mp.getInt("batteryPrecision",5)
+
         bd?.let{
-            it["perc"]?.let{v->dm["perc"]=v}
+            it["perc"]?.let{v->
+                when(v){
+                    is Int->dm["perc"]=rb(v,bp)
+                    else->dm["perc"]=v
+                }
+            }
             it["cap"]?.let{v->dm["cap"]=v}
         }
         ll?.let{
-            val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
-            val pr=mp.getInt("gpsPrecision",0)
+            val pr=mp.getInt("gpsPrecision",100)
+            val sp=mp.getInt("speedPrecision",-1)
             val ra=(it.altitude/2).roundToInt()*2
             val sk=(it.speed*3.6).roundToInt()
+            val rs=rsp(sk,sp)
             val(rl,rlo,ac)=when(pr){
                 0->{
                     val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
@@ -248,7 +280,7 @@ class BackgroundService:Service(){
                     Triple(lt,ln,ac2)
                 }
             }
-            dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=sk
+            dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=rs
         }
         try{
             dm["op"]=tm.networkOperatorName
@@ -279,8 +311,7 @@ class BackgroundService:Service(){
             dm["nt"]=ant
             val cl:List<CellInfo>?=tm.allCellInfo
             var fo=false
-            val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
-            val rp=mp.getInt("rssiPrecision",0)
+            val rp=mp.getInt("rssiPrecision",5)
             cl?.forEach{ci->
                 if(ci.isRegistered&&!fo){
                     fo=true
@@ -317,9 +348,10 @@ class BackgroundService:Service(){
         if(nc!=null){
             val ld2=nc.linkDownstreamBandwidthKbps
             val lu2=nc.linkUpstreamBandwidthKbps
+            val np=mp.getInt("networkPrecision",0)
             val ldm=kotlin.math.ceil(ld2.toDouble()/1024.0).toInt()
             val lum=kotlin.math.ceil(lu2.toDouble()/1024.0).toInt()
-            dm["dn"]=ldm;dm["up"]=lum
+            dm["dn"]=rn(ldm,np);dm["up"]=rn(lum,np)
         }
         val gp=GsonBuilder().setPrettyPrinting().create()
         val js=gp.toJson(dm)
