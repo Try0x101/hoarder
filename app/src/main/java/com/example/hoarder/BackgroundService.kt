@@ -39,6 +39,7 @@ import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 import java.nio.charset.StandardCharsets
 import kotlin.math.roundToInt
+import kotlin.math.*
 class BackgroundService:Service(){
     private lateinit var h:Handler
     private lateinit var dr:Runnable
@@ -75,21 +76,18 @@ class BackgroundService:Service(){
                 val l=i.getIntExtra(BatteryManager.EXTRA_LEVEL,-1)
                 val s=i.getIntExtra(BatteryManager.EXTRA_SCALE,-1)
                 val p=l*100/s.toFloat()
-                val st=i.getIntExtra(BatteryManager.EXTRA_STATUS,-1)
-                val ss=when(st){
-                    BatteryManager.BATTERY_STATUS_CHARGING->"Charging"
-                    else->"Discharging"
-                }
                 var c2:Int?=null
                 if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.LOLLIPOP){
                     val cc=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
                     val cp=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                    if(cc>0&&cp>0)c2=(cc/1000*100)/cp
+                    if(cc>0&&cp>0){
+                        val rc=(cc/1000*100)/cp
+                        c2=(rc/100)*100
+                    }
                 }
                 bd=buildMap{
-                    put("percent",p.toInt())
-                    put("status",ss)
-                    if(c2!=null)put("estimated_full_capacity_mAh",c2)
+                    put("perc",p.toInt())
+                    if(c2!=null)put("cap",c2)
                 }
             }
         }
@@ -179,6 +177,12 @@ class BackgroundService:Service(){
     }
     private fun sd(){h.removeCallbacks(dr);if(ca)h.post(dr)}
     private fun su2(){h.removeCallbacks(ur);if(ua&&ip.isNotBlank()&&port>0)h.post(ur)else if(ua){ua=false;su("Error","Cannot start upload: Server IP or Port is invalid.",tb)}}
+    private fun rs(rv:Int,rp:Int):Int{
+        return when(rp){
+            0->rv
+            else->(rv/rp)*rp
+        }
+    }
     private fun c(){
         if(!ca)return
         val dm=mutableMapOf<String,Any>()
@@ -186,18 +190,65 @@ class BackgroundService:Service(){
         dm["id"]=di.take(4)
         dm["n"]=Build.MODEL
         bd?.let{
-            it["percent"]?.let{v->dm["perc"]=v}
-            it["status"]?.let{v->dm["stat"]=v}
-            it["estimated_full_capacity_mAh"]?.let{v->dm["cap"]=v}
-        }?:run{dm["stat"]="Battery data unavailable"}
+            it["perc"]?.let{v->dm["perc"]=v}
+            it["cap"]?.let{v->dm["cap"]=v}
+        }
         ll?.let{
+            val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
+            val pr=mp.getInt("gpsPrecision",0)
             val ra=(it.altitude/2).roundToInt()*2
-            val ra2=(it.accuracy/10).roundToInt()*10
-            val rb=it.bearing.roundToInt()
             val sk=(it.speed*3.6).roundToInt()
-            val rl=String.format(Locale.US,"%.4f",it.latitude).toDouble()
-            val rlo=String.format(Locale.US,"%.4f",it.longitude).toDouble()
-            dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ra2;dm["bear"]=rb;dm["spd"]=sk
+            val(rl,rlo,ac)=when(pr){
+                0->{
+                    val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
+                    val ln=String.format(Locale.US,"%.6f",it.longitude).toDouble()
+                    val ac2=(it.accuracy/1).roundToInt()*1
+                    Triple(lt,ln,ac2)
+                }
+                20->{
+                    val lt=(it.latitude*10000).roundToInt()/10000.0
+                    val ln=(it.longitude*10000).roundToInt()/10000.0
+                    val ac2=maxOf(20,(it.accuracy/20).roundToInt()*20)
+                    Triple(lt,ln,ac2)
+                }
+                50->{
+                    val lt=(it.latitude*1000).roundToInt()/1000.0
+                    val ln=(it.longitude*1000).roundToInt()/1000.0
+                    val ac2=maxOf(50,(it.accuracy/50).roundToInt()*50)
+                    Triple(lt,ln,ac2)
+                }
+                100->{
+                    val lt=(it.latitude*1000).roundToInt()/1000.0
+                    val ln=(it.longitude*1000).roundToInt()/1000.0
+                    val ac2=maxOf(100,(it.accuracy/100).roundToInt()*100)
+                    Triple(lt,ln,ac2)
+                }
+                500->{
+                    val lt=(it.latitude*100).roundToInt()/100.0
+                    val ln=(it.longitude*100).roundToInt()/100.0
+                    val ac2=maxOf(500,(it.accuracy/500).roundToInt()*500)
+                    Triple(lt,ln,ac2)
+                }
+                1000->{
+                    val lt=(it.latitude*100).roundToInt()/100.0
+                    val ln=(it.longitude*100).roundToInt()/100.0
+                    val ac2=maxOf(1000,(it.accuracy/1000).roundToInt()*1000)
+                    Triple(lt,ln,ac2)
+                }
+                10000->{
+                    val lt=(it.latitude*10).roundToInt()/10.0
+                    val ln=(it.longitude*10).roundToInt()/10.0
+                    val ac2=maxOf(10000,(it.accuracy/10000).roundToInt()*10000)
+                    Triple(lt,ln,ac2)
+                }
+                else->{
+                    val lt=String.format(Locale.US,"%.6f",it.latitude).toDouble()
+                    val ln=String.format(Locale.US,"%.6f",it.longitude).toDouble()
+                    val ac2=(it.accuracy/1).roundToInt()*1
+                    Triple(lt,ln,ac2)
+                }
+            }
+            dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=sk
         }
         try{
             dm["op"]=tm.networkOperatorName
@@ -228,33 +279,35 @@ class BackgroundService:Service(){
             dm["nt"]=ant
             val cl:List<CellInfo>?=tm.allCellInfo
             var fo=false
+            val mp=applicationContext.getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
+            val rp=mp.getInt("rssiPrecision",0)
             cl?.forEach{ci->
                 if(ci.isRegistered&&!fo){
                     fo=true
                     when(ci){
                         is CellInfoLte->{
                             dm["ci"]=ci.cellIdentity.ci;dm["tac"]=ci.cellIdentity.tac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=ss.dbm
+                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
                         }
                         is CellInfoWcdma->{
                             dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=ss.dbm
+                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
                         }
                         is CellInfoGsm->{
                             dm["ci"]=ci.cellIdentity.cid;dm["tac"]=ci.cellIdentity.lac;dm["mcc"]=ci.cellIdentity.mccString?:"N/A";dm["mnc"]=ci.cellIdentity.mncString?:"N/A"
-                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=ss.dbm
+                            val ss=ci.cellSignalStrength;if(ss.dbm!=Int.MAX_VALUE)dm["rssi"]=rs(ss.dbm,rp)
                         }
                         is CellInfoNr->{
                             val cin=ci.cellIdentity as?android.telephony.CellIdentityNr
                             dm["ci"]=cin?.nci?:"N/A";dm["tac"]=cin?.tac?:-1;dm["mcc"]=cin?.mccString?:"N/A";dm["mnc"]=cin?.mncString?:"N/A"
                             val ss=ci.cellSignalStrength as?android.telephony.CellSignalStrengthNr
-                            if(ss!=null&&ss.ssRsrp!=Int.MIN_VALUE)dm["rssi"]=ss.ssRsrp
+                            if(ss!=null&&ss.ssRsrp!=Int.MIN_VALUE)dm["rssi"]=rs(ss.ssRsrp,rp)
                         }
                     }
                 }
             }
             if(!fo){dm["ci"]="N/A";dm["tac"]="N/A";dm["mcc"]="N/A";dm["mnc"]="N/A";dm["rssi"]="N/A"}
-        }catch(e:SecurityException){dm["stat"]="No permission"}
+        }catch(e:SecurityException){}
         val wi=wm.connectionInfo
         val rs=wi.ssid
         val cs=when{rs==null||rs=="<unknown ssid>"||rs=="0x"||rs.isBlank()->0;rs.startsWith("\"")&&rs.endsWith("\"")->rs.substring(1,rs.length-1);else->rs}

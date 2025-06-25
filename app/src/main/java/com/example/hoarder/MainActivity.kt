@@ -15,6 +15,9 @@ import android.widget.TextView
 import android.widget.Switch
 import android.widget.EditText
 import android.widget.Button
+import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.AdapterView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -46,6 +49,8 @@ class MainActivity:AppCompatActivity(){
     private lateinit var uh:LinearLayout
     private lateinit var uc2:LinearLayout
     private lateinit var sp:SharedPreferences
+    private lateinit var gps:Spinner
+    private lateinit var rssi:Spinner
     private val dr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             i?.getStringExtra("jsonString")?.let{js->ld=js;if(rc.visibility==View.VISIBLE)dp(js)}
@@ -96,7 +101,11 @@ class MainActivity:AppCompatActivity(){
         sb=findViewById(R.id.saveServerIpButton)
         uh=findViewById(R.id.serverUploadHeader)
         uc2=findViewById(R.id.serverUploadContent)
+        gps=findViewById(R.id.gpsPrecisionSpinner)
+        rssi=findViewById(R.id.rssiPrecisionSpinner)
         sp=getSharedPreferences("HoarderPrefs",Context.MODE_PRIVATE)
+        sgs()
+        srs()
         su()
         scl()
         cp()
@@ -104,6 +113,38 @@ class MainActivity:AppCompatActivity(){
         LocalBroadcastManager.getInstance(this).apply{
             registerReceiver(dr,IntentFilter("com.example.hoarder.DATA_UPDATE"))
             registerReceiver(usr,IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+        }
+    }
+    private fun sgs(){
+        val po=arrayOf("Maximum precision","20 m","50 m","100 m","500 m","1 km","10 km")
+        val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        gps.adapter=ad
+        val cp=sp.getInt("gpsPrecision",0)
+        val ps=when(cp){0->0;20->1;50->2;100->3;500->4;1000->5;10000->6;else->0}
+        gps.setSelection(ps)
+        gps.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
+            override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
+                val nv=when(pos){0->0;1->20;2->50;3->100;4->500;5->1000;6->10000;else->0}
+                sp.edit().putInt("gpsPrecision",nv).apply()
+            }
+            override fun onNothingSelected(p:AdapterView<*>?){}
+        }
+    }
+    private fun srs(){
+        val po=arrayOf("Maximum precision","3 dBm","5 dBm","10 dBm")
+        val ad=ArrayAdapter(this,android.R.layout.simple_spinner_item,po)
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        rssi.adapter=ad
+        val cp=sp.getInt("rssiPrecision",0)
+        val ps=when(cp){0->0;3->1;5->2;10->3;else->0}
+        rssi.setSelection(ps)
+        rssi.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
+            override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){
+                val nv=when(pos){0->0;1->3;2->5;3->10;else->0}
+                sp.edit().putInt("rssiPrecision",nv).apply()
+            }
+            override fun onNothingSelected(p:AdapterView<*>?){}
         }
     }
     private fun su(){
