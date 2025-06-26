@@ -23,15 +23,18 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
     private lateinit var uh:LinearLayout
     private lateinit var uc2:LinearLayout
     private lateinit var gps:Spinner
+    private lateinit var gpsAlt:Spinner
     private lateinit var rssi:Spinner
     private lateinit var batt:Spinner
     private lateinit var net:Spinner
     private lateinit var spd:Spinner
+    private lateinit var baro:Spinner
     private lateinit var spi:TextView
     private lateinit var ni:TextView
     private lateinit var ri:TextView
     private lateinit var bi:TextView
     private lateinit var gi:TextView
+    private lateinit var bi2:TextView
 
     fun setupUI(){findViews();setupSpinners();setupState();setupListeners()}
 
@@ -51,15 +54,18 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
         uh=a.findViewById(R.id.serverUploadHeader)
         uc2=a.findViewById(R.id.serverUploadContent)
         gps=a.findViewById(R.id.gpsPrecisionSpinner)
+        gpsAlt=a.findViewById(R.id.gpsAltitudePrecisionSpinner)
         rssi=a.findViewById(R.id.rssiPrecisionSpinner)
         batt=a.findViewById(R.id.batteryPrecisionSpinner)
         net=a.findViewById(R.id.networkPrecisionSpinner)
         spd=a.findViewById(R.id.speedPrecisionSpinner)
+        baro=a.findViewById(R.id.barometerPrecisionSpinner)
         spi=a.findViewById(R.id.speedPrecisionInfo)
         ni=a.findViewById(R.id.networkPrecisionInfo)
         ri=a.findViewById(R.id.rssiPrecisionInfo)
         bi=a.findViewById(R.id.batteryPrecisionInfo)
         gi=a.findViewById(R.id.gpsPrecisionInfo)
+        bi2=a.findViewById(R.id.barometerPrecisionInfo)
     }
 
     private fun setupSpinners(){
@@ -72,6 +78,30 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
                 updateInfoText(gi,pos==0,"• If speed <4 km/h → round up to 1 km\n• If speed 4-40 km/h → round up to 20 m\n• If speed 40-140 km/h → round up to 100 m\n• If speed >140 km/h → round up to 1 km")
             },
             {v:Int->when(v){-1->0;0->1;20->2;100->3;1000->4;10000->5;else->0}}
+        )
+
+        setupSpinner(gpsAlt,
+            arrayOf("5 meters", "25 meters", "50 meters", "100 meters"),
+            p.getGPSAltitudePrecision(),
+            { pos: Int ->
+                val nv = when(pos) {
+                    0 -> 5
+                    1 -> 25
+                    2 -> 50
+                    3 -> 100
+                    else -> 50
+                }
+                p.setGPSAltitudePrecision(nv)
+            },
+            { v: Int ->
+                when(v) {
+                    5 -> 0
+                    25 -> 1
+                    50 -> 2
+                    100 -> 3
+                    else -> 2  // Default to 50 meters
+                }
+            }
         )
 
         setupSpinner(rssi,
@@ -116,6 +146,39 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
                 updateInfoText(spi,pos==0,"• If speed <2 km/h → show 0\n• If speed <10 km/h → round to nearest 3 km/h\n• If speed ≥10 km/h → round to nearest 10 km/h")
             },
             {v:Int->when(v){-1->0;0->1;1->2;3->3;5->4;10->5;else->0}}
+        )
+
+        setupSpinner(baro,
+            arrayOf("Smart Barometer Altitude", "Actual Pressure (hPa)", "2 meters", "5 meters", "10 meters", "20 meters", "50 meters", "100 meters"),
+            p.getBarometerPrecision(),
+            { pos: Int ->
+                val nv = when(pos) {
+                    0 -> -1
+                    1 -> 0
+                    2 -> 2
+                    3 -> 5
+                    4 -> 10
+                    5 -> 20
+                    6 -> 50
+                    7 -> 100
+                    else -> -1
+                }
+                p.setBarometerPrecision(nv)
+                updateInfoText(bi2, pos == 0, "• If barometer altitude is below -10 meters → show exact value\n• Otherwise → show minimum 0, rounded to lowest 5 meters")
+            },
+            { v: Int ->
+                when(v) {
+                    -1 -> 0
+                    0 -> 1
+                    2 -> 2
+                    5 -> 3
+                    10 -> 4
+                    20 -> 5
+                    50 -> 6
+                    100 -> 7
+                    else -> 0
+                }
+            }
         )
     }
 

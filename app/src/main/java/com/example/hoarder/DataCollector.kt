@@ -1,6 +1,10 @@
 // DataCollector.kt
 package com.example.hoarder
 import android.content.*
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.*
 import android.net.*
 import android.net.wifi.WifiManager
@@ -9,6 +13,7 @@ import android.provider.Settings
 import android.telephony.*
 import com.google.gson.GsonBuilder
 import java.util.*
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 class DataCollector(private val ctx:Context,private val h:Handler,private val callback:(String)->Unit){
@@ -17,9 +22,11 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
     private lateinit var wm:WifiManager
     private lateinit var bm:BatteryManager
     private lateinit var cm:ConnectivityManager
+    private lateinit var sm:SensorManager
     private var ll:Location?=null
     private var bd:Map<String,Any>?=null
     private var ca=false
+    private var bv:Float?=null
     private val dr=object:Runnable{override fun run(){if(ca){c();h.postDelayed(this,1000L)}}}
     private val ll2=object:LocationListener{
         override fun onLocationChanged(l:Location){ll=l}
@@ -44,21 +51,44 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
         }
     }
 
+    private val sel=object:SensorEventListener{
+        override fun onSensorChanged(event:SensorEvent){
+            if(event.sensor.type==Sensor.TYPE_PRESSURE){
+                bv=event.values[0]
+            }
+        }
+        override fun onAccuracyChanged(sensor:Sensor?,accuracy:Int){}
+    }
+
     fun init(){
         lm=ctx.getSystemService(Context.LOCATION_SERVICE)as LocationManager
         tm=ctx.getSystemService(Context.TELEPHONY_SERVICE)as TelephonyManager
         wm=ctx.getSystemService(Context.WIFI_SERVICE)as WifiManager
         bm=ctx.getSystemService(Context.BATTERY_SERVICE)as BatteryManager
         cm=ctx.getSystemService(Context.CONNECTIVITY_SERVICE)as ConnectivityManager
+        sm=ctx.getSystemService(Context.SENSOR_SERVICE)as SensorManager
+
         ctx.registerReceiver(br,IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         try{lm.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0f,ll2)
             lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,1000,0f,ll2)
         }catch(e:SecurityException){}
+
+        val ps=sm.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        if(ps!=null){
+            sm.registerListener(sel,ps,SensorManager.SENSOR_DELAY_NORMAL)
+        }
     }
 
     fun start(){h.removeCallbacks(dr);ca=true;h.post(dr)}
     fun stop(){ca=false;h.removeCallbacks(dr)}
-    fun cleanup(){stop();try{lm.removeUpdates(ll2);ctx.unregisterReceiver(br)}catch(e:Exception){}}
+    fun cleanup(){
+        stop()
+        try{
+            lm.removeUpdates(ll2)
+            ctx.unregisterReceiver(br)
+            sm.unregisterListener(sel)
+        }catch(e:Exception){}
+    }
 
     private fun c(){
         if(!ca)return
@@ -76,7 +106,11 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
         ll?.let{
             val gp=sp.getInt("gpsPrecision",100)
             val spdp=sp.getInt("speedPrecision",-1)
-            val ra=(it.altitude/2).roundToInt()*2
+            val altP=sp.getInt("gpsAltitudePrecision",50)
+
+            // Round altitude to nearest lower value of selected precision
+            val ra=(floor(it.altitude/altP)*altP).toInt()
+
             val sk=(it.speed*3.6).roundToInt()
             val rs=DataUtils.rsp(sk,spdp)
             val(prec,acc2)=if(gp==-1)DataUtils.smartGPSPrecision(it.speed)else Pair(gp,gp)
@@ -101,6 +135,36 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
                     (it.accuracy/1).roundToInt()*1)}
             }
             dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=rs
+        }
+
+        // Add barometer data if available
+        bv?.let{
+            // Get the barometer precision setting
+            val bp = sp.getInt("barometerPrecision", -1)
+
+            if(bp == 0) {
+                // Maximum precision: show actual pressure in hPa
+                dm["bar"] = it  // Keep the original pressure value in hPa
+            } else {
+                // Convert pressure to altitude for other precision settings
+                val pressureInHpa = it
+                val standardPressure = 1013.25f
+                val altitudeInMeters = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
+                val barometerValue = altitudeInMeters.toInt()
+
+                // Apply altitude-based precision rules
+                dm["bar"] = if(bp == -1) {
+                    // Smart precision
+                    if(barometerValue < -10) barometerValue else kotlin.math.max(0, (floor(barometerValue/5.0)*5).toInt())
+                } else {
+                    // Fixed precision
+                    if(barometerValue < -10) {
+                        barometerValue  // Show exact value for values below -10
+                    } else {
+                        kotlin.math.max(0, (floor(barometerValue/bp.toDouble())*bp).toInt())  // Round and ensure minimum 0
+                    }
+                }
+            }
         }
 
         try{

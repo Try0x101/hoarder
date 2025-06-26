@@ -1,4 +1,6 @@
 package com.example.hoarder
+import kotlin.math.floor
+import kotlin.math.max
 
 object DataUtils{
     fun rs(rv:Int,rp:Int)=when(rp){0->rv;else->(rv/rp)*rp}
@@ -14,6 +16,18 @@ object DataUtils{
     fun smartGPSPrecision(s:Float):Pair<Int,Int>{
         val sk=(s*3.6).toInt()
         return when{sk<4->Pair(1000,1000);sk<40->Pair(20,20);sk<140->Pair(100,100);else->Pair(1000,1000)}
+    }
+
+    fun smartBarometer(v:Int):Int{
+        return when{
+            v < -10 -> v  // Show exact value for values below -10 meters
+            else -> max(0, (floor(v/5.0)*5).toInt())  // Round to lowest 5 meters, min value 0
+        }
+    }
+
+    fun roundBarometer(v:Int, precision:Int):Int{
+        if(precision==0) return v  // No rounding (maximum precision)
+        return (floor(v/precision.toDouble())*precision).toInt()  // Round to lowest multiple of precision
     }
 
     fun isServiceRunning(ctx:android.content.Context,cls:Class<*>):Boolean{

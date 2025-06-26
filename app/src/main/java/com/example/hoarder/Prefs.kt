@@ -20,6 +20,9 @@ class Prefs(ctx: Context) {
     fun getGPSPrecision() = p.getInt("gpsPrecision", -1)
     fun setGPSPrecision(p: Int) = this.p.edit().putInt("gpsPrecision", p).apply()
 
+    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", 50)
+    fun setGPSAltitudePrecision(p: Int) = this.p.edit().putInt("gpsAltitudePrecision", p).apply()
+
     fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)
     fun setRSSIPrecision(p: Int) = this.p.edit().putInt("rssiPrecision", p).apply()
 
@@ -31,4 +34,7 @@ class Prefs(ctx: Context) {
 
     fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
+
+    fun getBarometerPrecision() = p.getInt("barometerPrecision", -1)
+    fun setBarometerPrecision(p: Int) = this.p.edit().putInt("barometerPrecision", p).apply()
 }
