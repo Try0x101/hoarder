@@ -17,24 +17,24 @@ class Prefs(ctx: Context) {
     fun getServerAddress() = p.getString("serverIpPortAddress", "") ?: ""
     fun setServerAddress(a: String) = p.edit().putString("serverIpPortAddress", a).apply()
 
-    fun getGPSPrecision() = p.getInt("gpsPrecision", -1)
+    fun getGPSPrecision() = p.getInt("gpsPrecision", -1)  // Default to smart GPS precision
     fun setGPSPrecision(p: Int) = this.p.edit().putInt("gpsPrecision", p).apply()
 
-    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", 50)
+    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", -1)  // Default to smart altitude precision
     fun setGPSAltitudePrecision(p: Int) = this.p.edit().putInt("gpsAltitudePrecision", p).apply()
 
-    fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)
+    fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)  // Default to smart RSSI precision
     fun setRSSIPrecision(p: Int) = this.p.edit().putInt("rssiPrecision", p).apply()
 
-    fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)
+    fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)  // Default to smart battery precision
     fun setBatteryPrecision(p: Int) = this.p.edit().putInt("batteryPrecision", p).apply()
 
-    fun getNetworkPrecision() = p.getInt("networkPrecision", 0)
+    fun getNetworkPrecision() = p.getInt("networkPrecision", -2)  // Default to float precision for network
     fun setNetworkPrecision(p: Int) = this.p.edit().putInt("networkPrecision", p).apply()
 
-    fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
+    fun getSpeedPrecision() = p.getInt("speedPrecision", -1)  // Default to smart speed precision
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
 
-    fun getBarometerPrecision() = p.getInt("barometerPrecision", -1)
+    fun getBarometerPrecision() = p.getInt("barometerPrecision", -1)  // Default to smart barometer precision
     fun setBarometerPrecision(p: Int) = this.p.edit().putInt("barometerPrecision", p).apply()
 }

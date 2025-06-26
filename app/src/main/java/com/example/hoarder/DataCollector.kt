@@ -28,12 +28,23 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
     private var ca=false
     private var bv:Float?=null
     private val dr=object:Runnable{override fun run(){if(ca){c();h.postDelayed(this,1000L)}}}
+
+    private val altitudeFilter = AltitudeKalmanFilter()
+    private var lastGpsAltitude: Double = Double.NaN
+    private var lastBarometerAltitude: Double = Double.NaN
+    private var lastGpsAccuracy: Float = 10f
+
     private val ll2=object:LocationListener{
-        override fun onLocationChanged(l:Location){ll=l}
+        override fun onLocationChanged(l:Location){
+            ll=l
+            lastGpsAltitude = l.altitude
+            lastGpsAccuracy = l.accuracy
+        }
         override fun onStatusChanged(p:String?,s:Int,e:Bundle?){}
         override fun onProviderEnabled(p:String){}
         override fun onProviderDisabled(p:String){}
     }
+
     private val br=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             if(i?.action==Intent.ACTION_BATTERY_CHANGED){
@@ -55,6 +66,10 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
         override fun onSensorChanged(event:SensorEvent){
             if(event.sensor.type==Sensor.TYPE_PRESSURE){
                 bv=event.values[0]
+                // Convert pressure to altitude
+                val pressureInHpa = event.values[0]
+                val standardPressure = 1013.25f
+                lastBarometerAltitude = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
             }
         }
         override fun onAccuracyChanged(sensor:Sensor?,accuracy:Int){}
@@ -87,6 +102,7 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
             lm.removeUpdates(ll2)
             ctx.unregisterReceiver(br)
             sm.unregisterListener(sel)
+            altitudeFilter.reset() // Reset the Kalman filter
         }catch(e:Exception){}
     }
 
@@ -104,12 +120,19 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
         }
 
         ll?.let{
-            val gp=sp.getInt("gpsPrecision",100)
+            val gp=sp.getInt("gpsPrecision",-1)
             val spdp=sp.getInt("speedPrecision",-1)
-            val altP=sp.getInt("gpsAltitudePrecision",50)
+            val altP=sp.getInt("gpsAltitudePrecision",-1)
 
-            // Round altitude to nearest lower value of selected precision
-            val ra=(floor(it.altitude/altP)*altP).toInt()
+            // Use the Kalman filter for altitude
+            val filteredAltitude = altitudeFilter.update(lastGpsAltitude, lastBarometerAltitude, lastGpsAccuracy)
+            val altitudeValue = when (altP) {
+                0 -> filteredAltitude.toInt() // Maximum precision - actual Kalman filter value
+                -1 -> altitudeFilter.applySmartRounding(filteredAltitude, -1) // Smart precision with our defined tiers
+                else -> (Math.floor(it.altitude/altP)*altP).toInt() // Fixed precision (existing logic)
+            }
+
+            dm["alt"] = altitudeValue
 
             val sk=(it.speed*3.6).roundToInt()
             val rs=DataUtils.rsp(sk,spdp)
@@ -134,7 +157,7 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
                     String.format(Locale.US,"%.6f",it.longitude).toDouble(),
                     (it.accuracy/1).roundToInt()*1)}
             }
-            dm["lat"]=rl;dm["lon"]=rlo;dm["alt"]=ra;dm["acc"]=ac;dm["spd"]=rs
+            dm["lat"]=rl;dm["lon"]=rlo;dm["acc"]=ac;dm["spd"]=rs
         }
 
         // Add barometer data if available
@@ -187,7 +210,7 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
 
             val cl:List<CellInfo>?=tm.allCellInfo
             var fo=false
-            val rp=sp.getInt("rssiPrecision",5)
+            val rp=sp.getInt("rssiPrecision",-1)
             cl?.forEach{ci->
                 if(ci.isRegistered&&!fo){
                     fo=true
@@ -236,9 +259,19 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
         val nc=cm.getNetworkCapabilities(an)
         if(nc!=null){
             val np=sp.getInt("networkPrecision",0)
-            val ldm=kotlin.math.ceil(nc.linkDownstreamBandwidthKbps.toDouble()/1024.0).toInt()
-            val lum=kotlin.math.ceil(nc.linkUpstreamBandwidthKbps.toDouble()/1024.0).toInt()
-            dm["dn"]=DataUtils.rn(ldm,np);dm["up"]=DataUtils.rn(lum,np)
+
+            // Handle the network speed based on the precision mode
+            if(np == -2) {
+                // Float precision mode - use raw values for more accurate decimal representation
+                dm["dn"] = DataUtils.rn(nc.linkDownstreamBandwidthKbps, np)
+                dm["up"] = DataUtils.rn(nc.linkUpstreamBandwidthKbps, np)
+            } else {
+                // Integer modes - convert to Mbps and round as integers
+                val ldm = kotlin.math.ceil(nc.linkDownstreamBandwidthKbps.toDouble()/1024.0).toInt()
+                val lum = kotlin.math.ceil(nc.linkUpstreamBandwidthKbps.toDouble()/1024.0).toInt()
+                dm["dn"] = DataUtils.rn(ldm, np)
+                dm["up"] = DataUtils.rn(lum, np)
+            }
         }
 
         callback(GsonBuilder().setPrettyPrinting().create().toJson(dm))

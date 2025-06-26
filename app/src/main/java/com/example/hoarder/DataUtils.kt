@@ -7,7 +7,21 @@ object DataUtils{
     fun smartRSSI(v:Int)=when{v<-110->v;v<-90->(v/5)*5;else->(v/10)*10}
     fun smartBattery(p:Int)=when{p<10->p;p<50->(p/5)*5;else->(p/10)*10}
     fun rb(p:Int,pr:Int):Int{if(pr==0)return p;if(p<10&&pr>1)return p;return(p/pr)*pr}
-    fun rn(v:Int,pr:Int):Int{if(pr==0)return if(v<7)v else(v/5)*5;return(v/pr)*pr}
+
+    fun rn(v:Int, pr:Int):Number {
+        // Float precision mode (-2): Return as float with 1 decimal place
+        if(pr == -2) {
+            val mbps = v.toDouble() / 1024.0
+            return (Math.round(mbps * 10) / 10.0).toFloat()
+        }
+
+        // Smart rounding (0): If < 7 Mbps show precise value, else round to nearest 5
+        if(pr == 0) return if(v < 7) v else (v/5)*5
+
+        // Fixed precision: Round to nearest multiple of precision value
+        return (v/pr)*pr
+    }
+
     fun rsp(s:Int,pr:Int):Int{
         if(pr==-1)return when{s<2->0;s<10->(s/3)*3;else->(s/10)*10}
         if(pr==0)return s

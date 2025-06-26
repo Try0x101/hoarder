@@ -157,6 +157,21 @@
                         </com.google.android.material.card.MaterialCardView>
 
                         <TextView
+                            android:id="@+id/gpsAltitudePrecisionInfo"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text=""
+                            android:textColor="@color/amoled_light_gray"
+                            android:textSize="14sp"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:layout_marginBottom="16dp"
+                            android:background="@color/amoled_medium_gray"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:visibility="gone"/>
+
+                        <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="RSSI Precision:"

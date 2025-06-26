@@ -35,6 +35,7 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
     private lateinit var bi:TextView
     private lateinit var gi:TextView
     private lateinit var bi2:TextView
+    private lateinit var gpsAltInfo:TextView
 
     fun setupUI(){findViews();setupSpinners();setupState();setupListeners()}
 
@@ -66,6 +67,7 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
         bi=a.findViewById(R.id.batteryPrecisionInfo)
         gi=a.findViewById(R.id.gpsPrecisionInfo)
         bi2=a.findViewById(R.id.barometerPrecisionInfo)
+        gpsAltInfo=a.findViewById(R.id.gpsAltitudePrecisionInfo)
     }
 
     private fun setupSpinners(){
@@ -81,25 +83,38 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
         )
 
         setupSpinner(gpsAlt,
-            arrayOf("5 meters", "25 meters", "50 meters", "100 meters"),
+            arrayOf("Smart Altitude Precision", "Maximum Precision", "25 meters", "50 meters", "100 meters"),
             p.getGPSAltitudePrecision(),
             { pos: Int ->
                 val nv = when(pos) {
-                    0 -> 5
-                    1 -> 25
-                    2 -> 50
-                    3 -> 100
-                    else -> 50
+                    0 -> -1  // Smart precision
+                    1 -> 0   // Maximum precision (actual Kalman filter value)
+                    2 -> 25  // 25m fixed precision
+                    3 -> 50  // 50m fixed precision
+                    4 -> 100 // 100m fixed precision
+                    else -> -1
                 }
                 p.setGPSAltitudePrecision(nv)
+
+                // Update the info text based on the selection
+                if (pos == 0) {
+                    updateInfoText(gpsAltInfo, true,
+                        "• Below 100m: 25m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision\n• Uses Kalman filter to combine GPS and barometer data")
+                } else if (pos == 1) {
+                    updateInfoText(gpsAltInfo, true,
+                        "• Shows exact altitude value from Kalman filter\n• Combines GPS and barometer data for maximum accuracy\n• No rounding applied")
+                } else {
+                    updateInfoText(gpsAltInfo, false, "")
+                }
             },
             { v: Int ->
                 when(v) {
-                    5 -> 0
-                    25 -> 1
-                    50 -> 2
-                    100 -> 3
-                    else -> 2  // Default to 50 meters
+                    -1 -> 0  // Smart precision
+                    0 -> 1   // Maximum precision
+                    25 -> 2
+                    50 -> 3
+                    100 -> 4
+                    else -> 0  // Default to Smart precision
                 }
             }
         )
@@ -127,14 +142,34 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
         )
 
         setupSpinner(net,
-            arrayOf("Smart Network Rounding","Round to 1 Mbps","Round to 2 Mbps","Round to 5 Mbps"),
+            arrayOf("Float Precision (0.0 Mbps)", "Smart Network Rounding", "Round to 1 Mbps", "Round to 2 Mbps", "Round to 5 Mbps"),
             p.getNetworkPrecision(),
-            {pos:Int->
-                val nv=when(pos){0->0;1->1;2->2;3->5;else->0}
+            { pos: Int ->
+                val nv = when(pos) {
+                    0 -> -2  // Float precision
+                    1 -> 0   // Smart rounding
+                    2 -> 1   // Round to 1 Mbps
+                    3 -> 2   // Round to 2 Mbps
+                    4 -> 5   // Round to 5 Mbps
+                    else -> 0
+                }
                 p.setNetworkPrecision(nv)
-                updateInfoText(ni,pos==0,"• If speed <7 Mbps → show precise value\n• If speed ≥7 Mbps → round to nearest 5 Mbps")
+                when(pos) {
+                    0 -> updateInfoText(ni, true, "• Shows network speeds with decimal precision (e.g., 0.3 Mbps)\n• Useful for accurately measuring slower connections")
+                    1 -> updateInfoText(ni, true, "• If speed <7 Mbps → show precise value\n• If speed ≥7 Mbps → round to nearest 5 Mbps")
+                    else -> updateInfoText(ni, false, "")
+                }
             },
-            {v:Int->when(v){0->0;1->1;2->2;5->3;else->0}}
+            { v: Int ->
+                when(v) {
+                    -2 -> 0  // Float precision
+                    0 -> 1   // Smart rounding
+                    1 -> 2
+                    2 -> 3
+                    5 -> 4
+                    else -> 1
+                }
+            }
         )
 
         setupSpinner(spd,
