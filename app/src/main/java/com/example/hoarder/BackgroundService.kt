@@ -1,3 +1,4 @@
+// BackgroundService.kt
 package com.example.hoarder
 import android.Manifest
 import android.app.*
@@ -18,27 +19,24 @@ class BackgroundService:Service(){
     private val cr=object:BroadcastReceiver(){
         override fun onReceive(c:Context?,i:Intent?){
             when(i?.action){
-                "com.example.hoarder.START_COLLECTION"->{if(!ca){ca=true;dataCollector.start()}}
-                "com.example.hoarder.STOP_COLLECTION"->{
-                    if(ca){ca=false;dataCollector.stop();LocalBroadcastManager.getInstance(applicationContext)
-                        .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",""))}
-                }
+                "com.example.hoarder.START_COLLECTION"->
+                    if(!ca){ca=true;dataCollector.start()}
+                "com.example.hoarder.STOP_COLLECTION"->
+                    if(ca){ca=false;dataCollector.stop();
+                        LocalBroadcastManager.getInstance(applicationContext)
+                            .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",""))}
                 "com.example.hoarder.START_UPLOAD"->{
                     val ip=i?.getStringExtra("ipPort")?.split(":")
-                    if(ip!=null&&ip.size==2&&ip[0].isNotBlank()&&ip[1].toIntOrNull()!=null&&ip[1].toInt()>0&&ip[1].toInt()<=65535){
-                        dataUploader.resetCounter() // Reset counter when starting upload
+                    if(ip!=null&&ip.size==2&&ip[0].isNotBlank()&&ip[1].toIntOrNull()!=null
+                        &&ip[1].toInt()>0&&ip[1].toInt()<=65535){
+                        dataUploader.resetCounter()
                         dataUploader.setServer(ip[0],ip[1].toInt())
                         ua=true
                         dataUploader.start()
                     }else{ua=false;dataUploader.notifyStatus("Error","Invalid Server IP:Port for starting upload.",0L)}
                 }
-                "com.example.hoarder.STOP_UPLOAD"->{
-                    if(ua){
-                        ua=false
-                        dataUploader.stop()
-                        dataUploader.resetCounter()
-                    }
-                }
+                "com.example.hoarder.STOP_UPLOAD"->
+                    if(ua){ua=false;dataUploader.stop();dataUploader.resetCounter()}
             }
         }
     }
@@ -48,10 +46,9 @@ class BackgroundService:Service(){
         h=Handler(Looper.getMainLooper())
         val p=getSharedPreferences("HoarderServicePrefs",Context.MODE_PRIVATE)
 
-        dataCollector=DataCollector(this,h){ json->
+        dataCollector=DataCollector(this,h){json->
             LocalBroadcastManager.getInstance(applicationContext)
                 .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",json))
-
             if(ua)dataUploader.queueData(json)
         }
 
@@ -72,8 +69,9 @@ class BackgroundService:Service(){
     }
 
     private fun initService(){
+        val lbm=LocalBroadcastManager.getInstance(this)
         if(!hasRequiredPermissions()){
-            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            lbm.sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
             stopSelf()
             return
         }
@@ -82,7 +80,7 @@ class BackgroundService:Service(){
             startForeground(1,createNotification())
             dataCollector.init()
         }catch(e:SecurityException){
-            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            lbm.sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
             stopSelf()
             return
         }
@@ -98,7 +96,7 @@ class BackgroundService:Service(){
         if(shouldCollect){ca=true;dataCollector.start()}
         if(shouldUpload&&dataUploader.hasValidServer()){
             ua=true
-            dataUploader.resetCounter() // Reset counter when starting from init
+            dataUploader.resetCounter()
             dataUploader.start()
         }
     }
@@ -119,14 +117,17 @@ class BackgroundService:Service(){
     private fun scheduleRestart(){
         val i=Intent(applicationContext,BackgroundService::class.java)
         val pi=PendingIntent.getService(applicationContext,1,i,PendingIntent.FLAG_IMMUTABLE)
-        (getSystemService(Context.ALARM_SERVICE)as AlarmManager).set(AlarmManager.RTC_WAKEUP,System.currentTimeMillis()+1000,pi)
+        (getSystemService(Context.ALARM_SERVICE)as AlarmManager).set(AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis()+1000,pi)
     }
 
     private fun restartService(){
         val i=Intent(applicationContext,BackgroundService::class.java)
         try{
-            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)applicationContext.startForegroundService(i)
-            else applicationContext.startService(i)
+            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)
+                applicationContext.startForegroundService(i)
+            else
+                applicationContext.startService(i)
         }catch(e:Exception){scheduleRestart()}
     }
 
@@ -134,17 +135,21 @@ class BackgroundService:Service(){
 
     private fun createNotificationChannel(){
         if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
-            val c=NotificationChannel("HoarderServiceChannel","Hoarder Service Channel",NotificationManager.IMPORTANCE_MIN)
-            c.setShowBadge(false)
-            c.enableLights(false)
-            c.enableVibration(false)
-            c.lockscreenVisibility=NotificationCompat.VISIBILITY_SECRET
+            val c=NotificationChannel("HoarderServiceChannel","Hoarder Service Channel",
+                NotificationManager.IMPORTANCE_MIN)
+            c.apply{
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                lockscreenVisibility=NotificationCompat.VISIBILITY_SECRET
+            }
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(c)
         }
     }
 
     private fun createNotification():Notification{
-        val pi=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE)
+        val pi=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(applicationContext,"HoarderServiceChannel")
             .setContentTitle(getString(R.string.app_name))
             .setContentText("Running in background")
@@ -157,9 +162,11 @@ class BackgroundService:Service(){
             .build()
     }
 
-    private fun hasRequiredPermissions():Boolean{
-        return (ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED||
-                ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED)&&
-                ContextCompat.checkSelfPermission(this,Manifest.permission.FOREGROUND_SERVICE_LOCATION)==PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasRequiredPermissions()=
+        (ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==
+                PackageManager.PERMISSION_GRANTED||
+                ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)==
+                PackageManager.PERMISSION_GRANTED)&&
+                ContextCompat.checkSelfPermission(this,Manifest.permission.FOREGROUND_SERVICE_LOCATION)==
+                PackageManager.PERMISSION_GRANTED
 }
