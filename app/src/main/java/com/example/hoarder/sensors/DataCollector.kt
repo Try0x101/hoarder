@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/hoarder/sensors/DataCollector.kt
 package com.example.hoarder.sensors
 
 import android.content.BroadcastReceiver
@@ -104,7 +105,6 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
             val spdp = sp.getInt("speedPrecision", -1)
             val altP = sp.getInt("gpsAltitudePrecision", -1)
 
-            // Get altitude from sensor manager
             dm["alt"] = sensorMgr.getFilteredAltitude(altP)
 
             val sk = (location.speed * 3.6).roundToInt()
@@ -185,10 +185,6 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
 
     private fun collectWifiData(dm: MutableMap<String, Any>) {
         val wi = wm.connectionInfo
-
-        // Changed SSID handling: Now returns 1 if there's a valid SSID, 0 otherwise
-        val ssidValue = if (wi != null && wi.ssid != null && wi.ssid != "<unknown ssid>" && wi.ssid != "0x" && !wi.ssid.isEmpty()) 1 else 0
-        dm["ssid"] = ssidValue
 
         // Add BSSID to the output - returns 0 if not available
         val bssidValue = if (wi != null && wi.bssid != null && wi.bssid != "02:00:00:00:00:00" && wi.bssid != "00:00:00:00:00:00") wi.bssid else 0
