@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GridLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:columnCount="2"
+    android:padding="20dp">
+
+    <TextView style="@style/TelemetryLabel" android:text="Latitude"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryLat" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Longitude"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryLon" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Altitude"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryAlt" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Speed"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetrySpd" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Accuracy"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryAcc" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Battery"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryBattery" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="RSSI"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryRssi" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Network"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryNetwork" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Operator"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryOperator" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="Cell ID"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryCellId" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="DL Speed"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryDownload" android:text="--"/>
+
+    <TextView style="@style/TelemetryLabel" android:text="UL Speed"/>
+    <TextView style="@style/TelemetryValue" android:id="@+id/telemetryUpload" android:text="--"/>
+</GridLayout>

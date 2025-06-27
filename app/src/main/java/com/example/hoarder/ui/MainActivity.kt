@@ -8,34 +8,27 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.example.hoarder.utils.NetUtils
-import com.example.hoarder.utils.NotifUtils
-import com.example.hoarder.utils.PermHandler
 import com.example.hoarder.R
 import com.example.hoarder.data.ConcurrentDataManager
 import com.example.hoarder.data.DataUtils
 import com.example.hoarder.data.Prefs
 import com.example.hoarder.service.BackgroundService
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonParser
+import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.utils.NotifUtils
+import com.example.hoarder.utils.PermHandler
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var dt: TextView
-
-    // Lazy initialization for better resource management
     private val h = Handler(Looper.getMainLooper())
     private val prefs by lazy { Prefs(this) }
     private val permHandler by lazy { PermHandler(this, h) }
     private val ui by lazy { UIHelper(this, prefs) }
     private val dataManager by lazy { ConcurrentDataManager() }
-    private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
 
     private var ld: String? = null
     private val rcvs = mutableListOf<BroadcastReceiver>()
@@ -45,17 +38,19 @@ class MainActivity : AppCompatActivity() {
             i?.getStringExtra("jsonString")?.let { j ->
                 ld = j
                 dataManager.setJsonData(j)
-                if (ui.isDataVisible()) dj(j)
+                ui.updateRawJson(j)
             }
         }
     }
 
     private val ur = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
-            ui.updateStatus(
+            ui.updateUploadUI(
+                prefs.isDataUploadEnabled(),
                 i?.getStringExtra("status"),
                 i?.getStringExtra("message"),
-                i?.getLongExtra("totalUploadedBytes", 0L)
+                i?.getLongExtra("totalUploadedBytes", 0L),
+                i?.getLongExtra("lastUploadSizeBytes", -1L)?.takeIf { it != -1L }
             )
         }
     }
@@ -79,7 +74,6 @@ class MainActivity : AppCompatActivity() {
             i
         }
 
-        dt = findViewById(R.id.dataTextView)
         ui.setupUI()
         NotifUtils.createSilentChannel(this)
 
@@ -112,23 +106,14 @@ class MainActivity : AppCompatActivity() {
             ss()
             rs()
         }
+        ui.updateRawJson(getLastData())
     }
 
     override fun onDestroy() {
         super.onDestroy()
         rcvs.forEach { LocalBroadcastManager.getInstance(this).unregisterReceiver(it) }
         h.removeCallbacksAndMessages(null)
-
-        // Clear any cached data to avoid memory leaks
         dataManager.clearData()
-    }
-
-    fun dj(j: String) {
-        try {
-            dt.text = g.toJson(JsonParser.parseString(j))
-        } catch (e: Exception) {
-            dt.text = "Error formatting JSON: ${e.message}"
-        }
     }
 
     private fun handleFirstRun() {
@@ -139,16 +124,14 @@ class MainActivity : AppCompatActivity() {
         val cip = prefs.getServerAddress()
         if (cip.isBlank() || !NetUtils.isValidIpPort(cip)) {
             val dip = "127.0.0.1:5000"
-            ui.setServerAddress(dip)
             prefs.setServerAddress(dip)
         }
 
-        prefs.setDataUploadEnabled(true)
-        ui.updateUploadUI(true)
+        prefs.setDataUploadEnabled(false)
+        ui.updateUploadUI(false, null, null, null, null)
 
         ss()
         startCollection()
-        startUpload(prefs.getServerAddress())
 
         Toast.makeText(this, "Setup complete. App will run in background.", Toast.LENGTH_SHORT).show()
         h.postDelayed({ finishAffinity() }, 2000)
@@ -172,7 +155,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun stopCollection() {
-        dt.text = ""
+        ui.updateRawJson(null)
         ld = null
         dataManager.setJsonData(null)
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_COLLECTION"))
@@ -180,18 +163,14 @@ class MainActivity : AppCompatActivity() {
 
     fun startUpload(sa: String) {
         if (NetUtils.isValidIpPort(sa)) {
-            ui.updateStatus("Connecting", "Attempting to connect...", 0L)
             LocalBroadcastManager.getInstance(this)
                 .sendBroadcast(Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", sa))
         }
     }
 
     fun stopUpload() {
-        ui.updateStatus("Paused", "Upload paused.", 0L)
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_UPLOAD"))
     }
 
-    fun getLastData(): String? {
-        return dataManager.getJsonData() ?: ld
-    }
+    fun getLastData(): String? = dataManager.getJsonData() ?: ld
 }

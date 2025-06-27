@@ -1,481 +1,234 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@color/amoled_black">
 
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        android:layout_height="match_parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp">
 
-            <com.google.android.material.card.MaterialCardView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="32dp"
-                app:cardElevation="4dp"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/amoled_dark_gray">
+                android:orientation="vertical">
+
+                <RelativeLayout
+                    android:id="@+id/dataCollectionHeader"
+                    style="@style/SettingsRow">
+
+                    <ImageView
+                        android:id="@+id/dataCollectionIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@drawable/ic_server_upload" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/dataCollectionSwitch"
+                        android:layout_toEndOf="@id/dataCollectionIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Data Collection" />
+
+                        <TextView
+                            android:id="@+id/dataCollectionSubtitle"
+                            style="@style/SettingsSubtitle"
+                            android:text="Inactive" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/dataCollectionArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/dataCollectionSwitch"
+                        android:layout_marginEnd="8dp"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_arrow_down" />
+
+                    <Switch
+                        android:id="@+id/dataCollectionSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:thumbTint="@color/amoled_white"
+                        android:track="@drawable/switch_track_selector" />
+                </RelativeLayout>
+
+                <HorizontalScrollView
+                    android:id="@+id/dataCollectionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:visibility="gone">
+                    <TextView
+                        android:id="@+id/rawJsonTextView"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Collecting data..."
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:typeface="monospace"/>
+                </HorizontalScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RelativeLayout
+                    android:id="@+id/precisionSettingsHeader"
+                    style="@style/SettingsRow">
+
+                    <ImageView
+                        android:id="@+id/precisionSettingsIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@drawable/ic_precision_settings" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/precisionSettingsArrow"
+                        android:layout_toEndOf="@id/precisionSettingsIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Precision Settings" />
+
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:text="Configure data rounding" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/precisionSettingsArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_arrow_down" />
+                </RelativeLayout>
 
                 <LinearLayout
+                    android:id="@+id/precisionSettingsContent"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="8dp">
+                    android:paddingHorizontal="20dp"
+                    android:visibility="gone">
 
-                    <LinearLayout
-                        android:id="@+id/rawDataHeader"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingVertical="12dp">
-
-                        <TextView
-                            android:id="@+id/rawDataTitleTextView"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Json data"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="20sp"
-                            android:textStyle="bold"
-                            android:translationX="32px"/>
-
-                        <LinearLayout
-                            android:id="@+id/switchAndIconContainer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:padding="8dp">
-
-                            <Switch
-                                android:id="@+id/dataCollectionSwitch"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textOff="OFF"
-                                android:textOn="ON"
-                                android:thumbTint="@color/amoled_white"
-                                android:trackTint="@color/amoled_medium_gray"/>
-                        </LinearLayout>
+                    <LinearLayout android:id="@+id/gpsPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="GPS"/>
+                            <TextView android:id="@+id/gpsPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/gpsPrecisionInfo" style="@style/SettingsInfoText" />
                     </LinearLayout>
 
-                    <LinearLayout
-                        android:id="@+id/rawDataContent"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:layout_marginTop="8dp"
-                        android:padding="8dp"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="GPS Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/gpsPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/gpsPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="GPS Altitude Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/gpsAltitudePrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/gpsAltitudePrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="RSSI Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/rssiPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/rssiPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Battery Percentage Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/batteryPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/batteryPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Network Speed Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/networkPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/networkPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Speed Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/speedPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/speedPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
-                            android:id="@+id/dataTextView"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Data: Loading..."
-                            android:textSize="14sp"
-                            android:fontFamily="monospace"
-                            android:textColor="@color/amoled_light_gray"/>
+                    <LinearLayout android:id="@+id/gpsAltitudePrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="GPS Altitude"/>
+                            <TextView android:id="@+id/gpsAltitudePrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/gpsAltitudePrecisionInfo" style="@style/SettingsInfoText" />
                     </LinearLayout>
+
+                    <LinearLayout android:id="@+id/rssiPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="RSSI"/>
+                            <TextView android:id="@+id/rssiPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/rssiPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+
+                    <LinearLayout android:id="@+id/batteryPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Battery"/>
+                            <TextView android:id="@+id/batteryPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/batteryPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+
+                    <LinearLayout android:id="@+id/networkPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Network Speed"/>
+                            <TextView android:id="@+id/networkPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/networkPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+
+                    <LinearLayout android:id="@+id/speedPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Speed"/>
+                            <TextView android:id="@+id/speedPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/speedPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/serverUploadCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardCornerRadius="32dp"
-                app:cardElevation="4dp"
-                app:cardBackgroundColor="@color/amoled_dark_gray">
+            <RelativeLayout
+                android:id="@+id/serverUploadRow"
+                style="@style/SettingsRow">
+
+                <ImageView
+                    android:id="@+id/serverUploadIcon"
+                    style="@style/SettingsIcon"
+                    android:src="@drawable/ic_data_collection" />
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="8dp">
+                    android:layout_toStartOf="@id/serverUploadSwitch"
+                    android:layout_toEndOf="@id/serverUploadIcon"
+                    android:layout_centerVertical="true"
+                    android:orientation="vertical">
 
-                    <LinearLayout
-                        android:id="@+id/serverUploadHeader"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingVertical="12dp">
+                    <TextView
+                        style="@style/SettingsTitle"
+                        android:text="Server Upload" />
 
-                        <TextView
-                            android:id="@+id/serverUploadTitleTextView"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Server Upload (Inactive)"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="20sp"
-                            android:textStyle="bold"
-                            android:translationX="32px"/>
+                    <TextView
+                        android:id="@+id/serverUploadBytes"
+                        style="@style/SettingsSubtitle"
+                        android:text="Uploaded: 0 B"
+                        android:visibility="gone"/>
 
-                        <LinearLayout
-                            android:id="@+id/serverUploadSwitchContainer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:padding="8dp">
-
-                            <Switch
-                                android:id="@+id/serverUploadSwitch"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textOff="OFF"
-                                android:textOn="ON"
-                                android:thumbTint="@color/amoled_white"
-                                android:trackTint="@color/amoled_medium_gray"/>
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/serverUploadContent"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:layout_marginTop="8dp"
-                        android:padding="8dp"
-                        android:visibility="gone">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingHorizontal="8dp">
-
-                            <EditText
-                                android:id="@+id/serverIpPortEditText"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:hint="Server IP:Port (e.g., 188.132.234.72:5000)"
-                                android:textColor="@color/amoled_white"
-                                android:textColorHint="@color/amoled_light_gray"
-                                android:textSize="14sp"
-                                android:inputType="textUri"
-                                android:backgroundTint="@color/amoled_true_blue"
-                                android:padding="8dp"
-                                android:textCursorDrawable="@drawable/edit_text_cursor_color"/>
-
-                            <Button
-                                android:id="@+id/saveServerIpButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Save"
-                                android:layout_marginStart="8dp"
-                                android:backgroundTint="@color/amoled_true_blue"
-                                android:textColor="@color/amoled_white"
-                                app:cornerRadius="16dp"/>
-                        </LinearLayout>
-
-                        <TextView
-                            android:id="@+id/uploadedBytesTextView"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Uploaded: 0 B"
-                            android:textSize="14sp"
-                            android:fontFamily="monospace"
-                            android:textColor="@color/amoled_light_gray"
-                            android:layout_marginBottom="4dp"/>
-
-                        <TextView
-                            android:id="@+id/uploadMessageTextView"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textSize="14sp"
-                            android:fontFamily="monospace"
-                            android:textColor="@color/amoled_red"
-                            android:layout_marginBottom="4dp"/>
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/serverUploadStatus"
+                        style="@style/SettingsSubtitle"
+                        android:text="Inactive" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+
+                <Switch
+                    android:id="@+id/serverUploadSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector" />
+            </RelativeLayout>
+
         </LinearLayout>
-    </ScrollView>
-</androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

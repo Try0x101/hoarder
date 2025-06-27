@@ -1,21 +1,102 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.Hoarder" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/amoled_primary</item>
-        <item name="colorPrimaryVariant">@color/amoled_primary_variant</item>
-        <item name="colorOnPrimary">@color/amoled_text_on_primary</item>
-        <item name="colorSecondary">@color/amoled_secondary</item>
-        <item name="colorSecondaryVariant">@color/amoled_secondary_variant</item>
-        <item name="colorOnSecondary">@color/amoled_text_on_secondary</item>
+        <item name="colorPrimary">@color/amoled_true_blue</item>
+        <item name="colorPrimaryVariant">@color/amoled_true_blue</item>
+        <item name="colorOnPrimary">@color/amoled_white</item>
+        <item name="colorSecondary">@color/amoled_true_blue</item>
+        <item name="colorSecondaryVariant">@color/amoled_true_blue</item>
+        <item name="colorOnSecondary">@color/amoled_black</item>
         <item name="android:statusBarColor">@color/amoled_black</item>
         <item name="android:windowBackground">@color/amoled_black</item>
-        <item name="android:textColorPrimary">@color/amoled_text_primary</item>
-        <item name="android:textColorSecondary">@color/amoled_text_secondary</item>
+    </style>
+
+    <style name="SettingsRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/settings_item_background</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingHorizontal">20dp</item>
+        <item name="android:paddingVertical">16dp</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="SettingsIcon">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">20dp</item>
+        <item name="android:tint">@color/amoled_light_gray</item>
+    </style>
+
+    <style name="SettingsTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/amoled_white</item>
-        <item name="android:navigationBarColor">@color/amoled_black</item>
-        <item name="materialCardViewStyle">@style/Widget.MaterialComponents.CardView</item>
-        <item name="cardBackgroundColor">@color/amoled_dark_gray</item>
-        <item name="colorSurface">@color/amoled_dark_gray</item>
-        <item name="colorOnSurface">@color/amoled_light_gray</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="SettingsSubtitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/amoled_light_gray</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="SettingsInfoText" parent="SettingsSubtitle">
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:visibility">gone</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="ClickableSettingsArea">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/settings_item_background</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingVertical">16dp</item>
+    </style>
+
+    <style name="SettingsRowContent">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="AlertDialogTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_background_rounded</item>
+        <item name="android:textColor">@color/amoled_white</item>
+        <item name="android:textColorPrimary">@color/amoled_white</item>
+        <item name="android:textColorSecondary">@color/amoled_light_gray</item>
+        <item name="colorAccent">@color/amoled_true_blue</item>
+        <item name="android:windowTitleStyle">@style/DialogWindowTitle</item>
+    </style>
+
+    <style name="DialogWindowTitle" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/amoled_white</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <style name="TelemetryLabel" parent="Widget.AppCompat.TextView">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:layout_gravity">fill_horizontal</item>
+        <item name="android:textColor">@color/amoled_light_gray</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:padding">8dp</item>
+    </style>
+
+    <style name="TelemetryValue" parent="Widget.AppCompat.TextView">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:layout_gravity">fill_horizontal</item>
+        <item name="android:textColor">@color/amoled_white</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:gravity">end</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:fontFamily">monospace</item>
     </style>
 </resources>
