@@ -255,10 +255,10 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
             else->rs
         }
 
-        val an=cm.activeNetwork
-        val nc=cm.getNetworkCapabilities(an)
-        if(nc!=null){
-            val np=sp.getInt("networkPrecision",0)
+        val an = cm.activeNetwork
+        val nc = cm.getNetworkCapabilities(an)
+        if(nc != null) {
+            val np = sp.getInt("networkPrecision", 0)
 
             // Handle the network speed based on the precision mode
             if(np == -2) {
@@ -269,8 +269,8 @@ class DataCollector(private val ctx:Context,private val h:Handler,private val ca
                 // Integer modes - convert to Mbps and round as integers
                 val ldm = kotlin.math.ceil(nc.linkDownstreamBandwidthKbps.toDouble()/1024.0).toInt()
                 val lum = kotlin.math.ceil(nc.linkUpstreamBandwidthKbps.toDouble()/1024.0).toInt()
-                dm["dn"] = DataUtils.rn(ldm, np)
-                dm["up"] = DataUtils.rn(lum, np)
+                dm["dn"] = DataUtils.rn(nc.linkDownstreamBandwidthKbps, np)
+                dm["up"] = DataUtils.rn(nc.linkUpstreamBandwidthKbps, np)
             }
         }
 

@@ -29,7 +29,7 @@ class Prefs(ctx: Context) {
     fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)  // Default to smart battery precision
     fun setBatteryPrecision(p: Int) = this.p.edit().putInt("batteryPrecision", p).apply()
 
-    fun getNetworkPrecision() = p.getInt("networkPrecision", -2)  // Default to float precision for network
+    fun getNetworkPrecision() = p.getInt("networkPrecision", 0)  // Default to smart precision (0)
     fun setNetworkPrecision(p: Int) = this.p.edit().putInt("networkPrecision", p).apply()
 
     fun getSpeedPrecision() = p.getInt("speedPrecision", -1)  // Default to smart speed precision

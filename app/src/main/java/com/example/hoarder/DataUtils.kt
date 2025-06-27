@@ -9,17 +9,26 @@ object DataUtils{
     fun rb(p:Int,pr:Int):Int{if(pr==0)return p;if(p<10&&pr>1)return p;return(p/pr)*pr}
 
     fun rn(v:Int, pr:Int):Number {
+        val mbps = v.toDouble() / 1024.0  // Convert Kbps to Mbps
+
         // Float precision mode (-2): Return as float with 1 decimal place
         if(pr == -2) {
-            val mbps = v.toDouble() / 1024.0
             return (Math.round(mbps * 10) / 10.0).toFloat()
         }
 
-        // Smart rounding (0): If < 7 Mbps show precise value, else round to nearest 5
-        if(pr == 0) return if(v < 7) v else (v/5)*5
+        // Smart rounding (0): Apply the tiered precision logic
+        if(pr == 0) {
+            return when {
+                mbps < 2.0 -> (Math.round(mbps * 10) / 10.0).toFloat() // Below 2 Mbps: float precision
+                mbps < 7.0 -> Math.floor(mbps).toInt() // Between 2-7 Mbps: round to nearest lower 1 Mbps
+                else -> (Math.floor(mbps / 5.0) * 5).toInt() // Above 7 Mbps: round to nearest lower 5 Mbps
+            }
+        }
 
-        // Fixed precision: Round to nearest multiple of precision value
-        return (v/pr)*pr
+        // Fixed precision: Round to nearest lower multiple of precision value
+        // Important fix: We need to ensure we're not returning 0 when the value is small
+        val rounded = (Math.floor(mbps / pr) * pr).toInt()
+        return if (mbps > 0 && rounded == 0) 1 else rounded  // Ensure at least 1 Mbps if non-zero
     }
 
     fun rsp(s:Int,pr:Int):Int{

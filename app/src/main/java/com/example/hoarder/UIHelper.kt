@@ -142,12 +142,12 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
         )
 
         setupSpinner(net,
-            arrayOf("Float Precision (0.0 Mbps)", "Smart Network Rounding", "Round to 1 Mbps", "Round to 2 Mbps", "Round to 5 Mbps"),
+            arrayOf("Smart Network Rounding", "Float Precision (0.0 Mbps)", "Round to 1 Mbps", "Round to 2 Mbps", "Round to 5 Mbps"),
             p.getNetworkPrecision(),
             { pos: Int ->
                 val nv = when(pos) {
-                    0 -> -2  // Float precision
-                    1 -> 0   // Smart rounding
+                    0 -> 0   // Smart rounding
+                    1 -> -2  // Float precision
                     2 -> 1   // Round to 1 Mbps
                     3 -> 2   // Round to 2 Mbps
                     4 -> 5   // Round to 5 Mbps
@@ -155,19 +155,19 @@ class UIHelper(private val a:MainActivity,private val p:Prefs){
                 }
                 p.setNetworkPrecision(nv)
                 when(pos) {
-                    0 -> updateInfoText(ni, true, "• Shows network speeds with decimal precision (e.g., 0.3 Mbps)\n• Useful for accurately measuring slower connections")
-                    1 -> updateInfoText(ni, true, "• If speed <7 Mbps → show precise value\n• If speed ≥7 Mbps → round to nearest 5 Mbps")
+                    0 -> updateInfoText(ni, true, "• Below 2 Mbps → show decimal precision (e.g., 1.5 Mbps)\n• 2-7 Mbps → round to nearest lower 1 Mbps\n• Above 7 Mbps → round to nearest lower 5 Mbps")
+                    1 -> updateInfoText(ni, true, "• Shows all network speeds with decimal precision (e.g., 0.3 Mbps)\n• Useful for accurately measuring all connections")
                     else -> updateInfoText(ni, false, "")
                 }
             },
             { v: Int ->
                 when(v) {
-                    -2 -> 0  // Float precision
-                    0 -> 1   // Smart rounding
+                    0 -> 0   // Smart rounding
+                    -2 -> 1  // Float precision
                     1 -> 2
                     2 -> 3
                     5 -> 4
-                    else -> 1
+                    else -> 0
                 }
             }
         )
