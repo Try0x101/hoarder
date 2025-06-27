@@ -29,7 +29,7 @@
         tools:targetApi="35">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -38,13 +38,13 @@
         </activity>
 
         <service
-            android:name="com.example.hoarder.BackgroundService"
+            android:name="com.example.hoarder.service.BackgroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location"/>
 
         <receiver
-            android:name=".BootReceiver"
+            android:name=".service.BootReceiver"
             android:enabled="true"
             android:exported="true"
             android:directBootAware="true"

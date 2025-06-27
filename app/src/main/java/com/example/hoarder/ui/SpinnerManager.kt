@@ -1,11 +1,12 @@
-// SpinnerManager.kt
-package com.example.hoarder
+package com.example.hoarder.ui
 
+import android.R
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Spinner
 import android.widget.TextView
+import com.example.hoarder.data.Prefs
 
 class SpinnerManager(private val context: MainActivity) {
 
@@ -17,8 +18,8 @@ class SpinnerManager(private val context: MainActivity) {
         onChanged: (Int) -> Unit,
         valueMapper: (Int) -> Int
     ) {
-        val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, options)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val adapter = ArrayAdapter(context, R.layout.simple_spinner_item, options)
+        adapter.setDropDownViewResource(R.layout.simple_spinner_dropdown_item)
         spinner.adapter = adapter
         spinner.setSelection(valueMapper(currentValue))
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {

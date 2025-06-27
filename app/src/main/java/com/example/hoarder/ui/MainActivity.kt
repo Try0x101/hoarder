@@ -1,17 +1,30 @@
-// MainActivity.kt
-package com.example.hoarder
-import android.Manifest
-import android.content.*
-import android.content.pm.PackageManager
-import android.os.*
-import android.view.View
-import android.widget.*
+package com.example.hoarder.ui
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import androidx.core.view.*
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.google.gson.*
+import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.utils.NotifUtils
+import com.example.hoarder.utils.PermHandler
+import com.example.hoarder.R
+import com.example.hoarder.data.ConcurrentDataManager
+import com.example.hoarder.data.DataUtils
+import com.example.hoarder.data.Prefs
+import com.example.hoarder.service.BackgroundService
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 
 class MainActivity : AppCompatActivity() {
     private lateinit var dt: TextView

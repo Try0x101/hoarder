@@ -1,9 +1,18 @@
-// UIHelper.kt
-package com.example.hoarder
+package com.example.hoarder.ui
+
 import android.graphics.Rect
-import android.view.*
-import android.widget.*
+import android.view.TouchDelegate
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Switch
+import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.R
+import com.example.hoarder.data.Prefs
 import com.google.android.material.card.MaterialCardView
 import java.util.Locale
 
@@ -196,7 +205,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         if (b < 1024) return "$b B"
         val e = (Math.log(b.toDouble()) / Math.log(1024.0)).toInt()
         val p = "KMGTPE"[e - 1]
-        return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
+        return String.Companion.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
     }
 
     fun isDataVisible() = rc.visibility == View.VISIBLE

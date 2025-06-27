@@ -1,4 +1,5 @@
-package com.example.hoarder
+package com.example.hoarder.data
+
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -14,16 +15,16 @@ import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 
 class DataUploader(
-    private val ctx:Context,
-    private val h:Handler,
-    private val sp:SharedPreferences
+    private val ctx: Context,
+    private val h: Handler,
+    private val sp: SharedPreferences
 ){
     private var ua=false
     private var ip=""
     private var port=5000
     private var ld:String?=null
     private var lu:String?=null
-    private val g=GsonBuilder().create()
+    private val g= GsonBuilder().create()
     private var tb=sp.getLong("totalUploadedBytes",0L)
     private var ls:String?=null
     private var lm2:Pair<String,String>?=null
@@ -90,7 +91,7 @@ class DataUploader(
     private fun gj(cf:String):Pair<String?,Boolean>{
         if(lu==null)return Pair(cf,false)
         try{
-            val t=object:TypeToken<Map<String,Any?>>(){}.type
+            val t=object: TypeToken<Map<String, Any?>>(){}.type
             val p=g.fromJson(lu,t)as Map<String,Any?>
             val c=g.fromJson(cf,t)as Map<String,Any?>
             val d=mutableMapOf<String,Any?>()
@@ -104,9 +105,9 @@ class DataUploader(
     private fun u(js:String,of:String,id:Boolean){
         if(ip.isBlank()||port<=0){notifyStatus("Error","Server IP or Port not set.",tb);return}
         val us="http://$ip:$port/api/telemetry"
-        var uc:HttpURLConnection?=null
+        var uc: HttpURLConnection?=null
         try{
-            val url=URL(us)
+            val url= URL(us)
             uc=url.openConnection()as HttpURLConnection
             uc.requestMethod="POST"
             uc.setRequestProperty("Content-Type","application/json")
@@ -115,14 +116,14 @@ class DataUploader(
             uc.connectTimeout=10000
             uc.readTimeout=10000
             val jb=js.toByteArray(StandardCharsets.UTF_8)
-            val d=Deflater(7,true)
-            val co=ByteArrayOutputStream()
-            DeflaterOutputStream(co,d).use{it.write(jb)}
+            val d= Deflater(7, true)
+            val co= ByteArrayOutputStream()
+            DeflaterOutputStream(co, d).use{it.write(jb)}
             val cb=co.toByteArray()
             uc.outputStream.write(cb)
             uc.outputStream.flush()
             val rc=uc.responseCode
-            if(rc==HttpURLConnection.HTTP_OK){
+            if(rc== HttpURLConnection.HTTP_OK){
                 tb+=cb.size.toLong()
                 sp.edit().putLong("totalUploadedBytes",tb).apply()
                 lu=of

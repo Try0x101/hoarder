@@ -1,4 +1,5 @@
-package com.example.hoarder
+package com.example.hoarder.utils
+
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager

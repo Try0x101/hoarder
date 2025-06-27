@@ -1,5 +1,7 @@
-// AltitudeKalmanFilter.kt
-package com.example.hoarder
+package com.example.hoarder.sensors
+
+import kotlin.math.floor
+import kotlin.math.max
 
 class AltitudeKalmanFilter {
     private var x = 0.0 // Estimated altitude
@@ -53,9 +55,9 @@ class AltitudeKalmanFilter {
 
         // Smart precision (-1)
         return when {
-            altitude < 100 -> kotlin.math.max(0, (kotlin.math.floor(altitude / 25.0) * 25).toInt()) // Below 100m: 25m precision
-            altitude < 1000 -> kotlin.math.max(0, (kotlin.math.floor(altitude / 50.0) * 50).toInt()) // 100-1000m: 50m precision
-            else -> kotlin.math.max(0, (kotlin.math.floor(altitude / 100.0) * 100).toInt()) // Above 1000m: 100m precision
+            altitude < 100 -> max(0, (floor(altitude / 25.0) * 25).toInt()) // Below 100m: 25m precision
+            altitude < 1000 -> max(0, (floor(altitude / 50.0) * 50).toInt()) // 100-1000m: 50m precision
+            else -> max(0, (floor(altitude / 100.0) * 100).toInt()) // Above 1000m: 100m precision
         }
     }
 }

@@ -1,14 +1,30 @@
-// DataCollector.kt (Modified)
-package com.example.hoarder
-import android.content.*
-import android.net.*
+package com.example.hoarder.sensors
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.SharedPreferences
+import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
-import android.os.*
+import android.os.BatteryManager
+import android.os.Build
+import android.os.Handler
 import android.provider.Settings
-import android.telephony.*
+import android.telephony.CellIdentityNr
+import android.telephony.CellInfo
+import android.telephony.CellInfoGsm
+import android.telephony.CellInfoLte
+import android.telephony.CellInfoNr
+import android.telephony.CellInfoWcdma
+import android.telephony.CellSignalStrengthNr
+import android.telephony.TelephonyManager
+import com.example.hoarder.data.DataUtils
 import com.google.gson.GsonBuilder
-import java.util.*
+import java.util.Locale
+import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 class DataCollector(private val ctx: Context, private val h: Handler, private val callback: (String) -> Unit) {
@@ -97,8 +113,8 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
             val (rl, rlo, ac) = when (prec) {
                 0 -> {
                     Triple(
-                        String.format(Locale.US, "%.6f", location.latitude).toDouble(),
-                        String.format(Locale.US, "%.6f", location.longitude).toDouble(),
+                        String.Companion.format(Locale.US, "%.6f", location.latitude).toDouble(),
+                        String.Companion.format(Locale.US, "%.6f", location.longitude).toDouble(),
                         (location.accuracy / 1).roundToInt() * 1
                     )
                 }
@@ -132,8 +148,8 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
                 }
                 else -> {
                     Triple(
-                        String.format(Locale.US, "%.6f", location.latitude).toDouble(),
-                        String.format(Locale.US, "%.6f", location.longitude).toDouble(),
+                        String.Companion.format(Locale.US, "%.6f", location.latitude).toDouble(),
+                        String.Companion.format(Locale.US, "%.6f", location.longitude).toDouble(),
                         (location.accuracy / 1).roundToInt() * 1
                     )
                 }
@@ -155,12 +171,12 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
                 val barometerValue = altitudeInMeters.toInt()
 
                 dm["bar"] = if (bp == -1) {
-                    if (barometerValue < -10) barometerValue else kotlin.math.max(0, (floor(barometerValue / 5.0) * 5).toInt())
+                    if (barometerValue < -10) barometerValue else max(0, (floor(barometerValue / 5.0) * 5).toInt())
                 } else {
                     if (barometerValue < -10) {
                         barometerValue
                     } else {
-                        kotlin.math.max(0, (floor(barometerValue / bp.toDouble()) * bp).toInt())
+                        max(0, (floor(barometerValue / bp.toDouble()) * bp).toInt())
                     }
                 }
             }
@@ -189,8 +205,8 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
                 dm["dn"] = DataUtils.rn(nc.linkDownstreamBandwidthKbps, np)
                 dm["up"] = DataUtils.rn(nc.linkUpstreamBandwidthKbps, np)
             } else {
-                val ldm = kotlin.math.ceil(nc.linkDownstreamBandwidthKbps.toDouble() / 1024.0).toInt()
-                val lum = kotlin.math.ceil(nc.linkUpstreamBandwidthKbps.toDouble() / 1024.0).toInt()
+                val ldm = ceil(nc.linkDownstreamBandwidthKbps.toDouble() / 1024.0).toInt()
+                val lum = ceil(nc.linkUpstreamBandwidthKbps.toDouble() / 1024.0).toInt()
                 dm["dn"] = DataUtils.rn(nc.linkDownstreamBandwidthKbps, np)
                 dm["up"] = DataUtils.rn(nc.linkUpstreamBandwidthKbps, np)
             }
@@ -244,10 +260,10 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
                             if (ss.dbm != Int.MAX_VALUE) dm["rssi"] = if (rp == -1) DataUtils.smartRSSI(ss.dbm) else DataUtils.rs(ss.dbm, rp)
                         }
                         is CellInfoNr -> {
-                            val cin = ci.cellIdentity as? android.telephony.CellIdentityNr
+                            val cin = ci.cellIdentity as? CellIdentityNr
                             dm["ci"] = cin?.nci ?: "N/A"; dm["tac"] = cin?.tac ?: -1
                             dm["mcc"] = cin?.mccString ?: "N/A"; dm["mnc"] = cin?.mncString ?: "N/A"
-                            val ss = ci.cellSignalStrength as? android.telephony.CellSignalStrengthNr
+                            val ss = ci.cellSignalStrength as? CellSignalStrengthNr
                             if (ss != null && ss.ssRsrp != Int.MIN_VALUE)
                                 dm["rssi"] = if (rp == -1) DataUtils.smartRSSI(ss.ssRsrp) else DataUtils.rs(ss.ssRsrp, rp)
                         }

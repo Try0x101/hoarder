@@ -1,4 +1,5 @@
-package com.example.hoarder
+package com.example.hoarder.data
+
 import android.content.Context
 import android.content.SharedPreferences
 

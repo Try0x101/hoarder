@@ -1,5 +1,4 @@
-// ConcurrentDataManager.kt
-package com.example.hoarder
+package com.example.hoarder.data
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference

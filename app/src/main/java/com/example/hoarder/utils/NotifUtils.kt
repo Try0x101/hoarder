@@ -1,4 +1,5 @@
-package com.example.hoarder
+package com.example.hoarder.utils
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context

@@ -1,4 +1,4 @@
-package com.example.hoarder
+package com.example.hoarder.utils
 
 object NetUtils {
     fun isValidIpPort(ip: String): Boolean {

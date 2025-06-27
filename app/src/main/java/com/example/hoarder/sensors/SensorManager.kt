@@ -1,5 +1,4 @@
-// SensorManager.kt
-package com.example.hoarder
+package com.example.hoarder.sensors
 
 import android.content.Context
 import android.hardware.Sensor
@@ -14,7 +13,7 @@ import android.os.Handler
 
 class SensorManager(private val ctx: Context, private val handler: Handler) {
     private lateinit var locationManager: LocationManager
-    private lateinit var sensorManager: android.hardware.SensorManager
+    private lateinit var sensorManager: SensorManager
     private var barometricValue: Float? = null
     private var lastLocation: Location? = null
 
@@ -48,7 +47,7 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
 
     fun init() {
         locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
         try {
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, locationListener)
@@ -57,7 +56,7 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
 
         val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
         if (pressureSensor != null) {
-            sensorManager.registerListener(sensorEventListener, pressureSensor, android.hardware.SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager.registerListener(sensorEventListener, pressureSensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
     }
 

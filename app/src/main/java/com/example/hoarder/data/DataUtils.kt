@@ -1,5 +1,7 @@
-// DataUtils.kt
-package com.example.hoarder
+package com.example.hoarder.data
+
+import android.app.ActivityManager
+import android.content.Context
 import kotlin.math.floor
 import kotlin.math.max
 
@@ -50,17 +52,17 @@ object DataUtils{
     fun smartBarometer(v:Int):Int{
         return when{
             v < -10 -> v  // Show exact value for values below -10 meters
-            else -> max(0, (floor(v/5.0)*5).toInt())  // Round to lowest 5 meters, min value 0
+            else -> max(0, (floor(v / 5.0) * 5).toInt())  // Round to lowest 5 meters, min value 0
         }
     }
 
     fun roundBarometer(v:Int, precision:Int):Int{
         if(precision==0) return v  // No rounding (maximum precision)
-        return (floor(v/precision.toDouble())*precision).toInt()  // Round to lowest multiple of precision
+        return (floor(v / precision.toDouble()) *precision).toInt()  // Round to lowest multiple of precision
     }
 
-    fun isServiceRunning(ctx:android.content.Context,cls:Class<*>):Boolean{
-        val m=ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)as android.app.ActivityManager
+    fun isServiceRunning(ctx: Context, cls:Class<*>):Boolean{
+        val m=ctx.getSystemService(Context.ACTIVITY_SERVICE)as ActivityManager
         for(s in m.getRunningServices(Integer.MAX_VALUE))if(cls.name==s.service.className)return true
         return false
     }

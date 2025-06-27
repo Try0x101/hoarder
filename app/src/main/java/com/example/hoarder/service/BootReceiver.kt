@@ -1,4 +1,5 @@
-package com.example.hoarder
+package com.example.hoarder.service
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
