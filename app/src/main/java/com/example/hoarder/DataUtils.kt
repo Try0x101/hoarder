@@ -1,3 +1,4 @@
+// DataUtils.kt
 package com.example.hoarder
 import kotlin.math.floor
 import kotlin.math.max
@@ -10,6 +11,11 @@ object DataUtils{
 
     fun rn(v:Int, pr:Int):Number {
         val mbps = v.toDouble() / 1024.0  // Convert Kbps to Mbps
+
+        // If speed is <= 0.1 Mbps, return 0
+        if (mbps <= 0.1) {
+            return 0
+        }
 
         // Float precision mode (-2): Return as float with 1 decimal place
         if(pr == -2) {
@@ -26,9 +32,9 @@ object DataUtils{
         }
 
         // Fixed precision: Round to nearest lower multiple of precision value
-        // Important fix: We need to ensure we're not returning 0 when the value is small
+        // Important fix: We need to ensure we're not returning 0 when the value is small but > 0.1
         val rounded = (Math.floor(mbps / pr) * pr).toInt()
-        return if (mbps > 0 && rounded == 0) 1 else rounded  // Ensure at least 1 Mbps if non-zero
+        return if (mbps > 0.1 && rounded == 0) 1 else rounded  // Ensure at least 1 Mbps if > 0.1
     }
 
     fun rsp(s:Int,pr:Int):Int{

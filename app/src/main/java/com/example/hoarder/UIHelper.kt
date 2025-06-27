@@ -7,350 +7,198 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.card.MaterialCardView
 import java.util.Locale
 
-class UIHelper(private val a:MainActivity,private val p:Prefs){
-    private lateinit var rh:LinearLayout
-    private lateinit var rc:LinearLayout
-    private lateinit var ds:Switch
-    private lateinit var sc:LinearLayout
-    private lateinit var rt:TextView
-    private lateinit var uc:MaterialCardView
-    private lateinit var ut:TextView
-    private lateinit var us:Switch
-    private lateinit var ub:TextView
-    private lateinit var um:TextView
-    private lateinit var ue:EditText
-    private lateinit var sb:Button
-    private lateinit var uh:LinearLayout
-    private lateinit var uc2:LinearLayout
-    private lateinit var gps:Spinner
-    private lateinit var gpsAlt:Spinner
-    private lateinit var rssi:Spinner
-    private lateinit var batt:Spinner
-    private lateinit var net:Spinner
-    private lateinit var spd:Spinner
-    private lateinit var baro:Spinner
-    private lateinit var spi:TextView
-    private lateinit var ni:TextView
-    private lateinit var ri:TextView
-    private lateinit var bi:TextView
-    private lateinit var gi:TextView
-    private lateinit var bi2:TextView
-    private lateinit var gpsAltInfo:TextView
+class UIHelper(private val a: MainActivity, private val p: Prefs) {
+    private lateinit var rh: LinearLayout
+    private lateinit var rc: LinearLayout
+    private lateinit var ds: Switch
+    private lateinit var sc: LinearLayout
+    private lateinit var rt: TextView
+    private lateinit var uc: MaterialCardView
+    private lateinit var ut: TextView
+    private lateinit var us: Switch
+    private lateinit var ub: TextView
+    private lateinit var um: TextView
+    private lateinit var ue: EditText
+    private lateinit var sb: Button
+    private lateinit var uh: LinearLayout
+    private lateinit var uc2: LinearLayout
 
-    fun setupUI(){findViews();setupSpinners();setupState();setupListeners()}
+    private lateinit var spinnerData: SpinnerData
+    private lateinit var spinnerManager: SpinnerManager
 
-    private fun findViews(){
-        rh=a.findViewById(R.id.rawDataHeader)
-        rc=a.findViewById(R.id.rawDataContent)
-        ds=a.findViewById(R.id.dataCollectionSwitch)
-        sc=a.findViewById(R.id.switchAndIconContainer)
-        rt=a.findViewById(R.id.rawDataTitleTextView)
-        uc=a.findViewById(R.id.serverUploadCard)
-        ut=a.findViewById(R.id.serverUploadTitleTextView)
-        us=a.findViewById(R.id.serverUploadSwitch)
-        ub=a.findViewById(R.id.uploadedBytesTextView)
-        um=a.findViewById(R.id.uploadMessageTextView)
-        ue=a.findViewById(R.id.serverIpPortEditText)
-        sb=a.findViewById(R.id.saveServerIpButton)
-        uh=a.findViewById(R.id.serverUploadHeader)
-        uc2=a.findViewById(R.id.serverUploadContent)
-        gps=a.findViewById(R.id.gpsPrecisionSpinner)
-        gpsAlt=a.findViewById(R.id.gpsAltitudePrecisionSpinner)
-        rssi=a.findViewById(R.id.rssiPrecisionSpinner)
-        batt=a.findViewById(R.id.batteryPrecisionSpinner)
-        net=a.findViewById(R.id.networkPrecisionSpinner)
-        spd=a.findViewById(R.id.speedPrecisionSpinner)
-        baro=a.findViewById(R.id.barometerPrecisionSpinner)
-        spi=a.findViewById(R.id.speedPrecisionInfo)
-        ni=a.findViewById(R.id.networkPrecisionInfo)
-        ri=a.findViewById(R.id.rssiPrecisionInfo)
-        bi=a.findViewById(R.id.batteryPrecisionInfo)
-        gi=a.findViewById(R.id.gpsPrecisionInfo)
-        bi2=a.findViewById(R.id.barometerPrecisionInfo)
-        gpsAltInfo=a.findViewById(R.id.gpsAltitudePrecisionInfo)
+    fun setupUI() {
+        findViews()
+        setupSpinners()
+        setupState()
+        setupListeners()
     }
 
-    private fun setupSpinners(){
-        setupSpinner(gps,
-            arrayOf("Smart GPS Precision","Maximum precision","20 m","100 m","1 km","10 km"),
-            p.getGPSPrecision(),
-            {pos:Int->
-                val nv=when(pos){0->-1;1->0;2->20;3->100;4->1000;5->10000;else->-1}
-                p.setGPSPrecision(nv)
-                updateInfoText(gi,pos==0,"• If speed <4 km/h → round up to 1 km\n• If speed 4-40 km/h → round up to 20 m\n• If speed 40-140 km/h → round up to 100 m\n• If speed >140 km/h → round up to 1 km")
-            },
-            {v:Int->when(v){-1->0;0->1;20->2;100->3;1000->4;10000->5;else->0}}
-        )
+    private fun findViews() {
+        // Main UI components
+        rh = a.findViewById(R.id.rawDataHeader)
+        rc = a.findViewById(R.id.rawDataContent)
+        ds = a.findViewById(R.id.dataCollectionSwitch)
+        sc = a.findViewById(R.id.switchAndIconContainer)
+        rt = a.findViewById(R.id.rawDataTitleTextView)
+        uc = a.findViewById(R.id.serverUploadCard)
+        ut = a.findViewById(R.id.serverUploadTitleTextView)
+        us = a.findViewById(R.id.serverUploadSwitch)
+        ub = a.findViewById(R.id.uploadedBytesTextView)
+        um = a.findViewById(R.id.uploadMessageTextView)
+        ue = a.findViewById(R.id.serverIpPortEditText)
+        sb = a.findViewById(R.id.saveServerIpButton)
+        uh = a.findViewById(R.id.serverUploadHeader)
+        uc2 = a.findViewById(R.id.serverUploadContent)
 
-        setupSpinner(gpsAlt,
-            arrayOf("Smart Altitude Precision", "Maximum Precision", "25 meters", "50 meters", "100 meters"),
-            p.getGPSAltitudePrecision(),
-            { pos: Int ->
-                val nv = when(pos) {
-                    0 -> -1  // Smart precision
-                    1 -> 0   // Maximum precision (actual Kalman filter value)
-                    2 -> 25  // 25m fixed precision
-                    3 -> 50  // 50m fixed precision
-                    4 -> 100 // 100m fixed precision
-                    else -> -1
-                }
-                p.setGPSAltitudePrecision(nv)
-
-                // Update the info text based on the selection
-                if (pos == 0) {
-                    updateInfoText(gpsAltInfo, true,
-                        "• Below 100m: 25m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision\n• Uses Kalman filter to combine GPS and barometer data")
-                } else if (pos == 1) {
-                    updateInfoText(gpsAltInfo, true,
-                        "• Shows exact altitude value from Kalman filter\n• Combines GPS and barometer data for maximum accuracy\n• No rounding applied")
-                } else {
-                    updateInfoText(gpsAltInfo, false, "")
-                }
-            },
-            { v: Int ->
-                when(v) {
-                    -1 -> 0  // Smart precision
-                    0 -> 1   // Maximum precision
-                    25 -> 2
-                    50 -> 3
-                    100 -> 4
-                    else -> 0  // Default to Smart precision
-                }
-            }
-        )
-
-        setupSpinner(rssi,
-            arrayOf("Smart RSSI Precision","Maximum precision","3 dBm","5 dBm","10 dBm"),
-            p.getRSSIPrecision(),
-            {pos:Int->
-                val nv=when(pos){0->-1;1->0;2->3;3->5;4->10;else->-1}
-                p.setRSSIPrecision(nv)
-                updateInfoText(ri,pos==0,"• If signal worse than -110 dBm → show precise value\n• If signal worse than -90 dBm → round to nearest 5\n• If signal better than -90 dBm → round to nearest 10")
-            },
-            {v:Int->when(v){-1->0;0->1;3->2;5->3;10->4;else->0}}
-        )
-
-        setupSpinner(batt,
-            arrayOf("Smart Battery Precision","Maximum precision","2%","5%","10%"),
-            p.getBatteryPrecision(),
-            {pos:Int->
-                val nv=when(pos){0->-1;1->0;2->2;3->5;4->10;else->-1}
-                p.setBatteryPrecision(nv)
-                updateInfoText(bi,pos==0,"• If battery below 10% → show precise value\n• If battery 10-50% → round to nearest 5%\n• If battery above 50% → round to nearest 10%")
-            },
-            {v:Int->when(v){-1->0;0->1;2->2;5->3;10->4;else->0}}
-        )
-
-        setupSpinner(net,
-            arrayOf("Smart Network Rounding", "Float Precision (0.0 Mbps)", "Round to 1 Mbps", "Round to 2 Mbps", "Round to 5 Mbps"),
-            p.getNetworkPrecision(),
-            { pos: Int ->
-                val nv = when(pos) {
-                    0 -> 0   // Smart rounding
-                    1 -> -2  // Float precision
-                    2 -> 1   // Round to 1 Mbps
-                    3 -> 2   // Round to 2 Mbps
-                    4 -> 5   // Round to 5 Mbps
-                    else -> 0
-                }
-                p.setNetworkPrecision(nv)
-                when(pos) {
-                    0 -> updateInfoText(ni, true, "• Below 2 Mbps → show decimal precision (e.g., 1.5 Mbps)\n• 2-7 Mbps → round to nearest lower 1 Mbps\n• Above 7 Mbps → round to nearest lower 5 Mbps")
-                    1 -> updateInfoText(ni, true, "• Shows all network speeds with decimal precision (e.g., 0.3 Mbps)\n• Useful for accurately measuring all connections")
-                    else -> updateInfoText(ni, false, "")
-                }
-            },
-            { v: Int ->
-                when(v) {
-                    0 -> 0   // Smart rounding
-                    -2 -> 1  // Float precision
-                    1 -> 2
-                    2 -> 3
-                    5 -> 4
-                    else -> 0
-                }
-            }
-        )
-
-        setupSpinner(spd,
-            arrayOf("Smart Speed Rounding","Maximum precision","1 km/h","3 km/h","5 km/h","10 km/h"),
-            p.getSpeedPrecision(),
-            {pos:Int->
-                val nv=when(pos){0->-1;1->0;2->1;3->3;4->5;5->10;else->-1}
-                p.setSpeedPrecision(nv)
-                updateInfoText(spi,pos==0,"• If speed <2 km/h → show 0\n• If speed <10 km/h → round to nearest 3 km/h\n• If speed ≥10 km/h → round to nearest 10 km/h")
-            },
-            {v:Int->when(v){-1->0;0->1;1->2;3->3;5->4;10->5;else->0}}
-        )
-
-        setupSpinner(baro,
-            arrayOf("Smart Barometer Altitude", "Actual Pressure (hPa)", "2 meters", "5 meters", "10 meters", "20 meters", "50 meters", "100 meters"),
-            p.getBarometerPrecision(),
-            { pos: Int ->
-                val nv = when(pos) {
-                    0 -> -1
-                    1 -> 0
-                    2 -> 2
-                    3 -> 5
-                    4 -> 10
-                    5 -> 20
-                    6 -> 50
-                    7 -> 100
-                    else -> -1
-                }
-                p.setBarometerPrecision(nv)
-                updateInfoText(bi2, pos == 0, "• If barometer altitude is below -10 meters → show exact value\n• Otherwise → show minimum 0, rounded to lowest 5 meters")
-            },
-            { v: Int ->
-                when(v) {
-                    -1 -> 0
-                    0 -> 1
-                    2 -> 2
-                    5 -> 3
-                    10 -> 4
-                    20 -> 5
-                    50 -> 6
-                    100 -> 7
-                    else -> 0
-                }
-            }
+        // Create SpinnerData object with all spinner references
+        spinnerData = SpinnerData(
+            a.findViewById(R.id.gpsPrecisionSpinner),
+            a.findViewById(R.id.gpsPrecisionInfo),
+            a.findViewById(R.id.gpsAltitudePrecisionSpinner),
+            a.findViewById(R.id.gpsAltitudePrecisionInfo),
+            a.findViewById(R.id.rssiPrecisionSpinner),
+            a.findViewById(R.id.rssiPrecisionInfo),
+            a.findViewById(R.id.batteryPrecisionSpinner),
+            a.findViewById(R.id.batteryPrecisionInfo),
+            a.findViewById(R.id.networkPrecisionSpinner),
+            a.findViewById(R.id.networkPrecisionInfo),
+            a.findViewById(R.id.speedPrecisionSpinner),
+            a.findViewById(R.id.speedPrecisionInfo),
+            a.findViewById(R.id.barometerPrecisionSpinner),
+            a.findViewById(R.id.barometerPrecisionInfo)
         )
     }
 
-    private fun <T> setupSpinner(s:Spinner, o:Array<T>, cv:Int, oc:(Int)->Unit, vm:(Int)->Int){
-        val a=ArrayAdapter(a,android.R.layout.simple_spinner_item,o)
-        a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        s.adapter=a
-        s.setSelection(vm(cv))
-        s.onItemSelectedListener=object:AdapterView.OnItemSelectedListener{
-            override fun onItemSelected(p:AdapterView<*>?,v:View?,pos:Int,id:Long){oc(pos)}
-            override fun onNothingSelected(p:AdapterView<*>?){}
-        }
+    private fun setupSpinners() {
+        spinnerManager = SpinnerManager(a)
+        spinnerManager.setupAllSpinners(spinnerData, p)
     }
 
-    private fun updateInfoText(tv:TextView,show:Boolean,text:String){
-        tv.text=text
-        tv.visibility=if(show)View.VISIBLE else View.GONE
-    }
-
-    private fun setupState(){
-        val tr=Rect()
-        sc.post{
+    private fun setupState() {
+        val tr = Rect()
+        sc.post {
             sc.getHitRect(tr)
-            tr.top-=100
-            tr.bottom+=100
-            tr.left-=100
-            tr.right+=100
-            (sc.parent as View).touchDelegate=TouchDelegate(tr,sc)
+            tr.top -= 100
+            tr.bottom += 100
+            tr.left -= 100
+            tr.right += 100
+            (sc.parent as View).touchDelegate = TouchDelegate(tr, sc)
         }
 
-        val dc=p.isDataCollectionEnabled()
-        val du=p.isDataUploadEnabled()
-        val sa=p.getServerAddress()
+        val dc = p.isDataCollectionEnabled()
+        val du = p.isDataUploadEnabled()
+        val sa = p.getServerAddress()
 
-        ds.isChecked=dc
-        us.isChecked=du
+        ds.isChecked = dc
+        us.isChecked = du
         ue.setText(sa)
 
-        rt.text=if(dc)"Json data (Active)" else "Json data (Inactive)"
-        ut.text=if(du)"Server Upload (Active)" else "Server Upload (Inactive)"
+        rt.text = if (dc) "Json data (Active)" else "Json data (Inactive)"
+        ut.text = if (du) "Server Upload (Active)" else "Server Upload (Inactive)"
 
-        ub.text="Uploaded: 0 B"
-        um.text=""
+        ub.text = "Uploaded: 0 B"
+        um.text = ""
 
-        rc.visibility=View.GONE
-        uc2.visibility=View.GONE
+        rc.visibility = View.GONE
+        uc2.visibility = View.GONE
     }
 
-    private fun setupListeners(){
-        rh.setOnClickListener{
-            rc.visibility=if(rc.visibility==View.GONE){
-                View.VISIBLE.also{a.getLastData()?.let{a.dj(it)}}
-            }else View.GONE
+    private fun setupListeners() {
+        setupDataPanelListeners()
+        setupUploadPanelListeners()
+    }
+
+    private fun setupDataPanelListeners() {
+        rh.setOnClickListener {
+            rc.visibility = if (rc.visibility == View.GONE) {
+                View.VISIBLE.also { a.getLastData()?.let { a.dj(it) } }
+            } else View.GONE
         }
 
-        uh.setOnClickListener{
-            uc2.visibility=if(uc2.visibility==View.GONE)View.VISIBLE else View.GONE
-        }
-
-        ds.setOnCheckedChangeListener{_,c->
+        ds.setOnCheckedChangeListener { _, c ->
             p.setDataCollectionEnabled(c)
             updateDataCollectionUI(c)
-            if(c)a.startCollection() else a.stopCollection()
+            if (c) a.startCollection() else a.stopCollection()
+        }
+    }
+
+    private fun setupUploadPanelListeners() {
+        uh.setOnClickListener {
+            uc2.visibility = if (uc2.visibility == View.GONE) View.VISIBLE else View.GONE
         }
 
-        us.setOnCheckedChangeListener{_,c->
+        us.setOnCheckedChangeListener { _, c ->
             p.setDataUploadEnabled(c)
-            if(c){
-                val addr=ue.text.toString()
-                if(NetUtils.isValidIpPort(addr)){
+            if (c) {
+                val addr = ue.text.toString()
+                if (NetUtils.isValidIpPort(addr)) {
                     updateUploadUI(true)
-                    updateStatus("Connecting","Attempting to connect...",0L)
+                    updateStatus("Connecting", "Attempting to connect...", 0L)
                     a.startUpload(addr)
-                }else{
-                    us.isChecked=false
+                } else {
+                    us.isChecked = false
                     updateUploadUI(false)
-                    Toast.makeText(a,"Invalid server IP:Port",Toast.LENGTH_SHORT).show()
+                    Toast.makeText(a, "Invalid server IP:Port", Toast.LENGTH_SHORT).show()
                 }
-            }else{
+            } else {
                 updateUploadUI(false)
-                updateStatus("Paused","Upload paused.",0L)
+                updateStatus("Paused", "Upload paused.", 0L)
                 a.stopUpload()
             }
         }
 
-        sb.setOnClickListener{
-            val addr=ue.text.toString()
-            if(NetUtils.isValidIpPort(addr)){
+        sb.setOnClickListener {
+            val addr = ue.text.toString()
+            if (NetUtils.isValidIpPort(addr)) {
                 p.setServerAddress(addr)
-                Toast.makeText(a,"Server address saved",Toast.LENGTH_SHORT).show()
-                if(us.isChecked){
-                    updateStatus("Connecting","Attempting to connect...",0L)
+                Toast.makeText(a, "Server address saved", Toast.LENGTH_SHORT).show()
+                if (us.isChecked) {
+                    updateStatus("Connecting", "Attempting to connect...", 0L)
                     a.stopUpload()
                     a.startUpload(addr)
                 }
-            }else{
-                Toast.makeText(a,"Invalid server IP:Port format",Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    fun updateDataCollectionUI(isActive:Boolean){
-        rt.text=if(isActive)"Json data (Active)" else "Json data (Inactive)"
+    fun updateDataCollectionUI(isActive: Boolean) {
+        rt.text = if (isActive) "Json data (Active)" else "Json data (Inactive)"
     }
 
-    fun updateUploadUI(isActive:Boolean){
-        ut.text=if(isActive)"Server Upload (Active)" else "Server Upload (Inactive)"
+    fun updateUploadUI(isActive: Boolean) {
+        ut.text = if (isActive) "Server Upload (Active)" else "Server Upload (Inactive)"
     }
 
-    fun updateStatus(status:String?,message:String?,bytes:Long?){
-        val fb=if(bytes!=null)fb(bytes) else "0 B"
-        ub.text="Uploaded: $fb"
+    fun updateStatus(status: String?, message: String?, bytes: Long?) {
+        val fb = if (bytes != null) formatBytes(bytes) else "0 B"
+        ub.text = "Uploaded: $fb"
 
-        if(status!=null||message!=null){
-            val text=when{
-                status=="OK"->"Status: OK\n"
-                status=="Paused"->"Status: Paused\n"
-                status!=null&&message!=null->"Status: $status - $message\n"
-                else->"\n"
+        if (status != null || message != null) {
+            val text = when {
+                status == "OK" -> "Status: OK\n"
+                status == "Paused" -> "Status: Paused\n"
+                status != null && message != null -> "Status: $status - $message\n"
+                else -> "\n"
             }
-            um.text=text
-            val color=when(status){
-                "OK"->R.color.amoled_green
-                "Paused"->R.color.amoled_light_gray
-                else->R.color.amoled_red
+            um.text = text
+            val color = when (status) {
+                "OK" -> R.color.amoled_green
+                "Paused" -> R.color.amoled_light_gray
+                else -> R.color.amoled_red
             }
-            um.setTextColor(ContextCompat.getColor(a,color))
+            um.setTextColor(ContextCompat.getColor(a, color))
         }
     }
 
-    private fun fb(b:Long):String{
-        if(b<1024)return "$b B"
-        val e=(Math.log(b.toDouble())/Math.log(1024.0)).toInt()
-        val p="KMGTPE"[e-1]
-        return String.format(Locale.getDefault(),"%.1f %sB",b/Math.pow(1024.0,e.toDouble()),p)
+    private fun formatBytes(b: Long): String {
+        if (b < 1024) return "$b B"
+        val e = (Math.log(b.toDouble()) / Math.log(1024.0)).toInt()
+        val p = "KMGTPE"[e - 1]
+        return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
     }
 
-    fun isDataVisible()=rc.visibility==View.VISIBLE
-    fun setServerAddress(a:String)=ue.setText(a)
+    fun isDataVisible() = rc.visibility == View.VISIBLE
+    fun setServerAddress(a: String) = ue.setText(a)
 }
