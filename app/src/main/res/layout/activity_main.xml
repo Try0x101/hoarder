@@ -348,50 +348,6 @@
                             android:visibility="gone"/>
 
                         <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Barometer Precision:"
-                            android:textColor="@color/amoled_white"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp"/>
-
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            app:cardCornerRadius="12dp"
-                            app:cardElevation="2dp"
-                            app:cardBackgroundColor="@color/amoled_medium_gray"
-                            android:layout_marginBottom="8dp">
-
-                            <Spinner
-                                android:id="@+id/barometerPrecisionSpinner"
-                                android:layout_width="match_parent"
-                                android:layout_height="48dp"
-                                android:layout_margin="2dp"
-                                android:paddingHorizontal="12dp"
-                                android:paddingVertical="8dp"
-                                android:background="@android:color/transparent"
-                                android:popupBackground="@color/amoled_dark_gray"
-                                android:dropDownWidth="match_parent"/>
-                        </com.google.android.material.card.MaterialCardView>
-
-                        <TextView
-                            android:id="@+id/barometerPrecisionInfo"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text=""
-                            android:textColor="@color/amoled_light_gray"
-                            android:textSize="14sp"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:layout_marginBottom="16dp"
-                            android:background="@color/amoled_medium_gray"
-                            android:paddingTop="8dp"
-                            android:paddingBottom="8dp"
-                            android:visibility="gone"/>
-
-                        <TextView
                             android:id="@+id/dataTextView"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

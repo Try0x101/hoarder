@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/hoarder/ui/UIHelper.kt
 package com.example.hoarder.ui
 
 import android.graphics.Rect
@@ -43,7 +44,6 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun findViews() {
-        // Main UI components
         rh = a.findViewById(R.id.rawDataHeader)
         rc = a.findViewById(R.id.rawDataContent)
         ds = a.findViewById(R.id.dataCollectionSwitch)
@@ -59,7 +59,6 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         uh = a.findViewById(R.id.serverUploadHeader)
         uc2 = a.findViewById(R.id.serverUploadContent)
 
-        // Create SpinnerData object with all spinner references
         spinnerData = SpinnerData(
             a.findViewById(R.id.gpsPrecisionSpinner),
             a.findViewById(R.id.gpsPrecisionInfo),
@@ -72,9 +71,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             a.findViewById(R.id.networkPrecisionSpinner),
             a.findViewById(R.id.networkPrecisionInfo),
             a.findViewById(R.id.speedPrecisionSpinner),
-            a.findViewById(R.id.speedPrecisionInfo),
-            a.findViewById(R.id.barometerPrecisionSpinner),
-            a.findViewById(R.id.barometerPrecisionInfo)
+            a.findViewById(R.id.speedPrecisionInfo)
         )
     }
 

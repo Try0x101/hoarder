@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/hoarder/ui/SpinnerManager.kt
 package com.example.hoarder.ui
 
 import android.R
@@ -10,7 +11,6 @@ import com.example.hoarder.data.Prefs
 
 class SpinnerManager(private val context: MainActivity) {
 
-    // Generic spinner setup function
     fun <T> setupSpinner(
         spinner: Spinner,
         options: Array<T>,
@@ -30,15 +30,12 @@ class SpinnerManager(private val context: MainActivity) {
         }
     }
 
-    // Update info text helper
     fun updateInfoText(textView: TextView, show: Boolean, text: String) {
         textView.text = text
         textView.visibility = if (show) View.VISIBLE else View.GONE
     }
 
-    // Setup all spinners in one function
     fun setupAllSpinners(spinnerData: SpinnerData, prefs: Prefs) {
-        // GPS Precision Spinner
         setupSpinner(
             spinnerData.gpsSpinner,
             arrayOf("Smart GPS Precision", "Maximum precision", "20 m", "100 m", "1 km", "10 km"),
@@ -55,26 +52,24 @@ class SpinnerManager(private val context: MainActivity) {
             { v -> when(v) { -1 -> 0; 0 -> 1; 20 -> 2; 100 -> 3; 1000 -> 4; 10000 -> 5; else -> 0 } }
         )
 
-        // GPS Altitude Precision Spinner
         setupSpinner(
             spinnerData.gpsAltSpinner,
-            arrayOf("Smart Altitude Precision", "Maximum Precision", "25 meters", "50 meters", "100 meters"),
+            arrayOf("Smart Altitude Precision", "Maximum Precision", "2 meters", "10 meters", "25 meters", "50 meters", "100 meters"),
             prefs.getGPSAltitudePrecision(),
             { pos ->
-                val nv = when(pos) { 0 -> -1; 1 -> 0; 2 -> 25; 3 -> 50; 4 -> 100; else -> -1 }
+                val nv = when(pos) { 0 -> -1; 1 -> 0; 2 -> 2; 3 -> 10; 4 -> 25; 5 -> 50; 6 -> 100; else -> -1 }
                 prefs.setGPSAltitudePrecision(nv)
 
                 val infoText = when(pos) {
-                    0 -> "• Below 100m: 25m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision\n• Uses Kalman filter to combine GPS and barometer data"
+                    0 -> "• Below 100m: 10m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision\n• Uses Kalman filter to combine GPS and barometer data"
                     1 -> "• Shows exact altitude value from Kalman filter\n• Combines GPS and barometer data for maximum accuracy\n• No rounding applied"
                     else -> ""
                 }
                 updateInfoText(spinnerData.gpsAltInfo, pos < 2, infoText)
             },
-            { v -> when(v) { -1 -> 0; 0 -> 1; 25 -> 2; 50 -> 3; 100 -> 4; else -> 0 } }
+            { v -> when(v) { -1 -> 0; 0 -> 1; 2 -> 2; 10 -> 3; 25 -> 4; 50 -> 5; 100 -> 6; else -> 0 } }
         )
 
-        // RSSI Precision Spinner
         setupSpinner(
             spinnerData.rssiSpinner,
             arrayOf("Smart RSSI Precision", "Maximum precision", "3 dBm", "5 dBm", "10 dBm"),
@@ -91,7 +86,6 @@ class SpinnerManager(private val context: MainActivity) {
             { v -> when(v) { -1 -> 0; 0 -> 1; 3 -> 2; 5 -> 3; 10 -> 4; else -> 0 } }
         )
 
-        // Battery Precision Spinner
         setupSpinner(
             spinnerData.batterySpinner,
             arrayOf("Smart Battery Precision", "Maximum precision", "2%", "5%", "10%"),
@@ -108,7 +102,6 @@ class SpinnerManager(private val context: MainActivity) {
             { v -> when(v) { -1 -> 0; 0 -> 1; 2 -> 2; 5 -> 3; 10 -> 4; else -> 0 } }
         )
 
-        // Network Precision Spinner
         setupSpinner(
             spinnerData.netSpinner,
             arrayOf("Smart Network Rounding", "Float Precision (0.0 Mbps)", "Round to 1 Mbps", "Round to 2 Mbps", "Round to 5 Mbps"),
@@ -127,7 +120,6 @@ class SpinnerManager(private val context: MainActivity) {
             { v -> when(v) { 0 -> 0; -2 -> 1; 1 -> 2; 2 -> 3; 5 -> 4; else -> 0 } }
         )
 
-        // Speed Precision Spinner
         setupSpinner(
             spinnerData.speedSpinner,
             arrayOf("Smart Speed Rounding", "Maximum precision", "1 km/h", "3 km/h", "5 km/h", "10 km/h"),
@@ -143,27 +135,9 @@ class SpinnerManager(private val context: MainActivity) {
             },
             { v -> when(v) { -1 -> 0; 0 -> 1; 1 -> 2; 3 -> 3; 5 -> 4; 10 -> 5; else -> 0 } }
         )
-
-        // Barometer Precision Spinner
-        setupSpinner(
-            spinnerData.baroSpinner,
-            arrayOf("Smart Barometer Altitude", "Actual Pressure (hPa)", "2 meters", "5 meters", "10 meters", "20 meters", "50 meters", "100 meters"),
-            prefs.getBarometerPrecision(),
-            { pos ->
-                val nv = when(pos) { 0 -> -1; 1 -> 0; 2 -> 2; 3 -> 5; 4 -> 10; 5 -> 20; 6 -> 50; 7 -> 100; else -> -1 }
-                prefs.setBarometerPrecision(nv)
-                updateInfoText(
-                    spinnerData.baroInfo,
-                    pos == 0,
-                    "• If barometer altitude is below -10 meters → show exact value\n• Otherwise → show minimum 0, rounded to lowest 5 meters"
-                )
-            },
-            { v -> when(v) { -1 -> 0; 0 -> 1; 2 -> 2; 5 -> 3; 10 -> 4; 20 -> 5; 50 -> 6; 100 -> 7; else -> 0 } }
-        )
     }
 }
 
-// Data class to hold all spinner and info TextView references
 data class SpinnerData(
     val gpsSpinner: Spinner,
     val gpsInfo: TextView,
@@ -176,7 +150,5 @@ data class SpinnerData(
     val netSpinner: Spinner,
     val netInfo: TextView,
     val speedSpinner: Spinner,
-    val speedInfo: TextView,
-    val baroSpinner: Spinner,
-    val baroInfo: TextView
+    val speedInfo: TextView
 )

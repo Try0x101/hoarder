@@ -24,7 +24,6 @@ import com.example.hoarder.data.DataUtils
 import com.google.gson.GsonBuilder
 import java.util.Locale
 import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -91,7 +90,6 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
         }
 
         collectLocationData(dm, sp)
-        collectBarometerData(dm, sp)
         collectNetworkData(dm, sp)
         collectWifiData(dm)
         collectMobileNetworkData(dm)
@@ -158,35 +156,8 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
         }
     }
 
-    private fun collectBarometerData(dm: MutableMap<String, Any>, sp: SharedPreferences) {
-        sensorMgr.getBarometricValue()?.let { pressure ->
-            val bp = sp.getInt("barometerPrecision", -1)
-
-            if (bp == 0) {
-                dm["bar"] = pressure
-            } else {
-                val pressureInHpa = pressure
-                val standardPressure = 1013.25f
-                val altitudeInMeters = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
-                val barometerValue = altitudeInMeters.toInt()
-
-                dm["bar"] = if (bp == -1) {
-                    if (barometerValue < -10) barometerValue else max(0, (floor(barometerValue / 5.0) * 5).toInt())
-                } else {
-                    if (barometerValue < -10) {
-                        barometerValue
-                    } else {
-                        max(0, (floor(barometerValue / bp.toDouble()) * bp).toInt())
-                    }
-                }
-            }
-        }
-    }
-
     private fun collectWifiData(dm: MutableMap<String, Any>) {
         val wi = wm.connectionInfo
-
-        // Add BSSID to the output - returns 0 if not available
         val bssidValue = if (wi != null && wi.bssid != null && wi.bssid != "02:00:00:00:00:00" && wi.bssid != "00:00:00:00:00:00") wi.bssid else 0
         dm["bssid"] = bssidValue
     }

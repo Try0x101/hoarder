@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/hoarder/data/Prefs.kt
 package com.example.hoarder.data
 
 import android.content.Context
@@ -18,24 +19,21 @@ class Prefs(ctx: Context) {
     fun getServerAddress() = p.getString("serverIpPortAddress", "") ?: ""
     fun setServerAddress(a: String) = p.edit().putString("serverIpPortAddress", a).apply()
 
-    fun getGPSPrecision() = p.getInt("gpsPrecision", -1)  // Default to smart GPS precision
+    fun getGPSPrecision() = p.getInt("gpsPrecision", -1)
     fun setGPSPrecision(p: Int) = this.p.edit().putInt("gpsPrecision", p).apply()
 
-    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", -1)  // Default to smart altitude precision
+    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", -1)
     fun setGPSAltitudePrecision(p: Int) = this.p.edit().putInt("gpsAltitudePrecision", p).apply()
 
-    fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)  // Default to smart RSSI precision
+    fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)
     fun setRSSIPrecision(p: Int) = this.p.edit().putInt("rssiPrecision", p).apply()
 
-    fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)  // Default to smart battery precision
+    fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)
     fun setBatteryPrecision(p: Int) = this.p.edit().putInt("batteryPrecision", p).apply()
 
-    fun getNetworkPrecision() = p.getInt("networkPrecision", 0)  // Default to smart precision (0)
+    fun getNetworkPrecision() = p.getInt("networkPrecision", 0)
     fun setNetworkPrecision(p: Int) = this.p.edit().putInt("networkPrecision", p).apply()
 
-    fun getSpeedPrecision() = p.getInt("speedPrecision", -1)  // Default to smart speed precision
+    fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
-
-    fun getBarometerPrecision() = p.getInt("barometerPrecision", -1)  // Default to smart barometer precision
-    fun setBarometerPrecision(p: Int) = this.p.edit().putInt("barometerPrecision", p).apply()
 }
