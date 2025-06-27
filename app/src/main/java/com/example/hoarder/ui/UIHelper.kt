@@ -1,9 +1,14 @@
 package com.example.hoarder.ui
 
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Typeface
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -15,12 +20,18 @@ import android.widget.RelativeLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
 import com.example.hoarder.data.Prefs
 import com.example.hoarder.utils.NetUtils
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
+import com.google.gson.ToNumberPolicy
+import com.google.gson.reflect.TypeToken
+import java.io.File
 import java.util.Locale
+import kotlin.math.ceil
 
 class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private lateinit var dataCollectionHeader: RelativeLayout
@@ -53,8 +64,10 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private lateinit var networkPrecisionInfo: TextView
     private lateinit var speedPrecisionInfo: TextView
 
-    private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
+    private val g by lazy { GsonBuilder().setPrettyPrinting().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create() }
     private var lastErrorMessage: String? = null
+    private val BUFFER_LIMIT_BYTES = 5 * 1024
+    private val RECORDS_PER_PAGE = 20
 
     fun setupUI() {
         findViews()
@@ -98,7 +111,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         updateDataCollectionUI(p.isDataCollectionEnabled())
         dataCollectionSwitch.isChecked = p.isDataCollectionEnabled()
 
-        updateUploadUI(p.isDataUploadEnabled(), null, null, null, null)
+        updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
         serverUploadSwitch.isChecked = p.isDataUploadEnabled()
 
         updateAllPrecisionLabels()
@@ -128,7 +141,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             } else {
                 a.stopUpload()
             }
-            updateUploadUI(isChecked, null, null, null, null)
+            updateUploadUI(isChecked, null, null, null, null, 0L)
         }
         serverUploadRow.setOnClickListener { showServerSettingsDialog() }
 
@@ -158,7 +171,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         dataCollectionSubtitle.text = if (isActive) "Active" else "Inactive"
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, lastUploadBytes: Long?) {
+    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, lastUploadBytes: Long?, bufferedSize: Long) {
         if (!isActive) {
             serverUploadStatus.text = "Inactive"
             serverUploadBytes.visibility = View.GONE
@@ -175,9 +188,21 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         }
 
         val statusText = when {
-            status?.startsWith("OK") == true || status == "No Change" || status == "Connecting" -> {
+            status == "Saving Locally" -> {
+                lastErrorMessage = message
+                var localStatus = "Saving locally: ${formatBytes(bufferedSize)}"
+                if (bufferedSize > BUFFER_LIMIT_BYTES) {
+                    localStatus += "\nBuffer large, confirm send in settings."
+                }
+                localStatus
+            }
+            status?.startsWith("OK") == true || status == "No Change" || status == "Connecting" || status == "OK (Batch)" -> {
                 lastErrorMessage = null
-                "Connected"
+                var connectedStatus = "Connected"
+                if (bufferedSize > 0) {
+                    connectedStatus += " | Local: ${formatBytes(bufferedSize)}"
+                }
+                connectedStatus
             }
             status == "Network Error" && message == "Internet not accessible" -> {
                 lastErrorMessage = message
@@ -219,12 +244,55 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         view.findViewById<TextView>(R.id.statsLastDay).text = formatBytes(lastDay)
         view.findViewById<TextView>(R.id.statsLast7Days).text = formatBytes(last7Days)
 
-        populateLogs(view)
+        val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
+        val viewCachedUploadLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
+        val viewSuccessLogButton = view.findViewById<Button>(R.id.viewSuccessLogButton)
+        val viewErrorLogButton = view.findViewById<Button>(R.id.viewErrorLogButton)
+        val servicePrefs = a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
+
+        fun updateButtonsState() {
+            val bufferSize = servicePrefs.getStringSet("data_buffer", emptySet())?.sumOf { it.toByteArray().size }?.toLong() ?: 0L
+            if (bufferSize > 0) {
+                sendBufferButton.visibility = View.VISIBLE
+                sendBufferButton.text = "Send Buffered Data (${formatBytes(bufferSize)})"
+                sendBufferButton.isEnabled = true
+            } else {
+                sendBufferButton.visibility = View.GONE
+            }
+            val lastUploadFile = File(a.cacheDir, "last_upload_details.json")
+            viewCachedUploadLogButton.visibility = if (lastUploadFile.exists()) View.VISIBLE else View.GONE
+        }
+
+        updateButtonsState()
+
+        sendBufferButton.setOnClickListener {
+            a.sendBuffer()
+            it.isEnabled = false
+            (it as Button).text = "Sending..."
+        }
+
+        viewCachedUploadLogButton.setOnClickListener { showDetailedLogDialog("cached") }
+        viewSuccessLogButton.setOnClickListener { showDetailedLogDialog("success") }
+        viewErrorLogButton.setOnClickListener { showDetailedLogDialog("error") }
 
         val dialog = builder.setTitle("Server Settings")
             .setPositiveButton("Save", null)
             .setNegativeButton("Cancel", null)
             .create()
+
+        val uploadStatusReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                updateButtonsState()
+                val status = intent?.getStringExtra("status")
+                when (status) {
+                    "OK (Batch)" -> Toast.makeText(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT).show()
+                    "HTTP Error", "Network Error" -> {
+                        val message = intent.getStringExtra("message") ?: "Check logs for details."
+                        Toast.makeText(a, "Failed to send buffer: $message", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -232,9 +300,14 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             }
             view.findViewById<Button>(R.id.clearLogsButton).setOnClickListener {
                 clearAllLogs()
-                populateLogs(view)
+                updateButtonsState()
                 Toast.makeText(a, "Logs cleared", Toast.LENGTH_SHORT).show()
             }
+            LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+        }
+
+        dialog.setOnDismissListener {
+            LocalBroadcastManager.getInstance(a).unregisterReceiver(uploadStatusReceiver)
         }
 
         editText.setOnEditorActionListener { _, actionId, _ ->
@@ -249,6 +322,158 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         dialog.show()
     }
 
+    private fun showDetailedLogDialog(logType: String) {
+        val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
+        val view = LayoutInflater.from(a).inflate(R.layout.dialog_log_viewer, null)
+        val container = view.findViewById<LinearLayout>(R.id.logViewerContainer)
+        val controlsContainer = view.findViewById<LinearLayout>(R.id.controlsContainer)
+        val prevButton = view.findViewById<Button>(R.id.prevButton)
+        val nextButton = view.findViewById<Button>(R.id.nextButton)
+        val pageIndicator = view.findViewById<TextView>(R.id.pageIndicator)
+        val copyPageButton = view.findViewById<Button>(R.id.copyPageButton)
+        builder.setView(view)
+
+        val logEntries = getLogEntries(logType)
+        var currentPage = 0
+        val totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
+
+        fun renderPage(page: Int) {
+            currentPage = page.coerceIn(0, totalPages - 1)
+            container.removeAllViews()
+
+            val startIndex = currentPage * RECORDS_PER_PAGE
+            val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
+            val pageEntries = if (logEntries.isNotEmpty()) logEntries.subList(startIndex, endIndex) else emptyList()
+
+            if (pageEntries.isNotEmpty()) {
+                pageEntries.forEachIndexed { index, entry ->
+                    val recordNum = startIndex + index + 1
+                    val (headerText, contentText, copyText) = formatLogEntry(logType, entry, recordNum)
+
+                    val header = TextView(a).apply {
+                        text = headerText
+                        textSize = 16f
+                        setTypeface(null, Typeface.BOLD)
+                        setTextColor(ContextCompat.getColor(a, R.color.amoled_white))
+                        setPadding(0, if (index > 0) 24 else 0, 0, 8)
+                    }
+                    container.addView(header)
+
+                    val content = TextView(a).apply {
+                        text = contentText
+                        textSize = 12f
+                        typeface = Typeface.MONOSPACE
+                        setTextColor(ContextCompat.getColor(a, R.color.amoled_light_gray))
+                        setOnLongClickListener {
+                            val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Hoarder Log Record", copyText)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(a, "$headerText copied to clipboard", Toast.LENGTH_SHORT).show()
+                            true
+                        }
+                    }
+                    container.addView(content)
+                }
+            } else {
+                container.addView(createLogTextView("No logs found."))
+            }
+
+            pageIndicator.text = "Page ${currentPage + 1} of $totalPages"
+            prevButton.isEnabled = currentPage > 0
+            nextButton.isEnabled = currentPage < totalPages - 1
+            copyPageButton.isEnabled = pageEntries.isNotEmpty()
+        }
+
+        controlsContainer.visibility = View.VISIBLE
+        renderPage(0)
+
+        prevButton.setOnClickListener { renderPage(currentPage - 1) }
+        nextButton.setOnClickListener { renderPage(currentPage + 1) }
+        copyPageButton.setOnClickListener {
+            val startIndex = currentPage * RECORDS_PER_PAGE
+            val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
+            val pageEntries = if (logEntries.isNotEmpty()) logEntries.subList(startIndex, endIndex) else emptyList()
+
+            val allPageJson = pageEntries.joinToString(separator = ",\n\n") { entry ->
+                val (_, _, copyText) = formatLogEntry(logType, entry, 0)
+                copyText
+            }
+            val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Hoarder Page Log", allPageJson)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(a, "Copied ${pageEntries.size} records from page", Toast.LENGTH_SHORT).show()
+        }
+
+        val title = when(logType) {
+            "cached" -> "Last Cached Upload Details"
+            "success" -> "Upload Log"
+            "error" -> "Error Log"
+            else -> "Log"
+        }
+
+        builder.setTitle(title)
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    private fun getLogEntries(logType: String): List<String> {
+        return when (logType) {
+            "cached" -> {
+                try {
+                    val file = File(a.cacheDir, "last_upload_details.json")
+                    if (file.exists()) {
+                        val jsonText = file.readText()
+                        val type = object : TypeToken<List<String>>() {}.type
+                        g.fromJson(jsonText, type)
+                    } else emptyList()
+                } catch (e: Exception) { emptyList() }
+            }
+            "success" -> a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
+                .getStringSet("success_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
+            "error" -> a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
+                .getStringSet("error_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
+            else -> emptyList()
+        }
+    }
+
+    private fun formatLogEntry(logType: String, entry: String, recordNum: Int): Triple<String, String, String> {
+        return when (logType) {
+            "cached" -> {
+                val header = "Cached Record $recordNum"
+                val content = g.toJson(JsonParser.parseString(entry))
+                Triple(header, content, content)
+            }
+            "success" -> {
+                val parts = entry.split("|", limit = 3)
+                val header = parts.getOrElse(0) { "Success Record" }
+                val content: String
+                val copyText: String
+                if (parts.size == 3) {
+                    val size = parts[1].toLongOrNull() ?: 0
+                    val json = parts[2]
+                    if (json.startsWith("Batch upload")) {
+                        content = "${json} - Size: ${formatBytes(size)}"
+                        copyText = content
+                    } else {
+                        content = "Size: ${formatBytes(size)}\nJSON: ${g.toJson(JsonParser.parseString(json))}"
+                        copyText = g.toJson(JsonParser.parseString(json))
+                    }
+                } else {
+                    content = entry
+                    copyText = entry
+                }
+                Triple(header, content, copyText)
+            }
+            "error" -> {
+                val parts = entry.split("|", limit = 2)
+                val header = parts.getOrElse(0) { "Error Record" }
+                val content = parts.getOrElse(1) { entry }
+                Triple(header, content, content)
+            }
+            else -> Triple("Record $recordNum", entry, entry)
+        }
+    }
+
     private fun saveServerAddress(addr: String, dialog: AlertDialog) {
         if (NetUtils.isValidIpPort(addr)) {
             p.setServerAddress(addr)
@@ -257,7 +482,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
                 a.stopUpload()
                 a.startUpload(addr)
             }
-            updateUploadUI(p.isDataUploadEnabled(), null, null, null, null)
+            updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
             dialog.dismiss()
         } else {
             Toast.makeText(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT).show()
@@ -270,59 +495,12 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             .remove("error_logs")
             .remove("success_logs")
             .remove("uploadRecords")
+            .remove("data_buffer")
             .apply()
-    }
-
-    private fun populateLogs(dialogView: View) {
-        val prefs = a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-        val errorContainer = dialogView.findViewById<LinearLayout>(R.id.errorLogContainer)
-        val successContainer = dialogView.findViewById<LinearLayout>(R.id.successLogContainer)
-        errorContainer.removeAllViews()
-        successContainer.removeAllViews()
-
-        val errorLogs = prefs.getStringSet("error_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
-        if (errorLogs.isEmpty()) {
-            errorContainer.addView(createLogTextView("No errors recorded."))
-        } else {
-            errorLogs.forEach { log ->
-                val parts = log.split("|", limit = 2)
-                val text = if (parts.size == 2) "${parts[0]}: ${parts[1]}" else log
-                errorContainer.addView(createLogTextView(text))
-            }
-        }
-
-        val successLogs = prefs.getStringSet("success_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
-        if (successLogs.isEmpty()) {
-            successContainer.addView(createLogTextView("No uploads recorded."))
-        } else {
-            successLogs.forEach { log ->
-                val parts = log.split("|", limit = 3)
-                val text = if (parts.size == 3) {
-                    "${parts[0]} - Size: ${formatBytes(parts[1].toLongOrNull() ?: 0)}\nJSON: ${parts[2]}"
-                } else log
-                successContainer.addView(createLogTextView(text))
-            }
-        }
-
-        setContainerCopyListener(errorContainer, "Error Log")
-        setContainerCopyListener(successContainer, "Upload Log")
-    }
-
-    private fun setContainerCopyListener(container: LinearLayout, label: String) {
-        container.setOnLongClickListener {
-            val fullLog = StringBuilder()
-            for (i in 0 until container.childCount) {
-                (container.getChildAt(i) as? TextView)?.let {
-                    fullLog.append(it.text).append("\n\n")
-                }
-            }
-            if (fullLog.isNotEmpty()) {
-                val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText(label, fullLog.toString().trim())
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(a, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
-            }
-            true
+        try {
+            File(a.cacheDir, "last_upload_details.json").delete()
+        } catch (e: Exception) {
+            // ignore
         }
     }
 

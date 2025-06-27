@@ -99,36 +99,51 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Last 10 Errors"
+            android:text="Logs"
             android:textColor="@color/amoled_light_gray"
             android:textSize="14sp"
             android:layout_marginBottom="8dp"/>
 
-        <LinearLayout
-            android:id="@+id/errorLogContainer"
+        <Button
+            android:id="@+id/viewCachedUploadLogButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/log_container_background"
-            android:padding="8dp"
-            android:layout_marginBottom="16dp"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Last 10 Uploads"
-            android:textColor="@color/amoled_light_gray"
-            android:textSize="14sp"
+            android:text="View Last Cached Upload"
+            android:backgroundTint="@color/amoled_medium_gray"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
             android:layout_marginBottom="8dp"/>
 
-        <LinearLayout
-            android:id="@+id/successLogContainer"
+        <Button
+            android:id="@+id/viewSuccessLogButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/log_container_background"
-            android:padding="8dp"
+            android:text="View Upload Log"
+            android:backgroundTint="@color/amoled_medium_gray"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/viewErrorLogButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="View Error Log"
+            android:backgroundTint="@color/amoled_medium_gray"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
             android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/sendBufferedDataButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Send Buffered Data"
+            android:backgroundTint="@color/amoled_true_blue"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp"/>
 
         <Button
             android:id="@+id/clearLogsButton"

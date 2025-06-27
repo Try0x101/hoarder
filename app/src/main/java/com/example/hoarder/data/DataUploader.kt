@@ -7,14 +7,17 @@ import android.os.Handler
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.utils.NetUtils
 import com.google.gson.GsonBuilder
+import com.google.gson.ToNumberPolicy
 import com.google.gson.reflect.TypeToken
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 
@@ -28,7 +31,7 @@ class DataUploader(
     private var port=5000
     private var ld:String?=null
     private var lu:String?=null
-    private val g= GsonBuilder().create()
+    private val g = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private var tb=sp.getLong("totalUploadedBytes",0L)
     private var ls:String?=null
     private var lm2:Pair<String,String>?=null
@@ -36,10 +39,26 @@ class DataUploader(
     private val cd=5000L
     private val ur=object:Runnable{
         override fun run(){
-            if(ua&&ld!=null&&ip.isNotBlank()&&port>0){
-                Thread{ld?.let{val(d,delta)=gj(it);if(d!=null)u(d,it,delta)else notifyStatus("No Change","Data unchanged, skipping upload.",tb)}}.start()
+            if(ua&&ip.isNotBlank()&&port>0){
+                Thread{
+                    ld?.let { dataToProcess ->
+                        val (d, delta) = gj(dataToProcess)
+                        if (d != null) {
+                            lu = dataToProcess
+                            if (NetUtils.isNetworkAvailable(ctx)) {
+                                u(d, delta)
+                            } else {
+                                saveToBuffer(d)
+                                notifyStatus("Saving Locally", "Internet not accessible. Delta saved locally.", tb, getBufferedDataSize())
+                            }
+                        } else {
+                            notifyStatus("No Change", "Data unchanged, skipping upload.", tb, getBufferedDataSize())
+                        }
+                        ld = null
+                    }
+                }.start()
                 if(ua)h.postDelayed(this,1000L)
-            }else if(ua&&(ip.isBlank()||port<=0)){notifyStatus("Error","Server IP or Port became invalid.",tb);ua=false}
+            }else if(ua&&(ip.isBlank()||port<=0)){notifyStatus("Error","Server IP or Port became invalid.",tb, getBufferedDataSize());ua=false}
         }
     }
 
@@ -51,7 +70,7 @@ class DataUploader(
         h.removeCallbacks(ur)
         lu = null
         ua=true
-        notifyStatus("Connecting","Attempting to connect...",tb)
+        notifyStatus("Connecting","Attempting to connect...",tb, getBufferedDataSize())
         h.post(ur)
     }
 
@@ -64,14 +83,25 @@ class DataUploader(
         tb = 0L
         lu = null
         sp.edit().putLong("totalUploadedBytes", 0L).apply()
-        notifyStatus("Paused", "Upload paused.", tb)
+        notifyStatus("Paused", "Upload paused.", tb, getBufferedDataSize())
     }
 
     fun getUploadedBytes(): Long {
         return tb
     }
 
-    fun notifyStatus(s:String,m:String,ub:Long, lastUploadSize: Long? = null){
+    fun forceSendBuffer() {
+        if (ua && ip.isNotBlank() && port > 0) {
+            Thread {
+                val bufferedData = getBufferedData()
+                if (bufferedData.isNotEmpty()) {
+                    uBatch(bufferedData)
+                }
+            }.start()
+        }
+    }
+
+    fun notifyStatus(s:String,m:String,ub:Long, bufferSize: Long, lastUploadSize: Long? = null){
         val cm2=Pair(s,m)
         val ct=System.currentTimeMillis()
         var sf=true
@@ -84,6 +114,7 @@ class DataUploader(
                 putExtra("status",s)
                 putExtra("message",m)
                 putExtra("totalUploadedBytes",ub)
+                putExtra("bufferedDataSize", bufferSize)
                 lastUploadSize?.let { putExtra("lastUploadSizeBytes", it) }
             })
             ls=s;lm2=cm2
@@ -91,6 +122,7 @@ class DataUploader(
         }else if(!sf&&s=="Network Error"||ls==s&&lm2==cm2){
             LocalBroadcastManager.getInstance(ctx).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply{
                 putExtra("totalUploadedBytes",ub)
+                putExtra("bufferedDataSize", bufferSize)
                 lastUploadSize?.let { putExtra("lastUploadSizeBytes", it) }
             })
         }
@@ -110,15 +142,16 @@ class DataUploader(
         }catch(e:Exception){return Pair(cf,false)}
     }
 
-    private fun u(js:String,of:String,id:Boolean){
+    private fun u(js:String,id:Boolean){
         if (!NetUtils.isNetworkAvailable(ctx)) {
             val errorMessage = "Internet not accessible"
             addErrorLog(errorMessage)
-            notifyStatus("Network Error", errorMessage, tb)
+            saveToBuffer(js)
+            notifyStatus("Saving Locally", errorMessage, tb, getBufferedDataSize())
             return
         }
 
-        if(ip.isBlank()||port<=0){notifyStatus("Error","Server IP or Port not set.",tb);return}
+        if(ip.isBlank()||port<=0){notifyStatus("Error","Server IP or Port not set.",tb, getBufferedDataSize());return}
         val us="http://$ip:$port/api/telemetry"
         var uc: HttpURLConnection?=null
         try{
@@ -144,19 +177,127 @@ class DataUploader(
                 sp.edit().putLong("totalUploadedBytes",tb).apply()
                 addUploadRecord(uploadedBytes)
                 addSuccessLog(js, uploadedBytes)
-                lu=of
-                notifyStatus(if(id)"OK (Delta)"else"OK (Full)","Uploaded successfully.",tb, uploadedBytes)
+                notifyStatus(if(id)"OK (Delta)"else"OK (Full)","Uploaded successfully.",tb, getBufferedDataSize(), uploadedBytes)
             }else{
                 val er=uc.errorStream?.bufferedReader()?.use{it.readText()}?:"No error response"
                 val errorMessage = "$rc: ${uc.responseMessage}. Server response: $er"
                 addErrorLog(errorMessage)
-                notifyStatus("HTTP Error",errorMessage,tb)
+                saveToBuffer(js)
+                notifyStatus("HTTP Error",errorMessage,tb, getBufferedDataSize())
             }
         }catch(e:Exception){
             val errorMessage = "Failed to connect: ${e.message}"
             addErrorLog(errorMessage)
-            notifyStatus("Network Error",errorMessage,tb)
+            saveToBuffer(js)
+            notifyStatus("Network Error",errorMessage,tb, getBufferedDataSize())
         }finally{uc?.disconnect()}
+    }
+
+    private fun uBatch(batch: List<String>) {
+        if (ip.isBlank() || port <= 0) {
+            notifyStatus("Error", "Server IP or Port not set.", tb, getBufferedDataSize())
+            return
+        }
+        val us = "http://$ip:$port/api/batch-delta"
+        var uc: HttpURLConnection? = null
+        try {
+            val url = URL(us)
+            uc = url.openConnection() as HttpURLConnection
+            uc.requestMethod = "POST"
+            uc.setRequestProperty("Content-Type", "application/json")
+            uc.doOutput = true
+            uc.connectTimeout = 30000
+            uc.readTimeout = 30000
+
+            val jsonBatch = "[" + batch.joinToString(",") + "]"
+            val requestBody = jsonBatch.toByteArray(StandardCharsets.UTF_8)
+
+            uc.outputStream.write(requestBody)
+            uc.outputStream.flush()
+
+            val rc = uc.responseCode
+            if (rc == HttpURLConnection.HTTP_OK) {
+                val uploadedBytes = requestBody.size.toLong()
+                tb += uploadedBytes
+                sp.edit().putLong("totalUploadedBytes", tb).apply()
+                addUploadRecord(uploadedBytes)
+                addSuccessLog("Batch upload of ${batch.size} records", uploadedBytes)
+                saveLastUploadDetails(batch)
+                clearBuffer(batch)
+                notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb, getBufferedDataSize(), uploadedBytes)
+            } else {
+                val er = uc.errorStream?.bufferedReader()?.use { it.readText() } ?: "No error response"
+                val errorMessage = "$rc: ${uc.responseMessage}. Server response: $er"
+                addErrorLog(errorMessage)
+                notifyStatus("HTTP Error", errorMessage, tb, getBufferedDataSize())
+            }
+        } catch (e: Exception) {
+            val errorMessage = "Failed to connect: ${e.message}"
+            addErrorLog(errorMessage)
+            notifyStatus("Network Error", errorMessage, tb, getBufferedDataSize())
+        } finally {
+            uc?.disconnect()
+        }
+    }
+
+    private fun saveToBuffer(jsonString: String) {
+        val buffer = getBufferedData().toMutableSet()
+        try {
+            val type = object : TypeToken<MutableMap<String, Any>>() {}.type
+            val dataMap = g.fromJson<MutableMap<String, Any>>(jsonString, type)
+
+            dataMap["ts"] = System.currentTimeMillis() / 1000L
+
+            val modifiedJsonString = g.toJson(dataMap)
+            buffer.add(modifiedJsonString)
+            sp.edit().putStringSet("data_buffer", buffer).apply()
+            cleanupOldBufferData()
+        } catch (e: Exception) {
+            // Fallback for malformed json
+        }
+    }
+
+    private fun getBufferedData(): List<String> {
+        cleanupOldBufferData()
+        return sp.getStringSet("data_buffer", emptySet())?.toList() ?: emptyList()
+    }
+
+    private fun clearBuffer(sentData: List<String>) {
+        val buffer = getBufferedData().toMutableSet()
+        buffer.removeAll(sentData)
+        sp.edit().putStringSet("data_buffer", buffer).apply()
+    }
+
+    fun getBufferedDataSize(): Long {
+        return getBufferedData().sumOf { it.toByteArray(StandardCharsets.UTF_8).size }.toLong()
+    }
+
+    private fun cleanupOldBufferData() {
+        val sevenDaysAgo = (System.currentTimeMillis() / 1000) - 7 * 24 * 60 * 60
+        val buffer = sp.getStringSet("data_buffer", emptySet())?.toMutableSet() ?: return
+        val type = object : TypeToken<Map<String, Any>>() {}.type
+        val toRemove = buffer.filter {
+            try {
+                val data = g.fromJson<Map<String, Any>>(it, type)
+                val timestamp = (data["ts"] as? Long)
+                timestamp != null && timestamp < sevenDaysAgo
+            } catch (e: Exception) {
+                true
+            }
+        }
+        if (toRemove.isNotEmpty()) {
+            buffer.removeAll(toRemove)
+            sp.edit().putStringSet("data_buffer", buffer).apply()
+        }
+    }
+
+    private fun saveLastUploadDetails(jsonData: List<String>) {
+        try {
+            val file = File(ctx.cacheDir, "last_upload_details.json")
+            file.writeText(g.toJson(jsonData))
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     private fun addUploadRecord(bytes: Long) {

@@ -50,7 +50,8 @@ class MainActivity : AppCompatActivity() {
                 i?.getStringExtra("status"),
                 i?.getStringExtra("message"),
                 i?.getLongExtra("totalUploadedBytes", 0L),
-                i?.getLongExtra("lastUploadSizeBytes", -1L)?.takeIf { it != -1L }
+                i?.getLongExtra("lastUploadSizeBytes", -1L)?.takeIf { it != -1L },
+                i?.getLongExtra("bufferedDataSize", 0L) ?: 0L
             )
         }
     }
@@ -128,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs.setDataUploadEnabled(false)
-        ui.updateUploadUI(false, null, null, null, null)
+        ui.updateUploadUI(false, null, null, null, null, 0L)
 
         ss()
         startCollection()
@@ -170,6 +171,10 @@ class MainActivity : AppCompatActivity() {
 
     fun stopUpload() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_UPLOAD"))
+    }
+
+    fun sendBuffer() {
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.SEND_BUFFER"))
     }
 
     fun getLastData(): String? = dataManager.getJsonData() ?: ld

@@ -48,10 +48,12 @@ class BackgroundService: Service(){
                         dataUploader.setServer(ip[0],ip[1].toInt())
                         ua=true
                         dataUploader.start()
-                    }else{ua=false;dataUploader.notifyStatus("Error","Invalid Server IP:Port for starting upload.",0L)}
+                    }else{ua=false;dataUploader.notifyStatus("Error","Invalid Server IP:Port for starting upload.",0L, 0L)}
                 }
                 "com.example.hoarder.STOP_UPLOAD"->
                     if(ua){ua=false;dataUploader.stop();dataUploader.resetCounter()}
+                "com.example.hoarder.SEND_BUFFER" ->
+                    if(ua){dataUploader.forceSendBuffer()}
             }
         }
     }
@@ -79,6 +81,7 @@ class BackgroundService: Service(){
             addAction("com.example.hoarder.STOP_COLLECTION")
             addAction("com.example.hoarder.START_UPLOAD")
             addAction("com.example.hoarder.STOP_UPLOAD")
+            addAction("com.example.hoarder.SEND_BUFFER")
         })
     }
 
