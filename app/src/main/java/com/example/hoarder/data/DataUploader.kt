@@ -15,6 +15,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -246,17 +249,21 @@ class DataUploader(
             val type = object : TypeToken<MutableMap<String, Any>>() {}.type
             val dataMap = g.fromJson<MutableMap<String, Any>>(jsonString, type)
 
-            val currentTimeMillis = System.currentTimeMillis()
-            val secondsInMinute = (currentTimeMillis / 1000L) % 60L
+            val now = Instant.now()
+            val date = LocalDate.ofInstant(now, ZoneOffset.UTC)
+            val quarterStartMonth = (date.monthValue - 1) / 3 * 3 + 1
+            val quarterStartDate = LocalDate.of(date.year, quarterStartMonth, 1)
+            val quarterStartInstant = quarterStartDate.atStartOfDay().toInstant(ZoneOffset.UTC)
+            val secondsSinceQuarterStart = now.epochSecond - quarterStartInstant.epochSecond
 
-            dataMap["ts"] = secondsInMinute
+            dataMap["ts"] = secondsSinceQuarterStart
 
             val modifiedJsonString = g.toJson(dataMap)
             buffer.add(modifiedJsonString)
 
             sp.edit()
                 .putStringSet("data_buffer", buffer)
-                .putLong("buffer_entry_${modifiedJsonString.hashCode()}", currentTimeMillis)
+                .putLong("buffer_entry_${modifiedJsonString.hashCode()}", now.toEpochMilli())
                 .apply()
             cleanupOldBufferData()
         } catch (e: Exception) {
