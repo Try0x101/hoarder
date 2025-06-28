@@ -25,11 +25,15 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
 import com.example.hoarder.data.Prefs
 import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.utils.ToastHelper
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.google.gson.ToNumberPolicy
 import com.google.gson.reflect.TypeToken
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 
@@ -40,6 +44,10 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private lateinit var dataCollectionArrow: ImageView
     private lateinit var dataCollectionContent: HorizontalScrollView
     private lateinit var rawJsonTextView: TextView
+
+    private lateinit var dataDescriptionHeader: RelativeLayout
+    private lateinit var dataDescriptionArrow: ImageView
+    private lateinit var dataDescriptionContent: LinearLayout
 
     private lateinit var serverUploadRow: RelativeLayout
     private lateinit var serverUploadSwitch: Switch
@@ -82,6 +90,10 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         dataCollectionArrow = a.findViewById(R.id.dataCollectionArrow)
         dataCollectionContent = a.findViewById(R.id.dataCollectionContent)
         rawJsonTextView = a.findViewById(R.id.rawJsonTextView)
+
+        dataDescriptionHeader = a.findViewById(R.id.dataDescriptionHeader)
+        dataDescriptionArrow = a.findViewById(R.id.dataDescriptionArrow)
+        dataDescriptionContent = a.findViewById(R.id.dataDescriptionContent)
 
         serverUploadRow = a.findViewById(R.id.serverUploadRow)
         serverUploadSwitch = a.findViewById(R.id.serverUploadSwitch)
@@ -127,6 +139,26 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             toggleVisibility(dataCollectionContent, dataCollectionArrow)
         }
 
+        dataDescriptionHeader.setOnClickListener {
+            toggleVisibility(dataDescriptionContent, dataDescriptionArrow)
+        }
+
+        // Add long-press listeners for the info sections
+        a.findViewById<TextView>(R.id.timestampInfoText)?.setOnLongClickListener {
+            copyTextToClipboard(it as TextView, "Timestamp Info")
+            true
+        }
+
+        a.findViewById<TextView>(R.id.precisionInfoText)?.setOnLongClickListener {
+            copyTextToClipboard(it as TextView, "Precision Settings Info")
+            true
+        }
+
+        a.findViewById<TextView>(R.id.fieldsInfoText)?.setOnLongClickListener {
+            copyTextToClipboard(it as TextView, "Data Fields Reference")
+            true
+        }
+
         serverUploadSwitch.setOnCheckedChangeListener { _, isChecked ->
             p.setDataUploadEnabled(isChecked)
             if (isChecked) {
@@ -153,9 +185,17 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Hoarder JSON", rawJsonTextView.text)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(a, "JSON data copied to clipboard", Toast.LENGTH_SHORT).show()
+            ToastHelper.showToast(a, "JSON data copied to clipboard", Toast.LENGTH_SHORT)
             true
         }
+    }
+
+    // Helper method for copying text
+    private fun copyTextToClipboard(textView: TextView, label: String) {
+        val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText(label, textView.text)
+        clipboard.setPrimaryClip(clip)
+        ToastHelper.showToast(a, "$label copied to clipboard", Toast.LENGTH_SHORT)
     }
 
     private fun setupPrecisionDialogListeners() {
@@ -285,10 +325,10 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
                 updateButtonsState()
                 val status = intent?.getStringExtra("status")
                 when (status) {
-                    "OK (Batch)" -> Toast.makeText(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT).show()
+                    "OK (Batch)" -> ToastHelper.showToast(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT)
                     "HTTP Error", "Network Error" -> {
                         val message = intent.getStringExtra("message") ?: "Check logs for details."
-                        Toast.makeText(a, "Failed to send buffer: $message", Toast.LENGTH_LONG).show()
+                        ToastHelper.showToast(a, "Failed to send buffer: $message", Toast.LENGTH_LONG)
                     }
                 }
             }
@@ -301,7 +341,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             view.findViewById<Button>(R.id.clearLogsButton).setOnClickListener {
                 clearAllLogs()
                 updateButtonsState()
-                Toast.makeText(a, "Logs cleared", Toast.LENGTH_SHORT).show()
+                ToastHelper.showToast(a, "Logs cleared", Toast.LENGTH_SHORT)
             }
             LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
         }
@@ -343,52 +383,78 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
 
             val startIndex = currentPage * RECORDS_PER_PAGE
             val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
-            val pageEntries = if (logEntries.isNotEmpty()) logEntries.subList(startIndex, endIndex) else emptyList()
 
-            if (pageEntries.isNotEmpty()) {
+            if (logEntries.isNotEmpty() && startIndex < logEntries.size) {
+                val pageEntries = logEntries.subList(startIndex, endIndex)
+
                 pageEntries.forEachIndexed { index, entry ->
-                    val recordNum = startIndex + index + 1
-                    val (headerText, contentText, copyText) = formatLogEntry(logType, entry, recordNum)
+                    try {
+                        val (headerText, contentText, copyText) = formatLogEntry(logType, entry, startIndex + index + 1)
 
-                    val header = TextView(a).apply {
-                        text = headerText
-                        textSize = 16f
-                        setTypeface(null, Typeface.BOLD)
-                        setTextColor(ContextCompat.getColor(a, R.color.amoled_white))
-                        setPadding(0, if (index > 0) 24 else 0, 0, 8)
-                    }
-                    container.addView(header)
-
-                    val content = TextView(a).apply {
-                        text = contentText
-                        textSize = 12f
-                        typeface = Typeface.MONOSPACE
-                        setTextColor(ContextCompat.getColor(a, R.color.amoled_light_gray))
-                        setOnLongClickListener {
-                            val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val clip = ClipData.newPlainText("Hoarder Log Record", copyText)
-                            clipboard.setPrimaryClip(clip)
-                            Toast.makeText(a, "$headerText copied to clipboard", Toast.LENGTH_SHORT).show()
-                            true
+                        val header = TextView(a).apply {
+                            text = headerText
+                            textSize = 16f
+                            setTypeface(null, Typeface.BOLD)
+                            setTextColor(ContextCompat.getColor(a, R.color.amoled_white))
+                            setPadding(0, if (index > 0) 24 else 0, 0, 8)
                         }
+                        container.addView(header)
+
+                        val content = TextView(a).apply {
+                            text = contentText
+                            textSize = 12f
+                            typeface = Typeface.MONOSPACE
+                            setTextColor(ContextCompat.getColor(a, R.color.amoled_light_gray))
+                            setOnLongClickListener {
+                                val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Hoarder Log Record", copyText)
+                                clipboard.setPrimaryClip(clip)
+                                ToastHelper.showToast(a, "Log entry copied to clipboard", Toast.LENGTH_SHORT)
+                                true
+                            }
+                        }
+                        container.addView(content)
+                    } catch (e: Exception) {
+                        val errorView = TextView(a).apply {
+                            text = "Error displaying entry: ${e.message}"
+                            textSize = 12f
+                            setTextColor(ContextCompat.getColor(a, R.color.amoled_red))
+                        }
+                        container.addView(errorView)
                     }
-                    container.addView(content)
                 }
             } else {
-                container.addView(createLogTextView("No logs found."))
+                val noDataView = TextView(a).apply {
+                    text = "No logs found for this page."
+                    textSize = 14f
+                    setTextColor(ContextCompat.getColor(a, R.color.amoled_light_gray))
+                    gravity = Gravity.CENTER
+                    setPadding(0, 50, 0, 0)
+                }
+                container.addView(noDataView)
             }
 
             pageIndicator.text = "Page ${currentPage + 1} of $totalPages"
             prevButton.isEnabled = currentPage > 0
             nextButton.isEnabled = currentPage < totalPages - 1
-            copyPageButton.isEnabled = pageEntries.isNotEmpty()
+            copyPageButton.isEnabled = logEntries.isNotEmpty() && startIndex < logEntries.size
         }
 
         controlsContainer.visibility = View.VISIBLE
         renderPage(0)
 
-        prevButton.setOnClickListener { renderPage(currentPage - 1) }
-        nextButton.setOnClickListener { renderPage(currentPage + 1) }
+        prevButton.setOnClickListener {
+            if (currentPage > 0) {
+                renderPage(currentPage - 1)
+            }
+        }
+
+        nextButton.setOnClickListener {
+            if (currentPage < totalPages - 1) {
+                renderPage(currentPage + 1)
+            }
+        }
+
         copyPageButton.setOnClickListener {
             val startIndex = currentPage * RECORDS_PER_PAGE
             val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
@@ -401,7 +467,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Hoarder Page Log", allPageJson)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(a, "Copied ${pageEntries.size} records from page", Toast.LENGTH_SHORT).show()
+            ToastHelper.showToast(a, "Copied ${pageEntries.size} records from page", Toast.LENGTH_SHORT)
         }
 
         val title = when(logType) {
@@ -417,67 +483,128 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun getLogEntries(logType: String): List<String> {
-        return when (logType) {
+        val result = when (logType) {
             "cached" -> {
                 try {
                     val file = File(a.cacheDir, "last_upload_details.json")
                     if (file.exists()) {
                         val jsonText = file.readText()
                         val type = object : TypeToken<List<String>>() {}.type
-                        g.fromJson(jsonText, type)
+                        g.fromJson<List<String>>(jsonText, type) ?: emptyList()
                     } else emptyList()
-                } catch (e: Exception) { emptyList() }
+                } catch (e: Exception) {
+                    emptyList()
+                }
             }
-            "success" -> a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-                .getStringSet("success_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
-            "error" -> a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-                .getStringSet("error_logs", emptySet())?.toMutableList()?.sortedDescending() ?: emptyList()
+            "success" -> {
+                a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
+                    .getStringSet("success_logs", emptySet())?.toList() ?: emptyList()
+            }
+            "error" -> {
+                a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
+                    .getStringSet("error_logs", emptySet())?.toList() ?: emptyList()
+            }
             else -> emptyList()
+        }
+
+        // Sort logs by timestamp (newest first)
+        return when (logType) {
+            "success", "error" -> {
+                result.sortedByDescending { entry ->
+                    try {
+                        val timestamp = entry.split("|", limit = 2).firstOrNull() ?: ""
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                        dateFormat.parse(timestamp)?.time ?: 0L
+                    } catch (e: Exception) {
+                        0L
+                    }
+                }
+            }
+            "cached" -> {
+                result.sortedByDescending { entry ->
+                    try {
+                        val jsonObject = g.fromJson(entry, Map::class.java) as? Map<String, Any>
+                        val timestamp = jsonObject?.get("ts") as? Number
+                        timestamp?.toLong() ?: 0L
+                    } catch (e: Exception) {
+                        0L
+                    }
+                }
+            }
+            else -> result
         }
     }
 
     private fun formatLogEntry(logType: String, entry: String, recordNum: Int): Triple<String, String, String> {
-        return when (logType) {
-            "cached" -> {
-                val header = "Cached Record $recordNum"
-                val content = g.toJson(JsonParser.parseString(entry))
-                Triple(header, content, content)
-            }
-            "success" -> {
-                val parts = entry.split("|", limit = 3)
-                val header = parts.getOrElse(0) { "Success Record" }
-                val content: String
-                val copyText: String
-                if (parts.size == 3) {
-                    val size = parts[1].toLongOrNull() ?: 0
-                    val json = parts[2]
-                    if (json.startsWith("Batch upload")) {
-                        content = "${json} - Size: ${formatBytes(size)}"
-                        copyText = content
-                    } else {
-                        content = "Size: ${formatBytes(size)}\nJSON: ${g.toJson(JsonParser.parseString(json))}"
-                        copyText = g.toJson(JsonParser.parseString(json))
+        return try {
+            when (logType) {
+                "cached" -> {
+                    // Calculate the size of the entry
+                    val entrySize = entry.toByteArray(StandardCharsets.UTF_8).size.toLong()
+
+                    // Try to parse the JSON to see if it has a ts field
+                    val jsonObject = try {
+                        g.fromJson(entry, Map::class.java) as? Map<String, Any>
+                    } catch (e: Exception) {
+                        null
                     }
-                } else {
-                    content = entry
-                    copyText = entry
+                    val timestamp = jsonObject?.get("ts") as? Number
+
+                    val timestampStr = if (timestamp != null) {
+                        // Interpret as seconds since Epoch-2025 (January 1, 2025)
+                        val epoch2025 = 1735689600L // Jan 1, 2025 00:00:00 UTC in Unix time
+                        val date = Date((timestamp.toLong() + epoch2025) * 1000)
+                        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                        dateFormat.format(date)
+                    } else {
+                        "Unknown"
+                    }
+
+                    val header = "[${timestampStr}] [${formatBytes(entrySize)}]"
+                    val content = entry // Just display raw entry
+
+                    Triple(header, content, content)
                 }
-                Triple(header, content, copyText)
+                "success" -> {
+                    val parts = entry.split("|", limit = 3)
+                    val timestamp = parts.getOrElse(0) { "Unknown" }
+                    val size = parts.getOrElse(1) { "0" }.toLongOrNull() ?: 0
+                    val json = parts.getOrElse(2) { "" }
+
+                    val header = "[${timestamp}] [${formatBytes(size)}]"
+                    val content = if (json.startsWith("Batch upload")) {
+                        json
+                    } else {
+                        try {
+                            g.toJson(JsonParser.parseString(json))
+                        } catch (e: Exception) {
+                            json
+                        }
+                    }
+
+                    Triple(header, content, json)
+                }
+                "error" -> {
+                    val parts = entry.split("|", limit = 2)
+                    val timestamp = parts.getOrElse(0) { "Unknown" }
+                    val message = parts.getOrElse(1) { entry }
+
+                    val header = "[${timestamp}]"
+
+                    Triple(header, message, message)
+                }
+                else -> Triple("", entry, entry)
             }
-            "error" -> {
-                val parts = entry.split("|", limit = 2)
-                val header = parts.getOrElse(0) { "Error Record" }
-                val content = parts.getOrElse(1) { entry }
-                Triple(header, content, content)
-            }
-            else -> Triple("Record $recordNum", entry, entry)
+        } catch (e: Exception) {
+            // Fallback in case of any exception
+            Triple("", "Error processing entry: ${e.message}", entry)
         }
     }
 
     private fun saveServerAddress(addr: String, dialog: AlertDialog) {
         if (NetUtils.isValidIpPort(addr)) {
             p.setServerAddress(addr)
-            Toast.makeText(a, "Server address saved", Toast.LENGTH_SHORT).show()
+            ToastHelper.showToast(a, "Server address saved", Toast.LENGTH_SHORT)
             if (p.isDataUploadEnabled()) {
                 a.stopUpload()
                 a.startUpload(addr)
@@ -485,7 +612,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
             updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
             dialog.dismiss()
         } else {
-            Toast.makeText(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT).show()
+            ToastHelper.showToast(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT)
         }
     }
 

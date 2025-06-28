@@ -1,5 +1,6 @@
 package com.example.hoarder.utils
 
+import com.example.hoarder.utils.ToastHelper
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -63,7 +64,7 @@ class PermHandler(private val a: Activity, private val h: Handler) {
                 act?.invoke()
                 act = null
             } else {
-                Toast.makeText(a, "App requires all permissions", Toast.LENGTH_LONG).show()
+                ToastHelper.showToast(a, "App requires all permissions", Toast.LENGTH_LONG)
                 h.postDelayed({ requestPerms() }, 1000)
             }
         }

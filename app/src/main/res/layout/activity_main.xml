@@ -93,6 +93,123 @@
                 android:orientation="vertical">
 
                 <RelativeLayout
+                    android:id="@+id/dataDescriptionHeader"
+                    style="@style/SettingsRow">
+
+                    <ImageView
+                        android:id="@+id/dataDescriptionIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@drawable/ic_precision_settings" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/dataDescriptionArrow"
+                        android:layout_toEndOf="@id/dataDescriptionIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Data Description" />
+
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:text="Encoding details and optimizations" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/dataDescriptionArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_arrow_down" />
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:id="@+id/dataDescriptionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone"
+                    android:background="@color/amoled_black">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Timestamp Encoding"
+                        android:textColor="@color/amoled_true_blue"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/timestampInfoText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• In cached data, 'ts' field represents seconds since Epoch-2025 (January 1, 2025 00:00:00 UTC)\n\n• Storage benefits:\n  - Standard Unix timestamp: ~10 bytes (e.g., 1719597600)\n  - Epoch-2025 timestamp: ~2-4 bytes (e.g., 15360)\n  - Saves ~6-8 bytes per record (~70% reduction)\n\n• As time progresses:\n  - 2025: 1-2 bytes (small integers)\n  - 2026: 2-3 bytes (growing integers) \n  - 2027+: 3-4 bytes (larger integers)\n\n• Implementation note:\n  - Server must add 1735689600 to 'ts' to get Unix timestamp\n  - Both app and server should update epoch reference every ~3 years\n  - Next optimal reset: January 2028"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:lineSpacingExtra="4dp"
+                        android:paddingBottom="16dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Precision Settings"
+                        android:textColor="@color/amoled_true_blue"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/precisionInfoText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• GPS Coordinates ('lat', 'lon'):\n  - Smart: Variable precision based on speed\n    * Speed &lt;4 km/h → round to 1 km\n    * Speed 4-40 km/h → round to 20 m\n    * Speed 40-140 km/h → round to 100 m\n    * Speed &gt;140 km/h → round to 1 km\n  - Values 0, 20, 100, 1000, 10000m control coordinate rounding precision\n\n• GPS Altitude ('alt'):\n  - Smart: Variable precision based on altitude\n    * Below 100m: rounded to nearest 10m\n    * 100-1000m: rounded to nearest 50m\n    * Above 1000m: rounded to nearest 100m\n  - Uses Kalman filter to combine barometer and GPS data\n  - Rate-limited to 15m change per update\n  - Values 0, 2, 10, 25, 50, 100m control altitude rounding precision\n\n• RSSI ('rssi'):\n  - Smart: Variable precision based on signal strength\n    * Worse than -110 dBm → exact value\n    * Between -110 and -90 dBm → round to nearest 5 dBm\n    * Better than -90 dBm → round to nearest 10 dBm\n  - Values 0, 3, 5, 10 dBm control signal rounding precision\n\n• Battery ('perc'):\n  - Smart: Variable precision based on battery level\n    * Below 10% → exact percentage\n    * 10-50% → round to nearest 5%\n    * Above 50% → round to nearest 10%\n  - Values 0, 2, 5, 10% control battery level rounding precision\n\n• Network Speed ('dn', 'up'):\n  - Smart: Variable precision based on speed\n    * Below 2 Mbps → decimal precision (e.g., 1.5 Mbps)\n    * 2-7 Mbps → round to nearest lower 1 Mbps\n    * Above 7 Mbps → round to nearest lower 5 Mbps\n  - Float mode: Shows decimal precision values\n  - Values 1, 2, 5 Mbps control network speed rounding precision\n  - Upstream and downstream speeds in Mbps (converted from Kbps)\n\n• Speed ('spd'):\n  - Smart: Variable precision based on speed\n    * Below 2 km/h → show 0\n    * 2-10 km/h → round to nearest 3 km/h\n    * Above 10 km/h → round to nearest 10 km/h\n  - Values 0, 1, 3, 5, 10 km/h control speed rounding precision\n  - Speed is always in km/h"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:lineSpacingExtra="4dp"
+                        android:paddingBottom="16dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Data Fields Reference"
+                        android:textColor="@color/amoled_true_blue"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/fieldsInfoText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• 'id': Device identifier (first 4 chars of Android ID)\n• 'n': Device model name (e.g., 'Pixel 7')\n• 'perc': Battery percentage (0-100)\n• 'cap': Battery capacity in mAh (when available)\n• 'lat': Latitude in decimal degrees\n• 'lon': Longitude in decimal degrees\n• 'alt': Altitude in meters above sea level\n• 'acc': GPS accuracy in meters\n• 'spd': Speed in km/h\n• 'op': Network operator name (e.g., 'Verizon')\n• 'nt': Network type (e.g., 'LTE', '5G NR', 'HSPA')\n• 'ci': Cell ID (integer, or 'N/A')\n• 'tac': Tracking Area Code (integer, or 'N/A')\n• 'mcc': Mobile Country Code (string, or 'N/A')\n• 'mnc': Mobile Network Code (string, or 'N/A')\n• 'rssi': Signal strength in dBm (negative values)\n• 'bssid': WiFi BSSID (MAC address, or 0 if not connected)\n• 'dn': Download speed in Mbps\n• 'up': Upload speed in Mbps\n• 'ts': Timestamp (seconds since Epoch-2025)\n\nNOTES:\n• Delta update protocol requires server to know baseline\n• Network values may show 'N/A' when unavailable\n• Signal strength (rssi) generally ranges from -50 to -120 dBm\n• Precision settings control data quality vs. size tradeoff\n• Higher precision = more accurate data but larger payload"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:lineSpacingExtra="4dp"
+                        android:paddingBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Long-press any section to copy its content"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:paddingTop="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RelativeLayout
                     android:id="@+id/precisionSettingsHeader"
                     style="@style/SettingsRow">
 

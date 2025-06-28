@@ -1,5 +1,6 @@
 package com.example.hoarder.ui
 
+import com.example.hoarder.utils.ToastHelper
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -59,7 +60,7 @@ class MainActivity : AppCompatActivity() {
     private val pr = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             if (i?.action == "com.example.hoarder.PERMISSIONS_REQUIRED") {
-                Toast.makeText(this@MainActivity, "Location permissions required", Toast.LENGTH_LONG).show()
+                ToastHelper.showToast(this@MainActivity, "Location permissions required", Toast.LENGTH_LONG)
                 permHandler.requestPerms()
             }
         }
@@ -134,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         ss()
         startCollection()
 
-        Toast.makeText(this, "Setup complete. App will run in background.", Toast.LENGTH_SHORT).show()
+        ToastHelper.showToast(this, "Setup complete. App will run in background.")
         h.postDelayed({ finishAffinity() }, 2000)
     }
 

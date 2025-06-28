@@ -246,7 +246,12 @@ class DataUploader(
             val type = object : TypeToken<MutableMap<String, Any>>() {}.type
             val dataMap = g.fromJson<MutableMap<String, Any>>(jsonString, type)
 
-            dataMap["ts"] = System.currentTimeMillis() / 1000L
+            // Calculate seconds since Epoch-2025 (January 1, 2025)
+            val epoch2025 = 1735689600L // Jan 1, 2025 00:00:00 UTC in Unix time
+            val currentTimeSecs = System.currentTimeMillis() / 1000L
+            val secondsSinceEpoch2025 = currentTimeSecs - epoch2025
+
+            dataMap["ts"] = secondsSinceEpoch2025
 
             val modifiedJsonString = g.toJson(dataMap)
             buffer.add(modifiedJsonString)
@@ -273,14 +278,16 @@ class DataUploader(
     }
 
     private fun cleanupOldBufferData() {
-        val sevenDaysAgo = (System.currentTimeMillis() / 1000) - 7 * 24 * 60 * 60
+        val epoch2025 = 1735689600L // Jan 1, 2025 00:00:00 UTC
+        val sevenDaysAgoEpoch2025 = (System.currentTimeMillis() / 1000 - epoch2025) - 7 * 24 * 60 * 60
+
         val buffer = sp.getStringSet("data_buffer", emptySet())?.toMutableSet() ?: return
         val type = object : TypeToken<Map<String, Any>>() {}.type
         val toRemove = buffer.filter {
             try {
                 val data = g.fromJson<Map<String, Any>>(it, type)
-                val timestamp = (data["ts"] as? Long)
-                timestamp != null && timestamp < sevenDaysAgo
+                val timestamp = (data["ts"] as? Number)?.toLong()
+                timestamp != null && timestamp < sevenDaysAgoEpoch2025
             } catch (e: Exception) {
                 true
             }
