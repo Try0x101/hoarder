@@ -246,16 +246,18 @@ class DataUploader(
             val type = object : TypeToken<MutableMap<String, Any>>() {}.type
             val dataMap = g.fromJson<MutableMap<String, Any>>(jsonString, type)
 
-            // Calculate seconds since Epoch-2025 (January 1, 2025)
-            val epoch2025 = 1735689600L // Jan 1, 2025 00:00:00 UTC in Unix time
-            val currentTimeSecs = System.currentTimeMillis() / 1000L
-            val secondsSinceEpoch2025 = currentTimeSecs - epoch2025
+            val currentTimeMillis = System.currentTimeMillis()
+            val secondsInMinute = (currentTimeMillis / 1000L) % 60L
 
-            dataMap["ts"] = secondsSinceEpoch2025
+            dataMap["ts"] = secondsInMinute
 
             val modifiedJsonString = g.toJson(dataMap)
             buffer.add(modifiedJsonString)
-            sp.edit().putStringSet("data_buffer", buffer).apply()
+
+            sp.edit()
+                .putStringSet("data_buffer", buffer)
+                .putLong("buffer_entry_${modifiedJsonString.hashCode()}", currentTimeMillis)
+                .apply()
             cleanupOldBufferData()
         } catch (e: Exception) {
             // Fallback for malformed json
@@ -278,22 +280,30 @@ class DataUploader(
     }
 
     private fun cleanupOldBufferData() {
-        val epoch2025 = 1735689600L // Jan 1, 2025 00:00:00 UTC
-        val sevenDaysAgoEpoch2025 = (System.currentTimeMillis() / 1000 - epoch2025) - 7 * 24 * 60 * 60
+        val currentTimeMillis = System.currentTimeMillis()
+        val sevenDaysAgoMillis = currentTimeMillis - 7 * 24 * 60 * 60 * 1000L
+        val sevenDaysAgoMinute = sevenDaysAgoMillis / 60000L
 
         val buffer = sp.getStringSet("data_buffer", emptySet())?.toMutableSet() ?: return
         val type = object : TypeToken<Map<String, Any>>() {}.type
         val toRemove = buffer.filter {
             try {
                 val data = g.fromJson<Map<String, Any>>(it, type)
-                val timestamp = (data["ts"] as? Number)?.toLong()
-                timestamp != null && timestamp < sevenDaysAgoEpoch2025
+                val tsInMinute = (data["ts"] as? Number)?.toLong() ?: return@filter false
+
+                val entryCreationTime = sp.getLong("buffer_entry_${it.hashCode()}", currentTimeMillis)
+                val entryMinute = entryCreationTime / 60000L
+
+                entryMinute < sevenDaysAgoMinute
             } catch (e: Exception) {
                 true
             }
         }
         if (toRemove.isNotEmpty()) {
             buffer.removeAll(toRemove)
+            toRemove.forEach {
+                sp.edit().remove("buffer_entry_${it.hashCode()}").apply()
+            }
             sp.edit().putStringSet("data_buffer", buffer).apply()
         }
     }
