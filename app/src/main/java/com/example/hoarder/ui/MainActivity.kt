@@ -1,6 +1,5 @@
 package com.example.hoarder.ui
 
-import com.example.hoarder.utils.ToastHelper
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,51 +10,29 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
-import com.example.hoarder.data.ConcurrentDataManager
-import com.example.hoarder.data.DataUtils
-import com.example.hoarder.data.Prefs
+import com.example.hoarder.common.ContextUtils
+import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.service.BackgroundService
-import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.transport.network.NetUtils
+import com.example.hoarder.ui.main.MainViewModel
 import com.example.hoarder.utils.NotifUtils
 import com.example.hoarder.utils.PermHandler
+import com.example.hoarder.utils.ToastHelper
 
 class MainActivity : AppCompatActivity() {
     private val h = Handler(Looper.getMainLooper())
     private val prefs by lazy { Prefs(this) }
     private val permHandler by lazy { PermHandler(this, h) }
     private val ui by lazy { UIHelper(this, prefs) }
-    private val dataManager by lazy { ConcurrentDataManager() }
+    private val viewModel: MainViewModel by viewModels()
 
-    private var ld: String? = null
-    private val rcvs = mutableListOf<BroadcastReceiver>()
-
-    private val dr = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) {
-            i?.getStringExtra("jsonString")?.let { j ->
-                ld = j
-                dataManager.setJsonData(j)
-                ui.updateRawJson(j)
-            }
-        }
-    }
-
-    private val ur = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) {
-            ui.updateUploadUI(
-                prefs.isDataUploadEnabled(),
-                i?.getStringExtra("status"),
-                i?.getStringExtra("message"),
-                i?.getLongExtra("totalUploadedBytes", 0L),
-                i?.getLongExtra("lastUploadSizeBytes", -1L)?.takeIf { it != -1L },
-                i?.getLongExtra("bufferedDataSize", 0L) ?: 0L
-            )
-        }
-    }
+    private var lastData: String? = null
 
     private val pr = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
@@ -78,8 +55,10 @@ class MainActivity : AppCompatActivity() {
 
         ui.setupUI()
         NotifUtils.createSilentChannel(this)
+        viewModel.registerReceivers()
+        observeViewModel()
 
-        registerReceivers()
+        LocalBroadcastManager.getInstance(this).registerReceiver(pr, IntentFilter("com.example.hoarder.PERMISSIONS_REQUIRED"))
 
         if (prefs.isFirstRun()) {
             permHandler.setPendingAction { handleFirstRun() }
@@ -89,11 +68,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun registerReceivers() {
-        val lbm = LocalBroadcastManager.getInstance(this)
-        lbm.registerReceiver(dr, IntentFilter("com.example.hoarder.DATA_UPDATE")).also { rcvs.add(dr) }
-        lbm.registerReceiver(ur, IntentFilter("com.example.hoarder.UPLOAD_STATUS")).also { rcvs.add(ur) }
-        lbm.registerReceiver(pr, IntentFilter("com.example.hoarder.PERMISSIONS_REQUIRED")).also { rcvs.add(pr) }
+    private fun observeViewModel() {
+        viewModel.lastJson.observe(this) { json ->
+            lastData = json
+            ui.updateRawJson(json)
+        }
+        viewModel.isUploadEnabled.observe(this) { isEnabled ->
+            ui.updateUploadUI(
+                isEnabled,
+                viewModel.uploadStatus.value,
+                viewModel.uploadMessage.value,
+                viewModel.totalUploadedBytes.value,
+                viewModel.bufferedDataSize.value ?: 0L
+            )
+        }
+        viewModel.totalUploadedBytes.observe(this) {
+            ui.updateUploadUI(
+                viewModel.isUploadEnabled.value ?: false,
+                viewModel.uploadStatus.value,
+                viewModel.uploadMessage.value,
+                it,
+                viewModel.bufferedDataSize.value ?: 0L
+            )
+        }
     }
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<String>, res: IntArray) {
@@ -104,7 +101,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         NotifUtils.createSilentChannel(this)
-        if (permHandler.hasAllPerms() && !DataUtils.isServiceRunning(this, BackgroundService::class.java)) {
+        if (permHandler.hasAllPerms() && !ContextUtils.isServiceRunning(this, BackgroundService::class.java)) {
             ss()
             rs()
         }
@@ -113,9 +110,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        rcvs.forEach { LocalBroadcastManager.getInstance(this).unregisterReceiver(it) }
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(pr)
         h.removeCallbacksAndMessages(null)
-        dataManager.clearData()
     }
 
     private fun handleFirstRun() {
@@ -130,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs.setDataUploadEnabled(false)
-        ui.updateUploadUI(false, null, null, null, null, 0L)
+        ui.updateUploadUI(false, null, null, null, 0L)
 
         ss()
         startCollection()
@@ -158,8 +154,7 @@ class MainActivity : AppCompatActivity() {
 
     fun stopCollection() {
         ui.updateRawJson(null)
-        ld = null
-        dataManager.setJsonData(null)
+        lastData = null
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_COLLECTION"))
     }
 
@@ -186,5 +181,5 @@ class MainActivity : AppCompatActivity() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.SEND_BUFFER"))
     }
 
-    fun getLastData(): String? = dataManager.getJsonData() ?: ld
+    fun getLastData(): String? = lastData
 }

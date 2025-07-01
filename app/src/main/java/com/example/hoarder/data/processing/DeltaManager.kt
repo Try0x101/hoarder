@@ -1,14 +1,17 @@
-package com.example.hoarder.data
+package com.example.hoarder.data.processing
 
 import android.content.Context
 import android.util.Log
+import com.example.hoarder.data.DataUploader
+import com.example.hoarder.data.models.TelemetryRecord
+import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.google.gson.Gson
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-class RealTimeDeltaManager(
+class DeltaManager(
     private val context: Context,
     private val dataUploader: DataUploader
 ) {
@@ -68,7 +71,7 @@ class RealTimeDeltaManager(
             }
 
             val previousData = lastKnownState[deviceId]
-            val deltaMap = calculateDelta(previousData, currentData)
+            val deltaMap = DeltaComputer.calculateDelta(previousData, currentData)
 
             lastKnownState[deviceId] = currentData
 
@@ -82,41 +85,6 @@ class RealTimeDeltaManager(
         } catch (e: Exception) {
             Log.e("DeltaManager", "Error processing telemetry data", e)
             null
-        }
-    }
-
-    private fun calculateDelta(previous: Map<String, Any>?, current: Map<String, Any>): Map<String, Any> {
-        if (previous == null) {
-            return current.toMutableMap()
-        }
-
-        val delta = mutableMapOf<String, Any>()
-
-        for ((key, value) in current) {
-            val previousValue = previous[key]
-            if (previousValue == null || !valuesEqual(previousValue, value)) {
-                delta[key] = value
-            }
-        }
-
-        if (current.containsKey("id")) {
-            delta["id"] = current["id"]!!
-        }
-
-        if (delta.size == 1 && delta.containsKey("id")) {
-            return emptyMap()
-        }
-
-        return delta
-    }
-
-    private fun valuesEqual(v1: Any, v2: Any): Boolean {
-        return when {
-            v1 is Number && v2 is Number -> {
-                v1.toDouble() == v2.toDouble()
-            }
-            v1 is String && v2 is String -> v1 == v2
-            else -> v1.toString() == v2.toString()
         }
     }
 
@@ -170,28 +138,22 @@ class RealTimeDeltaManager(
         return map
     }
 
-    private fun safeInt(value: Any?): Int {
-        return when (value) {
-            is Number -> value.toInt()
-            is String -> value.toIntOrNull() ?: 0
-            else -> 0
-        }
+    private fun safeInt(value: Any?): Int = when (value) {
+        is Number -> value.toInt()
+        is String -> value.toIntOrNull() ?: 0
+        else -> 0
     }
 
-    private fun safeIntOrNull(value: Any?): Int? {
-        return when (value) {
-            is Number -> value.toInt()
-            is String -> value.toIntOrNull()
-            else -> null
-        }
+    private fun safeIntOrNull(value: Any?): Int? = when (value) {
+        is Number -> value.toInt()
+        is String -> value.toIntOrNull()
+        else -> null
     }
 
-    private fun safeDouble(value: Any?): Double {
-        return when (value) {
-            is Number -> value.toDouble()
-            is String -> value.toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }
+    private fun safeDouble(value: Any?): Double = when (value) {
+        is Number -> value.toDouble()
+        is String -> value.toDoubleOrNull() ?: 0.0
+        else -> 0.0
     }
 
     suspend fun getPendingRecordsCount(): Int {

@@ -1,4 +1,4 @@
-package com.example.hoarder.utils
+package com.example.hoarder.transport.network
 
 import android.content.Context
 import android.net.ConnectivityManager

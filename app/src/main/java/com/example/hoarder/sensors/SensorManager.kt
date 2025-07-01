@@ -4,7 +4,7 @@ import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
-import android.hardware.SensorManager
+import android.hardware.SensorManager as AndroidSensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -16,11 +16,12 @@ import kotlin.math.max
 
 class SensorManager(private val ctx: Context, private val handler: Handler) {
     private lateinit var locationManager: LocationManager
-    private lateinit var sensorManager: SensorManager
+    private lateinit var androidSensorManager: AndroidSensorManager
+    private lateinit var listenerManager: SensorListenerManager
+
     private val barometricValue = AtomicReference<Float?>(null)
     private val lastLocation = AtomicReference<Location?>(null)
     private val isInitialized = AtomicBoolean(false)
-    private val listenersRegistered = AtomicBoolean(false)
 
     private val altitudeFilter = AltitudeKalmanFilter()
     private val lastGpsAltitude = AtomicReference<Double>(Double.NaN)
@@ -36,13 +37,9 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            try {
-                lastLocation.set(location)
-                lastGpsAltitude.set(location.altitude)
-                lastGpsAccuracy.set(location.accuracy)
-            } catch (e: Exception) {
-                // Error processing location update
-            }
+            lastLocation.set(location)
+            lastGpsAltitude.set(location.altitude)
+            lastGpsAccuracy.set(location.accuracy)
         }
         override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
         override fun onProviderEnabled(p: String) {}
@@ -52,15 +49,10 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
     private val sensorEventListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             if (event.sensor.type == Sensor.TYPE_PRESSURE) {
-                try {
-                    val pressureInHpa = event.values[0]
-                    barometricValue.set(pressureInHpa)
-                    val standardPressure = 1013.25f
-                    val altitude = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
-                    lastBarometerAltitude.set(altitude)
-                } catch (e: Exception) {
-                    // Error processing pressure sensor data
-                }
+                val pressureInHpa = event.values[0]
+                barometricValue.set(pressureInHpa)
+                val altitude = AndroidSensorManager.getAltitude(AndroidSensorManager.PRESSURE_STANDARD_ATMOSPHERE, pressureInHpa)
+                lastBarometerAltitude.set(altitude.toDouble())
             }
         }
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -68,87 +60,17 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
 
     fun init() {
         if (isInitialized.compareAndSet(false, true)) {
-            try {
-                locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-
-                registerListeners()
-            } catch (e: Exception) {
-                isInitialized.set(false)
-                throw e
-            }
-        }
-    }
-
-    private fun registerListeners() {
-        if (listenersRegistered.compareAndSet(false, true)) {
-            try {
-                // Register location listeners
-                try {
-                    if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        locationManager.requestLocationUpdates(
-                            LocationManager.GPS_PROVIDER,
-                            1000,
-                            0f,
-                            locationListener
-                        )
-                    }
-                } catch (e: SecurityException) {
-                    // GPS permission not granted
-                }
-
-                try {
-                    if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                        locationManager.requestLocationUpdates(
-                            LocationManager.NETWORK_PROVIDER,
-                            1000,
-                            0f,
-                            locationListener
-                        )
-                    }
-                } catch (e: SecurityException) {
-                    // Network location permission not granted
-                }
-
-                // Register pressure sensor
-                val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
-                if (pressureSensor != null) {
-                    val registered = sensorManager.registerListener(
-                        sensorEventListener,
-                        pressureSensor,
-                        SensorManager.SENSOR_DELAY_NORMAL
-                    )
-                    if (!registered) {
-                        // Pressure sensor registration failed
-                    }
-                }
-            } catch (e: Exception) {
-                listenersRegistered.set(false)
-                throw e
-            }
+            locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            androidSensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as AndroidSensorManager
+            listenerManager = SensorListenerManager(ctx, locationManager, androidSensorManager, locationListener, sensorEventListener)
+            listenerManager.registerListeners()
         }
     }
 
     fun cleanup() {
         if (isInitialized.compareAndSet(true, false)) {
-            unregisterListeners()
+            listenerManager.unregisterListeners()
             resetState()
-        }
-    }
-
-    private fun unregisterListeners() {
-        if (listenersRegistered.compareAndSet(true, false)) {
-            try {
-                locationManager.removeUpdates(locationListener)
-            } catch (e: Exception) {
-                // Location manager already cleaned up or permission revoked
-            }
-
-            try {
-                sensorManager.unregisterListener(sensorEventListener)
-            } catch (e: Exception) {
-                // Sensor manager already cleaned up
-            }
         }
     }
 
@@ -165,7 +87,6 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
     }
 
     fun getLocation(): Location? = lastLocation.get()
-    fun getBarometricValue(): Float? = barometricValue.get()
 
     fun getFilteredAltitude(altitudePrecision: Int): Int {
         if (!isInitialized.get()) return 0
@@ -205,13 +126,5 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
         lastAltitudeUpdateTime = currentTime
 
         return lastEmittedAltitude
-    }
-
-    fun isLocationAvailable(): Boolean {
-        return isInitialized.get() && lastLocation.get() != null
-    }
-
-    fun isSensorAvailable(): Boolean {
-        return isInitialized.get() && barometricValue.get() != null
     }
 }

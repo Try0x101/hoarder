@@ -12,11 +12,15 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
-import com.example.hoarder.data.Prefs
-import com.example.hoarder.utils.NetUtils
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.transport.network.NetUtils
+import com.example.hoarder.ui.dialogs.server.ServerStatsManager
+import com.example.hoarder.ui.formatters.ByteFormatter
 import com.example.hoarder.utils.ToastHelper
 
-class DialogManager(private val a: MainActivity, private val p: Prefs, private val statusManager: StatusManager) {
+class DialogManager(private val a: MainActivity, private val p: Prefs) {
+
+    private val serverStatsManager = ServerStatsManager(a)
 
     fun showServerSettingsDialog() {
         val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
@@ -26,10 +30,10 @@ class DialogManager(private val a: MainActivity, private val p: Prefs, private v
         val editText = view.findViewById<TextView>(R.id.serverIpPortEditText)
         editText.text = p.getServerAddress()
 
-        val (lastHour, lastDay, last7Days) = statusManager.calculateUploadStats()
-        view.findViewById<TextView>(R.id.statsLastHour).text = statusManager.formatBytes(lastHour)
-        view.findViewById<TextView>(R.id.statsLastDay).text = statusManager.formatBytes(lastDay)
-        view.findViewById<TextView>(R.id.statsLast7Days).text = statusManager.formatBytes(last7Days)
+        val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
+        view.findViewById<TextView>(R.id.statsLastHour).text = ByteFormatter.format(lastHour)
+        view.findViewById<TextView>(R.id.statsLastDay).text = ByteFormatter.format(lastDay)
+        view.findViewById<TextView>(R.id.statsLast7Days).text = ByteFormatter.format(last7Days)
 
         val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
         val viewCachedUploadLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
@@ -43,7 +47,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs, private v
             val bufferSize = servicePrefs.getStringSet("data_buffer", emptySet())?.sumOf { it.toByteArray().size }?.toLong() ?: 0L
             if (bufferSize > 0) {
                 sendBufferButton.visibility = android.view.View.VISIBLE
-                sendBufferButton.text = "Send Buffered Data (${statusManager.formatBytes(bufferSize)})"
+                sendBufferButton.text = "Send Buffered Data (${ByteFormatter.format(bufferSize)})"
                 sendBufferButton.isEnabled = true
             } else {
                 sendBufferButton.visibility = android.view.View.GONE

@@ -1,7 +1,6 @@
 package com.example.hoarder.service
 
 import android.Manifest
-import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,7 +22,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.DataUploader
-import com.example.hoarder.data.RealTimeDeltaManager
+import com.example.hoarder.data.processing.DeltaManager
 import com.example.hoarder.sensors.DataCollector
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,9 +31,10 @@ class BackgroundService: Service(){
     private lateinit var h: Handler
     private lateinit var dataCollector: DataCollector
     private lateinit var dataUploader: DataUploader
-    private lateinit var deltaManager: RealTimeDeltaManager
+    private lateinit var deltaManager: DeltaManager
     private lateinit var servicePrefs: SharedPreferences
     private lateinit var appPrefs: SharedPreferences
+    private lateinit var commandHandler: ServiceCommandHandler
 
     private val ca = AtomicBoolean(false)
     private val ua = AtomicBoolean(false)
@@ -45,90 +45,7 @@ class BackgroundService: Service(){
 
     private val cr = object: BroadcastReceiver(){
         override fun onReceive(c: Context?, i: Intent?){
-            when(i?.action){
-                "com.example.hoarder.START_COLLECTION" -> {
-                    if (ca.compareAndSet(false, true)) {
-                        dataCollector.start()
-                        updateAppPreferences("dataCollectionToggleState", true)
-                        broadcastStateUpdate()
-                    }
-                }
-                "com.example.hoarder.STOP_COLLECTION" -> {
-                    if (ca.compareAndSet(true, false)) {
-                        dataCollector.stop()
-                        updateAppPreferences("dataCollectionToggleState", false)
-                        LocalBroadcastManager.getInstance(applicationContext)
-                            .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString",""))
-                        broadcastStateUpdate()
-                    }
-                }
-                "com.example.hoarder.START_UPLOAD" -> {
-                    val ip = i?.getStringExtra("ipPort")?.split(":")
-                    if (ip != null && ip.size == 2 && ip[0].isNotBlank() && ip[1].toIntOrNull() != null
-                        && ip[1].toInt() > 0 && ip[1].toInt() <= 65535) {
-
-                        if (ua.compareAndSet(false, true)) {
-                            dataUploader.resetCounter()
-                            dataUploader.setServer(ip[0], ip[1].toInt())
-                            dataUploader.start()
-                            updateAppPreferences("dataUploadToggleState", true)
-                            updateAppPreferences("serverIpPortAddress", "${ip[0]}:${ip[1]}")
-                            broadcastStateUpdate()
-                        }
-                    } else {
-                        ua.set(false)
-                        dataUploader.notifyStatus("Error","Invalid Server IP:Port for starting upload.",0L, 0L)
-                        updateAppPreferences("dataUploadToggleState", false)
-                        broadcastStateUpdate()
-                    }
-                }
-                "com.example.hoarder.STOP_UPLOAD" -> {
-                    if (ua.compareAndSet(true, false)) {
-                        dataUploader.stop()
-                        dataUploader.resetCounter()
-                        updateAppPreferences("dataUploadToggleState", false)
-                        broadcastStateUpdate()
-                    }
-                }
-                "com.example.hoarder.FORCE_UPLOAD" -> {
-                    if (ua.get()) {
-                        val forcedData = i?.getStringExtra("forcedData")
-                        if (forcedData != null && forcedData.isNotBlank()) {
-                            dataUploader.queueForcedData(forcedData)
-                        }
-                    }
-                }
-                "com.example.hoarder.SEND_BUFFER" -> {
-                    if (ua.get()) {
-                        dataUploader.forceSendBuffer()
-                    }
-                }
-                "com.example.hoarder.GET_STATE" -> {
-                    broadcastStateUpdate()
-                }
-                "com.example.hoarder.GET_DB_STATS" -> {
-                    serviceScope.launch {
-                        try {
-                            val pendingCount = deltaManager.getPendingRecordsCount()
-                            LocalBroadcastManager.getInstance(applicationContext)
-                                .sendBroadcast(Intent("com.example.hoarder.DB_STATS_UPDATE").apply {
-                                    putExtra("pendingRecords", pendingCount)
-                                })
-                        } catch (e: Exception) {
-                            // Error getting stats
-                        }
-                    }
-                }
-                "com.example.hoarder.CLEANUP_OLD_RECORDS" -> {
-                    serviceScope.launch {
-                        try {
-                            deltaManager.cleanupOldRecords(7)
-                        } catch (e: Exception) {
-                            // Error during cleanup
-                        }
-                    }
-                }
-            }
+            commandHandler.handle(i)
         }
     }
 
@@ -139,7 +56,7 @@ class BackgroundService: Service(){
         appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
 
         dataUploader = DataUploader(this, h, servicePrefs)
-        deltaManager = RealTimeDeltaManager(this, dataUploader)
+        deltaManager = DeltaManager(this, dataUploader)
 
         dataCollector = DataCollector(this, h) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
@@ -150,6 +67,11 @@ class BackgroundService: Service(){
                     )
                 )
         }
+
+        commandHandler = ServiceCommandHandler(
+            this, serviceScope, dataCollector, dataUploader, deltaManager,
+            ca, ua, this::updateAppPreferences, this::broadcastStateUpdate
+        )
 
         dataCollector.setDeltaManager(deltaManager)
 
@@ -262,12 +184,12 @@ class BackgroundService: Service(){
     override fun onDestroy(){
         super.onDestroy()
         cleanup()
-        restartService()
+        ServiceUtils.restartService(applicationContext)
     }
 
     override fun onTaskRemoved(r: Intent?){
         super.onTaskRemoved(r)
-        scheduleRestart()
+        ServiceUtils.scheduleRestart(applicationContext)
     }
 
     private fun cleanup() {
@@ -292,26 +214,6 @@ class BackgroundService: Service(){
         }
 
         isInitialized.set(false)
-    }
-
-    private fun scheduleRestart(){
-        val i = Intent(applicationContext, BackgroundService::class.java)
-        val pi = PendingIntent.getService(applicationContext,1,i, PendingIntent.FLAG_IMMUTABLE)
-        (getSystemService(ALARM_SERVICE) as AlarmManager).set(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + 1000, pi)
-    }
-
-    private fun restartService(){
-        val i = Intent(applicationContext, BackgroundService::class.java)
-        try{
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                applicationContext.startForegroundService(i)
-            else
-                applicationContext.startService(i)
-        } catch(e:Exception){
-            scheduleRestart()
-        }
     }
 
     override fun onBind(i: Intent?): IBinder? = null

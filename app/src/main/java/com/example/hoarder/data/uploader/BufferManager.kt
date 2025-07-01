@@ -2,7 +2,7 @@ package com.example.hoarder.data.uploader
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.example.hoarder.data.DataUtils
+import com.example.hoarder.common.time.TimestampUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
@@ -25,17 +25,14 @@ class BufferManager(private val ctx: Context, private val sp: SharedPreferences)
             buffer.addAll(sortedBuffer)
         }
 
-        // Add timestamp to JSON data before buffering
         val jsonWithTimestamp = try {
             val type = object : TypeToken<MutableMap<String, Any>>() {}.type
             val dataMap: MutableMap<String, Any> = gson.fromJson(jsonString, type)
 
-            // Add timestamp using fixed epoch - this is when data was collected
-            dataMap["ts"] = DataUtils.getCurrentTimestamp()
+            dataMap["ts"] = TimestampUtils.getCurrentTimestamp()
 
             gson.toJson(dataMap)
         } catch (e: Exception) {
-            // If JSON parsing fails, use original string
             jsonString
         }
 
@@ -131,8 +128,6 @@ class BufferManager(private val ctx: Context, private val sp: SharedPreferences)
         try {
             val file = File(ctx.cacheDir, "last_upload_details.json")
 
-            // LogViewer expects a JSON array of JSON strings (not JSON objects)
-            // So each JSON object needs to be a quoted string in the array
             val jsonArrayOfStrings = gson.toJson(uploadedData)
 
             file.writeText(jsonArrayOfStrings)

@@ -13,29 +13,23 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.example.hoarder.R
+import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
+import com.example.hoarder.ui.dialogs.log.LogPaginator
+import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.utils.ToastHelper
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonSyntaxException
 import com.google.gson.ToNumberPolicy
-import com.google.gson.reflect.TypeToken
-import java.io.File
-import java.io.FileNotFoundException
-import java.io.IOException
-import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
-import java.util.*
-import kotlin.math.ceil
 
 class LogViewer(private val ctx: Context) {
-    private val g by lazy {
+    private val gson by lazy {
         GsonBuilder()
             .setPrettyPrinting()
             .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
             .create()
     }
-    private val RECORDS_PER_PAGE = 20
-    private val MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB limit
-    private val MAX_LOG_ENTRIES = 1000 // Memory protection
+    private val logRepository = LogRepository(ctx, gson)
+    private val logEntryFormatter = LogEntryFormatter(gson)
+    private val logPaginator = LogPaginator()
     private var currentLogType: String = ""
 
     fun showLogDialog(logType: String) {
@@ -51,31 +45,16 @@ class LogViewer(private val ctx: Context) {
         val refreshButton = view.findViewById<Button>(R.id.refreshButton)
         builder.setView(view)
 
-        var logEntries = getLogEntries(logType)
-        var currentPage = 0
-        var totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
-
-        fun renderPage(page: Int) {
-            currentPage = page.coerceIn(0, totalPages - 1)
+        fun renderPage() {
             container.removeAllViews()
+            val pageEntries = logPaginator.getCurrentPageEntries()
 
-            val startIndex = currentPage * RECORDS_PER_PAGE
-            val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
-
-            if (logEntries.isNotEmpty() && startIndex < logEntries.size) {
-                val pageEntries = try {
-                    logEntries.subList(startIndex, endIndex)
-                } catch (e: Exception) {
-                    showErrorView(container, "Error loading page entries: ${e.message}")
-                    emptyList()
-                }
-
+            if (pageEntries.isNotEmpty()) {
                 pageEntries.forEachIndexed { index, entry ->
                     try {
-                        val (headerText, contentText, copyText) = formatLogEntry(logType, entry, startIndex + index + 1)
-
+                        val formatted = logEntryFormatter.formatLogEntry(logType, entry)
                         val header = TextView(ctx).apply {
-                            text = headerText
+                            text = formatted.header
                             textSize = 16f
                             setTypeface(null, Typeface.BOLD)
                             setTextColor(ContextCompat.getColor(ctx, R.color.amoled_white))
@@ -84,51 +63,46 @@ class LogViewer(private val ctx: Context) {
                         container.addView(header)
 
                         val content = TextView(ctx).apply {
-                            text = contentText
+                            text = formatted.content
                             textSize = 12f
                             typeface = Typeface.MONOSPACE
                             setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
                             setOnLongClickListener {
-                                copyToClipboard("Hoarder Log Record", copyText)
+                                copyToClipboard("Hoarder Log Record", formatted.copyText)
                                 true
                             }
                         }
                         container.addView(content)
                     } catch (e: Exception) {
-                        showErrorView(container, "Error displaying entry ${startIndex + index + 1}: ${e.message}")
+                        showErrorView(container, "Error displaying entry: ${e.message}")
                     }
                 }
             } else {
                 showNoDataView(container)
             }
-
-            updatePaginationControls(currentPage, totalPages, prevButton, nextButton, pageIndicator, copyPageButton, logEntries.isNotEmpty() && startIndex < logEntries.size)
+            updatePaginationControls(prevButton, nextButton, pageIndicator, copyPageButton, pageEntries.isNotEmpty())
         }
 
         fun refreshLogs() {
-            logEntries = getLogEntries(currentLogType)
-            totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
-            currentPage = 0
-            renderPage(0)
+            logPaginator.setData(logRepository.getLogEntries(currentLogType))
+            renderPage()
         }
 
         controlsContainer.visibility = android.view.View.VISIBLE
-        renderPage(0)
+        refreshLogs()
 
         prevButton.setOnClickListener {
-            if (currentPage > 0) {
-                renderPage(currentPage - 1)
-            }
+            logPaginator.prevPage()
+            renderPage()
         }
 
         nextButton.setOnClickListener {
-            if (currentPage < totalPages - 1) {
-                renderPage(currentPage + 1)
-            }
+            logPaginator.nextPage()
+            renderPage()
         }
 
         copyPageButton.setOnClickListener {
-            copyCurrentPage(logType, logEntries, currentPage)
+            copyCurrentPage()
         }
 
         refreshButton.setOnClickListener {
@@ -147,218 +121,11 @@ class LogViewer(private val ctx: Context) {
             .show()
     }
 
-    private fun getLogEntries(logType: String): List<String> {
-        return try {
-            when (logType) {
-                "cached" -> getCachedLogEntries()
-                "success" -> getSuccessLogEntries()
-                "error" -> getErrorLogEntries()
-                else -> {
-                    emptyList()
-                }
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun getCachedLogEntries(): List<String> {
-        return try {
-            val file = File(ctx.cacheDir, "last_upload_details.json")
-            if (!file.exists()) {
-                return emptyList()
-            }
-
-            if (file.length() > MAX_FILE_SIZE) {
-                return emptyList()
-            }
-
-            val jsonText = file.readText(StandardCharsets.UTF_8)
-            if (jsonText.isBlank()) {
-                return emptyList()
-            }
-
-            val type = object : TypeToken<List<String>>() {}.type
-            val entries = g.fromJson<List<String>>(jsonText, type) ?: emptyList()
-
-            if (entries.size > MAX_LOG_ENTRIES) {
-                entries.takeLast(MAX_LOG_ENTRIES)
-            } else {
-                entries
-            }.sortedByDescending { entry ->
-                extractTimestampFromEntry(entry)
-            }
-        } catch (e: FileNotFoundException) {
-            emptyList()
-        } catch (e: IOException) {
-            emptyList()
-        } catch (e: JsonSyntaxException) {
-            emptyList()
-        } catch (e: OutOfMemoryError) {
-            emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun getSuccessLogEntries(): List<String> {
-        return try {
-            val prefs = ctx.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-            val entries = prefs.getStringSet("success_logs", emptySet())?.toList() ?: emptyList()
-
-            if (entries.size > MAX_LOG_ENTRIES) {
-                entries.takeLast(MAX_LOG_ENTRIES)
-            } else {
-                entries
-            }.sortedByDescending { entry ->
-                extractTimestampFromLogEntry(entry)
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun getErrorLogEntries(): List<String> {
-        return try {
-            val prefs = ctx.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-            val entries = prefs.getStringSet("error_logs", emptySet())?.toList() ?: emptyList()
-
-            if (entries.size > MAX_LOG_ENTRIES) {
-                entries.takeLast(MAX_LOG_ENTRIES)
-            } else {
-                entries
-            }.sortedByDescending { entry ->
-                extractTimestampFromLogEntry(entry)
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun extractTimestampFromEntry(entry: String): Long {
-        return try {
-            val jsonObject = g.fromJson(entry, Map::class.java) as? Map<String, Any>
-            val timestamp = jsonObject?.get("ts")
-            when (timestamp) {
-                is String -> timestamp.toLongOrNull() ?: 0L
-                is Number -> timestamp.toLong()
-                else -> 0L
-            }
-        } catch (e: Exception) {
-            0L
-        }
-    }
-
-    private fun extractTimestampFromLogEntry(entry: String): Long {
-        return try {
-            val parts = entry.split("|", limit = 2)
-            val timestampStr = parts.getOrNull(0) ?: return 0L
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            dateFormat.parse(timestampStr)?.time ?: 0L
-        } catch (e: Exception) {
-            0L
-        }
-    }
-
-    private fun formatLogEntry(logType: String, entry: String, recordNum: Int): Triple<String, String, String> {
-        return try {
-            when (logType) {
-                "cached" -> formatCachedEntry(entry)
-                "success" -> formatSuccessEntry(entry)
-                "error" -> formatErrorEntry(entry)
-                else -> Triple("", entry, entry)
-            }
-        } catch (e: Exception) {
-            Triple("Error", "Error processing entry: ${e.message}", entry)
-        }
-    }
-
-    private fun formatCachedEntry(entry: String): Triple<String, String, String> {
-        return try {
-            val entrySize = entry.toByteArray(StandardCharsets.UTF_8).size.toLong()
-            val jsonObject = g.fromJson(entry, Map::class.java) as? Map<String, Any>
-            val timestamp = jsonObject?.get("ts")
-
-            val timestampStr = formatTimestamp(timestamp)
-            val header = "[${timestampStr}] [${formatBytes(entrySize)}]"
-
-            Triple(header, entry, entry)
-        } catch (e: Exception) {
-            Triple("Error", "Error formatting cached entry: ${e.message}", entry)
-        }
-    }
-
-    private fun formatSuccessEntry(entry: String): Triple<String, String, String> {
-        return try {
-            val parts = entry.split("|", limit = 3)
-            val timestamp = parts.getOrElse(0) { "Unknown" }
-            val size = parts.getOrElse(1) { "0" }.toLongOrNull() ?: 0
-            val json = parts.getOrElse(2) { "" }
-
-            val header = "[${timestamp}] [${formatBytes(size)}]"
-            val content = if (json.startsWith("Batch upload")) {
-                json
-            } else {
-                try {
-                    g.toJson(com.google.gson.JsonParser.parseString(json))
-                } catch (e: Exception) {
-                    json
-                }
-            }
-
-            Triple(header, content, json)
-        } catch (e: Exception) {
-            Triple("Error", "Error formatting success entry: ${e.message}", entry)
-        }
-    }
-
-    private fun formatErrorEntry(entry: String): Triple<String, String, String> {
-        return try {
-            val parts = entry.split("|", limit = 2)
-            val timestamp = parts.getOrElse(0) { "Unknown" }
-            val message = parts.getOrElse(1) { entry }
-
-            val header = "[${timestamp}]"
-            Triple(header, message, message)
-        } catch (e: Exception) {
-            Triple("Error", "Error formatting error entry: ${e.message}", entry)
-        }
-    }
-
-    private fun formatTimestamp(timestamp: Any?): String {
-        return try {
-            val tsLong = when (timestamp) {
-                is String -> timestamp.toLongOrNull()
-                is Number -> timestamp.toLong()
-                else -> null
-            }
-
-            if (tsLong != null) {
-                val fixedEpoch = 1719705600L
-                val date = Date((tsLong + fixedEpoch) * 1000)
-                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                dateFormat.format(date)
-            } else {
-                "Unknown"
-            }
-        } catch (e: Exception) {
-            "Unknown"
-        }
-    }
-
-    private fun copyCurrentPage(logType: String, logEntries: List<String>, currentPage: Int) {
+    private fun copyCurrentPage() {
         try {
-            val startIndex = currentPage * RECORDS_PER_PAGE
-            val endIndex = (startIndex + RECORDS_PER_PAGE).coerceAtMost(logEntries.size)
-            val pageEntries = if (logEntries.isNotEmpty() && startIndex < logEntries.size) {
-                logEntries.subList(startIndex, endIndex)
-            } else {
-                emptyList()
-            }
-
+            val pageEntries = logPaginator.getCurrentPageEntries()
             val allPageJson = pageEntries.joinToString(separator = ",\n\n") { entry ->
-                val (_, _, copyText) = formatLogEntry(logType, entry, 0)
-                copyText
+                logEntryFormatter.formatLogEntry(currentLogType, entry).copyText
             }
 
             copyToClipboard("Hoarder Page Log", allPageJson)
@@ -400,18 +167,10 @@ class LogViewer(private val ctx: Context) {
         container.addView(noDataView)
     }
 
-    private fun updatePaginationControls(currentPage: Int, totalPages: Int, prevButton: Button, nextButton: Button, pageIndicator: TextView, copyPageButton: Button, hasData: Boolean) {
-        pageIndicator.text = "Page ${currentPage + 1} of $totalPages"
-        prevButton.isEnabled = currentPage > 0
-        nextButton.isEnabled = currentPage < totalPages - 1
+    private fun updatePaginationControls(prevButton: Button, nextButton: Button, pageIndicator: TextView, copyPageButton: Button, hasData: Boolean) {
+        pageIndicator.text = "Page ${logPaginator.currentPage + 1} of ${logPaginator.totalPages}"
+        prevButton.isEnabled = logPaginator.hasPrevPage()
+        nextButton.isEnabled = logPaginator.hasNextPage()
         copyPageButton.isEnabled = hasData
     }
-
-    private fun formatBytes(b: Long): String {
-        if (b < 1024) return "$b B"
-        val e = (Math.log(b.toDouble()) / Math.log(1024.0)).toInt()
-        val p = "KMGTPE"[e - 1]
-        return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
-    }
-
 }

@@ -1,36 +1,9 @@
-package com.example.hoarder.data
+package com.example.hoarder.data.storage.db
 
 import android.content.Context
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteDatabase
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
-
-@Entity(tableName = "telemetry_records")
-data class TelemetryRecord(
-    @PrimaryKey val id: String,
-    val deviceModel: String,
-    val timestamp: Long,
-    val batteryPercentage: Int,
-    val batteryCapacity: Int?,
-    val latitude: Double,
-    val longitude: Double,
-    val altitude: Int,
-    val accuracy: Int,
-    val speed: Int,
-    val networkOperator: String,
-    val networkType: String,
-    val cellId: String,
-    val trackingAreaCode: String,
-    val mobileCountryCode: String,
-    val mobileNetworkCode: String,
-    val signalStrength: String,
-    val wifiBssid: String,
-    val downloadSpeed: String,
-    val uploadSpeed: String,
-    val lastModified: Long = System.currentTimeMillis(),
-    val syncStatus: String = "PENDING"
-)
+import com.example.hoarder.data.models.TelemetryRecord
 
 @Dao
 interface TelemetryDao {
@@ -93,45 +66,5 @@ abstract class TelemetryDatabase : RoomDatabase() {
                 instance
             }
         }
-    }
-}
-
-class ConcurrentDataManager {
-    private val dataMap = ConcurrentHashMap<String, Any>()
-    private val lastJsonData = AtomicReference<String?>(null)
-    private val lastTelemetryRecord = AtomicReference<TelemetryRecord?>(null)
-
-    fun setData(key: String, value: Any) {
-        dataMap[key] = value
-    }
-
-    fun getData(key: String): Any? {
-        return dataMap[key]
-    }
-
-    fun clearData() {
-        dataMap.clear()
-        lastJsonData.set(null)
-        lastTelemetryRecord.set(null)
-    }
-
-    fun setJsonData(json: String?) {
-        lastJsonData.set(json)
-    }
-
-    fun getJsonData(): String? {
-        return lastJsonData.get()
-    }
-
-    fun setLastTelemetryRecord(record: TelemetryRecord?) {
-        lastTelemetryRecord.set(record)
-    }
-
-    fun getLastTelemetryRecord(): TelemetryRecord? {
-        return lastTelemetryRecord.get()
-    }
-
-    fun containsKey(key: String): Boolean {
-        return dataMap.containsKey(key)
     }
 }

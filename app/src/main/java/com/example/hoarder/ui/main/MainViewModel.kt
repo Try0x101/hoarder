@@ -1,0 +1,64 @@
+package com.example.hoarder.ui.main
+
+import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.hoarder.data.storage.app.Prefs
+
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val _lastJson = MutableLiveData<String?>()
+    val lastJson: LiveData<String?> = _lastJson
+
+    private val _uploadStatus = MutableLiveData<String?>()
+    val uploadStatus: LiveData<String?> = _uploadStatus
+
+    private val _uploadMessage = MutableLiveData<String?>()
+    val uploadMessage: LiveData<String?> = _uploadMessage
+
+    private val _totalUploadedBytes = MutableLiveData(0L)
+    val totalUploadedBytes: LiveData<Long> = _totalUploadedBytes
+
+    private val _bufferedDataSize = MutableLiveData(0L)
+    val bufferedDataSize: LiveData<Long> = _bufferedDataSize
+
+    private val _isUploadEnabled = MutableLiveData<Boolean>()
+    val isUploadEnabled: LiveData<Boolean> = _isUploadEnabled
+
+    private val lbm = LocalBroadcastManager.getInstance(application)
+    private val receivers = mutableListOf<BroadcastReceiver>()
+
+    private val dataReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            _lastJson.value = intent?.getStringExtra("jsonString")
+        }
+    }
+
+    private val uploadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            _isUploadEnabled.value = Prefs(application).isDataUploadEnabled()
+            _uploadStatus.value = intent?.getStringExtra("status")
+            _uploadMessage.value = intent?.getStringExtra("message")
+            _totalUploadedBytes.value = intent?.getLongExtra("totalUploadedBytes", 0L)
+            _bufferedDataSize.value = intent?.getLongExtra("bufferedDataSize", 0L)
+        }
+    }
+
+    fun registerReceivers() {
+        lbm.registerReceiver(dataReceiver, IntentFilter("com.example.hoarder.DATA_UPDATE"))
+        receivers.add(dataReceiver)
+        lbm.registerReceiver(uploadReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+        receivers.add(uploadReceiver)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        receivers.forEach { lbm.unregisterReceiver(it) }
+    }
+}

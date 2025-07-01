@@ -1,10 +1,9 @@
 package com.example.hoarder.ui
 
-import android.view.inputmethod.EditorInfo
 import android.widget.*
-import androidx.core.widget.NestedScrollView
 import com.example.hoarder.R
-import com.example.hoarder.data.Prefs
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.ui.dialogs.PrecisionChooserDialog
 
 class LayoutManager(private val a: MainActivity, private val p: Prefs, private val onPrecisionChanged: () -> Unit) {
     private lateinit var dataCollectionHeader: RelativeLayout
@@ -23,6 +22,8 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var precisionSettingsHeader: RelativeLayout
     private lateinit var precisionSettingsArrow: ImageView
     private lateinit var precisionSettingsContent: LinearLayout
+
+    private val precisionChooser by lazy { PrecisionChooserDialog(a, p, onPrecisionChanged) }
 
     fun setupUI() {
         findViews()
@@ -92,24 +93,12 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     }
 
     private fun setupPrecisionListeners() {
-        a.findViewById<LinearLayout>(R.id.gpsPrecisionSetting).setOnClickListener {
-            showGpsPrecisionChooser()
-        }
-        a.findViewById<LinearLayout>(R.id.gpsAltitudePrecisionSetting).setOnClickListener {
-            showGpsAltitudePrecisionChooser()
-        }
-        a.findViewById<LinearLayout>(R.id.rssiPrecisionSetting).setOnClickListener {
-            showRssiPrecisionChooser()
-        }
-        a.findViewById<LinearLayout>(R.id.batteryPrecisionSetting).setOnClickListener {
-            showBatteryPrecisionChooser()
-        }
-        a.findViewById<LinearLayout>(R.id.networkPrecisionSetting).setOnClickListener {
-            showNetworkPrecisionChooser()
-        }
-        a.findViewById<LinearLayout>(R.id.speedPrecisionSetting).setOnClickListener {
-            showSpeedPrecisionChooser()
-        }
+        a.findViewById<LinearLayout>(R.id.gpsPrecisionSetting).setOnClickListener { precisionChooser.showGpsPrecisionChooser() }
+        a.findViewById<LinearLayout>(R.id.gpsAltitudePrecisionSetting).setOnClickListener { precisionChooser.showGpsAltitudePrecisionChooser() }
+        a.findViewById<LinearLayout>(R.id.rssiPrecisionSetting).setOnClickListener { precisionChooser.showRssiPrecisionChooser() }
+        a.findViewById<LinearLayout>(R.id.batteryPrecisionSetting).setOnClickListener { precisionChooser.showBatteryPrecisionChooser() }
+        a.findViewById<LinearLayout>(R.id.networkPrecisionSetting).setOnClickListener { precisionChooser.showNetworkPrecisionChooser() }
+        a.findViewById<LinearLayout>(R.id.speedPrecisionSetting).setOnClickListener { precisionChooser.showSpeedPrecisionChooser() }
     }
 
     private fun setupTextCopyListeners() {
@@ -140,47 +129,5 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         val clipboard = a.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         val clip = android.content.ClipData.newPlainText(label, textView.text)
         clipboard.setPrimaryClip(clip)
-    }
-
-    private fun showGpsPrecisionChooser() = showChooser("GPS Precision", arrayOf("Smart", "Maximum", "20 Meters", "100 Meters", "1 Kilometer", "10 Kilometers"), intArrayOf(-1, 0, 20, 100, 1000, 10000), p.getGPSPrecision()) {
-        p.setGPSPrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showGpsAltitudePrecisionChooser() = showChooser("GPS Altitude", arrayOf("Smart", "Maximum", "2 Meters", "10 Meters", "25 Meters", "50 Meters", "100 Meters"), intArrayOf(-1, 0, 2, 10, 25, 50, 100), p.getGPSAltitudePrecision()) {
-        p.setGPSAltitudePrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showRssiPrecisionChooser() = showChooser("RSSI", arrayOf("Smart", "Maximum", "3 dBm", "5 dBm", "10 dBm"), intArrayOf(-1, 0, 3, 5, 10), p.getRSSIPrecision()) {
-        p.setRSSIPrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showBatteryPrecisionChooser() = showChooser("Battery", arrayOf("Smart", "Maximum", "2 Percent", "5 Percent", "10 Percent"), intArrayOf(-1, 0, 2, 5, 10), p.getBatteryPrecision()) {
-        p.setBatteryPrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showNetworkPrecisionChooser() = showChooser("Network Speed", arrayOf("Smart", "Float", "1 Mbps", "2 Mbps", "5 Mbps"), intArrayOf(0, -2, 1, 2, 5), p.getNetworkPrecision()) {
-        p.setNetworkPrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showSpeedPrecisionChooser() = showChooser("Speed", arrayOf("Smart", "Maximum", "1 km/h", "3 km/h", "5 km/h", "10 km/h"), intArrayOf(-1, 0, 1, 3, 5, 10), p.getSpeedPrecision()) {
-        p.setSpeedPrecision(it)
-        onPrecisionChanged()
-    }
-
-    private fun showChooser(title: String, options: Array<String>, values: IntArray, current: Int, onSelected: (Int) -> Unit) {
-        val checkedItem = values.indexOf(current).takeIf { it != -1 } ?: 0
-        androidx.appcompat.app.AlertDialog.Builder(a, R.style.AlertDialogTheme)
-            .setTitle(title)
-            .setSingleChoiceItems(options, checkedItem) { dialog, which ->
-                onSelected(values[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 }

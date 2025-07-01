@@ -6,18 +6,18 @@ import android.content.Context
 import android.widget.TextView
 import android.widget.Toast
 import com.example.hoarder.R
-import com.example.hoarder.data.Prefs
+import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.utils.ToastHelper
 
 class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private val layoutManager = LayoutManager(a, p) { updateAllPrecisionLabels() }
     private val statusManager = StatusManager(a, p)
-    private val dialogManager = DialogManager(a, p, statusManager)
+    private val dialogManager = DialogManager(a, p)
 
     fun setupUI() {
         layoutManager.setupUI()
         statusManager.updateDataCollectionUI(p.isDataCollectionEnabled())
-        statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
+        statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, 0L)
         statusManager.updateAllPrecisionLabels()
         setupJsonCopyListener()
         setupServerRowListener()
@@ -45,8 +45,8 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         statusManager.updateDataCollectionUI(isActive)
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, lastUploadBytes: Long?, bufferedSize: Long) {
-        statusManager.updateUploadUI(isActive, status, message, totalBytes, lastUploadBytes, bufferedSize)
+    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, bufferedSize: Long) {
+        statusManager.updateUploadUI(isActive, status, message, totalBytes, bufferedSize)
     }
 
     fun updateRawJson(json: String?) {
@@ -55,25 +55,5 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
 
     fun updateAllPrecisionLabels() {
         statusManager.updateAllPrecisionLabels()
-    }
-
-    fun toggleVisibility(content: android.view.View, arrow: android.widget.ImageView) {
-        layoutManager.toggleVisibility(content, arrow)
-    }
-
-    fun showServerSettingsDialog() {
-        dialogManager.showServerSettingsDialog()
-    }
-
-    fun showDetailedLogDialog(logType: String) {
-        dialogManager.showDetailedLogDialog(logType)
-    }
-
-    fun calculateUploadStats(): Triple<Long, Long, Long> {
-        return statusManager.calculateUploadStats()
-    }
-
-    fun formatBytes(bytes: Long): String {
-        return statusManager.formatBytes(bytes)
     }
 }

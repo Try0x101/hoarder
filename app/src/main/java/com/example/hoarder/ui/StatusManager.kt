@@ -3,11 +3,13 @@ package com.example.hoarder.ui
 import android.view.View
 import android.widget.TextView
 import com.example.hoarder.R
-import com.example.hoarder.utils.NetUtils
-import com.example.hoarder.data.Prefs
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.transport.network.NetUtils
+import com.example.hoarder.ui.formatters.ByteFormatter
+import com.example.hoarder.ui.formatters.PrecisionFormatter
+import com.example.hoarder.ui.formatters.StatusFormatter
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import java.util.Locale
 
 class StatusManager(private val a: MainActivity, private val p: Prefs) {
     private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
@@ -18,14 +20,11 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         subtitle.text = if (isActive) "Active" else "Inactive"
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, lastUploadBytes: Long?, bufferedSize: Long) {
+    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, bufferedSize: Long) {
         val statusView = a.findViewById<TextView>(R.id.serverUploadStatus)
         val bytesView = a.findViewById<TextView>(R.id.serverUploadBytes)
 
-        if (bufferedSize > 0) {
-            lastBufferSize = bufferedSize
-        }
-
+        if (bufferedSize > 0) lastBufferSize = bufferedSize
         if (!isActive) {
             statusView.text = "Inactive"
             bytesView.visibility = View.GONE
@@ -33,61 +32,16 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
             return
         }
 
-        val serverAddress = p.getServerAddress()
-        if (!NetUtils.isValidIpPort(serverAddress)) {
+        if (!NetUtils.isValidIpPort(p.getServerAddress())) {
             statusView.text = "Invalid Address"
             bytesView.visibility = View.GONE
             lastBufferSize = 0L
             return
         }
 
-        val statusText = formatStatusText(status, message, lastBufferSize)
-        statusView.text = statusText
-        bytesView.text = "Uploaded: ${formatBytes(totalBytes ?: 0)}"
+        statusView.text = StatusFormatter.formatStatusText(status, message, lastBufferSize)
+        bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)}"
         bytesView.visibility = View.VISIBLE
-    }
-
-    private fun formatStatusText(status: String?, message: String?, bufferedSize: Long): String {
-        return when {
-            status == "Saving Locally" -> {
-                var localStatus = "Saving locally"
-                if (bufferedSize > 0) {
-                    localStatus += " | Local: ${formatBytes(bufferedSize)}"
-                }
-                if (bufferedSize > 5120) {
-                    localStatus += "\nBuffer large, confirm send in settings."
-                }
-                localStatus
-            }
-            status?.startsWith("OK") == true || status == "No Change" || status == "Connecting" || status == "OK (Batch)" -> {
-                var connectedStatus = "Connected"
-                if (bufferedSize > 0) {
-                    connectedStatus += " | Local: ${formatBytes(bufferedSize)}"
-                }
-                connectedStatus
-            }
-            status == "Network Error" && message == "Internet not accessible" -> {
-                var offlineStatus = message
-                if (bufferedSize > 0) {
-                    offlineStatus += " | Local: ${formatBytes(bufferedSize)}"
-                }
-                offlineStatus
-            }
-            status == "HTTP Error" || status == "Network Error" -> {
-                var errorStatus = "Error (Check logs)"
-                if (bufferedSize > 0) {
-                    errorStatus += " | Local: ${formatBytes(bufferedSize)}"
-                }
-                errorStatus
-            }
-            else -> {
-                var defaultStatus = "Connected"
-                if (bufferedSize > 0) {
-                    defaultStatus += " | Local: ${formatBytes(bufferedSize)}"
-                }
-                defaultStatus
-            }
-        }
     }
 
     fun updateRawJson(json: String?) {
@@ -104,12 +58,12 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
     }
 
     fun updateAllPrecisionLabels() {
-        updatePrecisionLabel(R.id.gpsPrecisionValue, getGpsPrecisionString(p.getGPSPrecision()))
-        updatePrecisionLabel(R.id.gpsAltitudePrecisionValue, getGpsAltitudePrecisionString(p.getGPSAltitudePrecision()))
-        updatePrecisionLabel(R.id.rssiPrecisionValue, getRssiPrecisionString(p.getRSSIPrecision()))
-        updatePrecisionLabel(R.id.batteryPrecisionValue, getBatteryPrecisionString(p.getBatteryPrecision()))
-        updatePrecisionLabel(R.id.networkPrecisionValue, getNetworkPrecisionString(p.getNetworkPrecision()))
-        updatePrecisionLabel(R.id.speedPrecisionValue, getSpeedPrecisionString(p.getSpeedPrecision()))
+        updatePrecisionLabel(R.id.gpsPrecisionValue, PrecisionFormatter.getGpsPrecisionString(p.getGPSPrecision()))
+        updatePrecisionLabel(R.id.gpsAltitudePrecisionValue, PrecisionFormatter.getGpsAltitudePrecisionString(p.getGPSAltitudePrecision()))
+        updatePrecisionLabel(R.id.rssiPrecisionValue, PrecisionFormatter.getRssiPrecisionString(p.getRSSIPrecision()))
+        updatePrecisionLabel(R.id.batteryPrecisionValue, PrecisionFormatter.getBatteryPrecisionString(p.getBatteryPrecision()))
+        updatePrecisionLabel(R.id.networkPrecisionValue, PrecisionFormatter.getNetworkPrecisionString(p.getNetworkPrecision()))
+        updatePrecisionLabel(R.id.speedPrecisionValue, PrecisionFormatter.getSpeedPrecisionString(p.getSpeedPrecision()))
         updatePrecisionInfoVisibility()
     }
 
@@ -131,48 +85,4 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         view.visibility = if (show) View.VISIBLE else View.GONE
         if (show) view.text = text
     }
-
-    fun calculateUploadStats(): Triple<Long, Long, Long> {
-        val records = a.getSharedPreferences("HoarderServicePrefs", android.content.Context.MODE_PRIVATE)
-            .getStringSet("uploadRecords", emptySet()) ?: emptySet()
-        val now = System.currentTimeMillis()
-        val oneHourAgo = now - 60 * 60 * 1000L
-        val oneDayAgo = now - 24 * 60 * 60 * 1000L
-
-        var lastHourBytes = 0L
-        var lastDayBytes = 0L
-        var last7DaysBytes = 0L
-
-        records.forEach { record ->
-            val parts = record.split(":")
-            if (parts.size == 2) {
-                val timestamp = parts[0].toLongOrNull()
-                val bytes = parts[1].toLongOrNull()
-                if (timestamp != null && bytes != null) {
-                    last7DaysBytes += bytes
-                    if (timestamp >= oneDayAgo) {
-                        lastDayBytes += bytes
-                    }
-                    if (timestamp >= oneHourAgo) {
-                        lastHourBytes += bytes
-                    }
-                }
-            }
-        }
-        return Triple(lastHourBytes, lastDayBytes, last7DaysBytes)
-    }
-
-    fun formatBytes(b: Long): String {
-        if (b < 1024) return "$b B"
-        val e = (Math.log(b.toDouble()) / Math.log(1024.0)).toInt()
-        val p = "KMGTPE"[e - 1]
-        return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
-    }
-
-    private fun getGpsPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 20 -> "20 Meters"; 100 -> "100 Meters"; 1000 -> "1 Kilometer"; 10000 -> "10 Kilometers"; else -> "Unknown" }
-    private fun getGpsAltitudePrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2 Meters"; 10 -> "10 Meters"; 25 -> "25 Meters"; 50 -> "50 Meters"; 100 -> "100 Meters"; else -> "Unknown" }
-    private fun getRssiPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 3 -> "3 dBm"; 5 -> "5 dBm"; 10 -> "10 dBm"; else -> "Unknown" }
-    private fun getBatteryPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2 Percent"; 5 -> "5 Percent"; 10 -> "10 Percent"; else -> "Unknown" }
-    private fun getNetworkPrecisionString(v: Int) = when(v) { 0 -> "Smart"; -2 -> "Float"; 1 -> "1 Mbps"; 2 -> "2 Mbps"; 5 -> "5 Mbps"; else -> "Unknown" }
-    private fun getSpeedPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 1 -> "1 km/h"; 3 -> "3 km/h"; 5 -> "5 km/h"; 10 -> "10 km/h"; else -> "Unknown" }
 }

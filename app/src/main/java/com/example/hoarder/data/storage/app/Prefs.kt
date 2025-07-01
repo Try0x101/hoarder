@@ -1,5 +1,4 @@
-// app/src/main/java/com/example/hoarder/data/Prefs.kt
-package com.example.hoarder.data
+package com.example.hoarder.data.storage.app
 
 import android.content.Context
 import android.content.SharedPreferences
