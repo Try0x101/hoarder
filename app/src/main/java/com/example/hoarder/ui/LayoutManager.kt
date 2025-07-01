@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/hoarder/ui/LayoutManager.kt
 package com.example.hoarder.ui
 
 import android.view.inputmethod.EditorInfo
@@ -7,7 +6,7 @@ import androidx.core.widget.NestedScrollView
 import com.example.hoarder.R
 import com.example.hoarder.data.Prefs
 
-class LayoutManager(private val a: MainActivity, private val p: Prefs) {
+class LayoutManager(private val a: MainActivity, private val p: Prefs, private val onPrecisionChanged: () -> Unit) {
     private lateinit var dataCollectionHeader: RelativeLayout
     private lateinit var dataCollectionSwitch: Switch
     private lateinit var dataCollectionSubtitle: TextView
@@ -143,12 +142,35 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs) {
         clipboard.setPrimaryClip(clip)
     }
 
-    private fun showGpsPrecisionChooser() = showChooser("GPS Precision", arrayOf("Smart", "Maximum", "20m", "100m", "1km", "10km"), intArrayOf(-1, 0, 20, 100, 1000, 10000), p.getGPSPrecision()) { p.setGPSPrecision(it) }
-    private fun showGpsAltitudePrecisionChooser() = showChooser("GPS Altitude", arrayOf("Smart", "Maximum", "2m", "10m", "25m", "50m", "100m"), intArrayOf(-1, 0, 2, 10, 25, 50, 100), p.getGPSAltitudePrecision()) { p.setGPSAltitudePrecision(it) }
-    private fun showRssiPrecisionChooser() = showChooser("RSSI", arrayOf("Smart", "Maximum", "3dBm", "5dBm", "10dBm"), intArrayOf(-1, 0, 3, 5, 10), p.getRSSIPrecision()) { p.setRSSIPrecision(it) }
-    private fun showBatteryPrecisionChooser() = showChooser("Battery", arrayOf("Smart", "Maximum", "2%", "5%", "10%"), intArrayOf(-1, 0, 2, 5, 10), p.getBatteryPrecision()) { p.setBatteryPrecision(it) }
-    private fun showNetworkPrecisionChooser() = showChooser("Network Speed", arrayOf("Smart", "Float", "1Mbps", "2Mbps", "5Mbps"), intArrayOf(0, -2, 1, 2, 5), p.getNetworkPrecision()) { p.setNetworkPrecision(it) }
-    private fun showSpeedPrecisionChooser() = showChooser("Speed", arrayOf("Smart", "Maximum", "1km/h", "3km/h", "5km/h", "10km/h"), intArrayOf(-1, 0, 1, 3, 5, 10), p.getSpeedPrecision()) { p.setSpeedPrecision(it) }
+    private fun showGpsPrecisionChooser() = showChooser("GPS Precision", arrayOf("Smart", "Maximum", "20m", "100m", "1km", "10km"), intArrayOf(-1, 0, 20, 100, 1000, 10000), p.getGPSPrecision()) {
+        p.setGPSPrecision(it)
+        onPrecisionChanged()
+    }
+
+    private fun showGpsAltitudePrecisionChooser() = showChooser("GPS Altitude", arrayOf("Smart", "Maximum", "2m", "10m", "25m", "50m", "100m"), intArrayOf(-1, 0, 2, 10, 25, 50, 100), p.getGPSAltitudePrecision()) {
+        p.setGPSAltitudePrecision(it)
+        onPrecisionChanged()
+    }
+
+    private fun showRssiPrecisionChooser() = showChooser("RSSI", arrayOf("Smart", "Maximum", "3dBm", "5dBm", "10dBm"), intArrayOf(-1, 0, 3, 5, 10), p.getRSSIPrecision()) {
+        p.setRSSIPrecision(it)
+        onPrecisionChanged()
+    }
+
+    private fun showBatteryPrecisionChooser() = showChooser("Battery", arrayOf("Smart", "Maximum", "2%", "5%", "10%"), intArrayOf(-1, 0, 2, 5, 10), p.getBatteryPrecision()) {
+        p.setBatteryPrecision(it)
+        onPrecisionChanged()
+    }
+
+    private fun showNetworkPrecisionChooser() = showChooser("Network Speed", arrayOf("Smart", "Float", "1Mbps", "2Mbps", "5Mbps"), intArrayOf(0, -2, 1, 2, 5), p.getNetworkPrecision()) {
+        p.setNetworkPrecision(it)
+        onPrecisionChanged()
+    }
+
+    private fun showSpeedPrecisionChooser() = showChooser("Speed", arrayOf("Smart", "Maximum", "1km/h", "3km/h", "5km/h", "10km/h"), intArrayOf(-1, 0, 1, 3, 5, 10), p.getSpeedPrecision()) {
+        p.setSpeedPrecision(it)
+        onPrecisionChanged()
+    }
 
     private fun showChooser(title: String, options: Array<String>, values: IntArray, current: Int, onSelected: (Int) -> Unit) {
         val checkedItem = values.indexOf(current).takeIf { it != -1 } ?: 0

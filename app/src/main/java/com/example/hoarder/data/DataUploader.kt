@@ -11,19 +11,25 @@ import com.example.hoarder.utils.NetUtils
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
 import com.google.gson.reflect.TypeToken
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class DataUploader(
     private val ctx: Context,
     private val h: Handler,
     private val sp: SharedPreferences
 ) {
-    private var ua = false
+    private val ua = AtomicBoolean(false)
     private var ip = ""
     private var port = 5000
-    private var ld: String? = null
-    private var lu: String? = null
+    private val ld = AtomicReference<String?>(null)
+    private val lu = AtomicReference<String?>(null)
     private val g = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
-    private var tb = sp.getLong("totalUploadedBytes", 0L)
+    private val tb = AtomicLong(sp.getLong("totalUploadedBytes", 0L))
     private var ls: String? = null
     private var lm2: Pair<String, String>? = null
     private var lt = 0L
@@ -31,127 +37,157 @@ class DataUploader(
 
     private val bufferManager = BufferManager(ctx, sp)
     private val networkUploader = NetworkUploader(ctx)
+    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var currentUploadTask: Future<*>? = null
 
     private val ur = object : Runnable {
         override fun run() {
-            if (ua && ip.isNotBlank() && port > 0) {
-                Thread {
-                    ld?.let { dataToProcess ->
+            if (ua.get() && ip.isNotBlank() && port > 0) {
+                val dataToProcess = ld.getAndSet(null)
+                if (dataToProcess != null) {
+                    currentUploadTask?.cancel(false)
+                    currentUploadTask = executor.submit {
                         val (d, delta) = generateJson(dataToProcess)
                         if (d != null) {
-                            lu = dataToProcess
+                            lu.set(dataToProcess)
                             processUpload(d, delta)
                         } else {
-                            notifyStatus("No Change", "Data unchanged, skipping upload.", tb, bufferManager.getBufferedDataSize())
+                            h.post {
+                                notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), bufferManager.getBufferedDataSize())
+                            }
                         }
-                        ld = null
                     }
-                }.start()
-                if (ua) h.postDelayed(this, 1000L)
-            } else if (ua && (ip.isBlank() || port <= 0)) {
-                notifyStatus("Error", "Server IP or Port became invalid.", tb, bufferManager.getBufferedDataSize())
-                ua = false
+                }
+                if (ua.get()) h.postDelayed(this, 1000L)
+            } else if (ua.get() && (ip.isBlank() || port <= 0)) {
+                h.post {
+                    notifyStatus("Error", "Server IP or Port became invalid.", tb.get(), bufferManager.getBufferedDataSize())
+                }
+                ua.set(false)
             }
         }
     }
 
     fun setServer(ip: String, port: Int) {
-        this.ip = ip
-        this.port = port
+        synchronized(this) {
+            this.ip = ip
+            this.port = port
+        }
     }
 
-    fun hasValidServer() = ip.isNotBlank() && port > 0
+    fun hasValidServer(): Boolean {
+        synchronized(this) {
+            return ip.isNotBlank() && port > 0
+        }
+    }
 
     fun queueData(data: String) {
-        ld = data
+        ld.set(data)
     }
 
     fun start() {
         h.removeCallbacks(ur)
-        lu = null
-        ua = true
-        notifyStatus("Connecting", "Attempting to connect...", tb, bufferManager.getBufferedDataSize())
+        lu.set(null)
+        ua.set(true)
+        h.post {
+            notifyStatus("Connecting", "Attempting to connect...", tb.get(), bufferManager.getBufferedDataSize())
+        }
         h.post(ur)
     }
 
     fun stop() {
-        ua = false
+        ua.set(false)
         h.removeCallbacks(ur)
+        currentUploadTask?.cancel(true)
     }
 
     fun resetCounter() {
-        tb = 0L
-        lu = null
+        tb.set(0L)
+        lu.set(null)
         sp.edit().putLong("totalUploadedBytes", 0L).apply()
-        notifyStatus("Paused", "Upload paused.", tb, bufferManager.getBufferedDataSize())
+        h.post {
+            notifyStatus("Paused", "Upload paused.", tb.get(), bufferManager.getBufferedDataSize())
+        }
     }
 
     fun getUploadedBytes(): Long {
-        return tb
+        return tb.get()
     }
 
     fun forceSendBuffer() {
-        if (ua && ip.isNotBlank() && port > 0) {
-            Thread {
+        if (ua.get() && ip.isNotBlank() && port > 0) {
+            executor.submit {
                 val bufferedData = bufferManager.getBufferedData()
                 if (bufferedData.isNotEmpty()) {
                     processBatchUpload(bufferedData)
                 }
-            }.start()
+            }
         }
+    }
+
+    fun cleanup() {
+        stop()
+        executor.shutdown()
     }
 
     private fun processUpload(jsonString: String, isDelta: Boolean) {
         if (!NetUtils.isNetworkAvailable(ctx)) {
             bufferManager.saveToBuffer(jsonString)
             bufferManager.addErrorLog("Internet not accessible")
-            notifyStatus("Saving Locally", "Internet not accessible. Delta saved locally.", tb, bufferManager.getBufferedDataSize())
+            h.post {
+                notifyStatus("Saving Locally", "Internet not accessible. Delta saved locally.", tb.get(), bufferManager.getBufferedDataSize())
+            }
             return
         }
 
         val result = networkUploader.uploadSingle(jsonString, isDelta, ip, port)
 
-        if (result.success) {
-            tb += result.uploadedBytes
-            sp.edit().putLong("totalUploadedBytes", tb).apply()
-            bufferManager.addUploadRecord(result.uploadedBytes)
-            bufferManager.addSuccessLog(jsonString, result.uploadedBytes)
-            notifyStatus(
-                if (isDelta) "OK (Delta)" else "OK (Full)",
-                "Uploaded successfully.",
-                tb,
-                bufferManager.getBufferedDataSize(),
-                result.uploadedBytes
-            )
-        } else {
-            bufferManager.saveToBuffer(jsonString)
-            result.errorMessage?.let { bufferManager.addErrorLog(it) }
-            notifyStatus(result.statusMessage, result.errorMessage ?: "Upload failed", tb, bufferManager.getBufferedDataSize())
+        h.post {
+            if (result.success) {
+                tb.addAndGet(result.uploadedBytes)
+                sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
+                bufferManager.addUploadRecord(result.uploadedBytes)
+                bufferManager.addSuccessLog(jsonString, result.uploadedBytes)
+                notifyStatus(
+                    if (isDelta) "OK (Delta)" else "OK (Full)",
+                    "Uploaded successfully.",
+                    tb.get(),
+                    bufferManager.getBufferedDataSize(),
+                    result.uploadedBytes
+                )
+            } else {
+                bufferManager.saveToBuffer(jsonString)
+                result.errorMessage?.let { bufferManager.addErrorLog(it) }
+                notifyStatus(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), bufferManager.getBufferedDataSize())
+            }
         }
     }
 
     private fun processBatchUpload(batch: List<String>) {
         val result = networkUploader.uploadBatch(batch, ip, port)
 
-        if (result.success) {
-            tb += result.uploadedBytes
-            sp.edit().putLong("totalUploadedBytes", tb).apply()
-            bufferManager.addUploadRecord(result.uploadedBytes)
-            bufferManager.addSuccessLog("Batch upload of ${batch.size} records", result.uploadedBytes)
-            bufferManager.saveLastUploadDetails(batch)
-            bufferManager.clearBuffer(batch)
-            notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb, bufferManager.getBufferedDataSize(), result.uploadedBytes)
-        } else {
-            result.errorMessage?.let { bufferManager.addErrorLog(it) }
-            notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed", tb, bufferManager.getBufferedDataSize())
+        h.post {
+            if (result.success) {
+                tb.addAndGet(result.uploadedBytes)
+                sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
+                bufferManager.addUploadRecord(result.uploadedBytes)
+                bufferManager.addSuccessLog("Batch upload of ${batch.size} records", result.uploadedBytes)
+                bufferManager.saveLastUploadDetails(batch)
+                bufferManager.clearBuffer(batch)
+                notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb.get(), bufferManager.getBufferedDataSize(), result.uploadedBytes)
+            } else {
+                result.errorMessage?.let { bufferManager.addErrorLog(it) }
+                notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed", tb.get(), bufferManager.getBufferedDataSize())
+            }
         }
     }
 
     private fun generateJson(currentFrame: String): Pair<String?, Boolean> {
-        if (lu == null) return Pair(currentFrame, false)
-        try {
+        val lastUpload = lu.get() ?: return Pair(currentFrame, false)
+
+        return try {
             val type = object : TypeToken<Map<String, Any?>>() {}.type
-            val previous = g.fromJson(lu, type) as Map<String, Any?>
+            val previous = g.fromJson(lastUpload, type) as Map<String, Any?>
             val current = g.fromJson(currentFrame, type) as Map<String, Any?>
             val delta = mutableMapOf<String, Any?>()
 
@@ -166,7 +202,7 @@ class DataUploader(
 
             return Pair(g.toJson(delta), true)
         } catch (e: Exception) {
-            return Pair(currentFrame, false)
+            Pair(currentFrame, false)
         }
     }
 

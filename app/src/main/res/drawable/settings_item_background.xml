@@ -1,7 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="@color/amoled_medium_gray">
-    <item android:id="@android:id/mask">
-        <color android:color="@android:color/white" />
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/amoled_dark_gray"/>
+            <corners android:radius="8dp"/>
+        </shape>
     </item>
-</ripple>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/amoled_dark_gray"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+</selector>

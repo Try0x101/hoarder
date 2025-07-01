@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/hoarder/sensors/SensorManager.kt
 package com.example.hoarder.sensors
 
 import android.content.Context
@@ -11,20 +10,24 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 class SensorManager(private val ctx: Context, private val handler: Handler) {
     private lateinit var locationManager: LocationManager
     private lateinit var sensorManager: SensorManager
-    private var barometricValue: Float? = null
-    private var lastLocation: Location? = null
+    private val barometricValue = AtomicReference<Float?>(null)
+    private val lastLocation = AtomicReference<Location?>(null)
+    private val isInitialized = AtomicBoolean(false)
+    private val listenersRegistered = AtomicBoolean(false)
 
     private val altitudeFilter = AltitudeKalmanFilter()
-    var lastGpsAltitude: Double = Double.NaN
-    var lastBarometerAltitude: Double = Double.NaN
-    var lastGpsAccuracy: Float = 10f
+    private val lastGpsAltitude = AtomicReference<Double>(Double.NaN)
+    private val lastBarometerAltitude = AtomicReference<Double>(Double.NaN)
+    private val lastGpsAccuracy = AtomicReference<Float>(10f)
 
-    private var lastReportedAltitude: Double = Double.NaN
+    private val lastReportedAltitude = AtomicReference<Double>(Double.NaN)
     private val MAX_ALTITUDE_CHANGE_PER_TICK = 15.0
 
     private var lastAltitudeUpdateTime: Long = 0L
@@ -33,9 +36,13 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            lastLocation = location
-            lastGpsAltitude = location.altitude
-            lastGpsAccuracy = location.accuracy
+            try {
+                lastLocation.set(location)
+                lastGpsAltitude.set(location.altitude)
+                lastGpsAccuracy.set(location.accuracy)
+            } catch (e: Exception) {
+                // Error processing location update
+            }
         }
         override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
         override fun onProviderEnabled(p: String) {}
@@ -45,72 +52,166 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
     private val sensorEventListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
             if (event.sensor.type == Sensor.TYPE_PRESSURE) {
-                barometricValue = event.values[0]
-                val pressureInHpa = event.values[0]
-                val standardPressure = 1013.25f
-                lastBarometerAltitude = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
+                try {
+                    val pressureInHpa = event.values[0]
+                    barometricValue.set(pressureInHpa)
+                    val standardPressure = 1013.25f
+                    val altitude = 44330.0 * (1.0 - Math.pow((pressureInHpa / standardPressure).toDouble(), 0.1903))
+                    lastBarometerAltitude.set(altitude)
+                } catch (e: Exception) {
+                    // Error processing pressure sensor data
+                }
             }
         }
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
 
     fun init() {
-        locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        if (isInitialized.compareAndSet(false, true)) {
+            try {
+                locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
-        try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, locationListener)
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0f, locationListener)
-        } catch (e: SecurityException) {}
+                registerListeners()
+            } catch (e: Exception) {
+                isInitialized.set(false)
+                throw e
+            }
+        }
+    }
 
-        val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
-        if (pressureSensor != null) {
-            sensorManager.registerListener(sensorEventListener, pressureSensor, SensorManager.SENSOR_DELAY_NORMAL)
+    private fun registerListeners() {
+        if (listenersRegistered.compareAndSet(false, true)) {
+            try {
+                // Register location listeners
+                try {
+                    if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                        locationManager.requestLocationUpdates(
+                            LocationManager.GPS_PROVIDER,
+                            1000,
+                            0f,
+                            locationListener
+                        )
+                    }
+                } catch (e: SecurityException) {
+                    // GPS permission not granted
+                }
+
+                try {
+                    if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        locationManager.requestLocationUpdates(
+                            LocationManager.NETWORK_PROVIDER,
+                            1000,
+                            0f,
+                            locationListener
+                        )
+                    }
+                } catch (e: SecurityException) {
+                    // Network location permission not granted
+                }
+
+                // Register pressure sensor
+                val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+                if (pressureSensor != null) {
+                    val registered = sensorManager.registerListener(
+                        sensorEventListener,
+                        pressureSensor,
+                        SensorManager.SENSOR_DELAY_NORMAL
+                    )
+                    if (!registered) {
+                        // Pressure sensor registration failed
+                    }
+                }
+            } catch (e: Exception) {
+                listenersRegistered.set(false)
+                throw e
+            }
         }
     }
 
     fun cleanup() {
-        try {
-            locationManager.removeUpdates(locationListener)
-            sensorManager.unregisterListener(sensorEventListener)
-            altitudeFilter.reset()
-            lastReportedAltitude = Double.NaN
-            lastAltitudeUpdateTime = 0L
-            lastEmittedAltitude = 0
-        } catch (e: Exception) {}
+        if (isInitialized.compareAndSet(true, false)) {
+            unregisterListeners()
+            resetState()
+        }
     }
 
-    fun getLocation(): Location? = lastLocation
-    fun getBarometricValue(): Float? = barometricValue
+    private fun unregisterListeners() {
+        if (listenersRegistered.compareAndSet(true, false)) {
+            try {
+                locationManager.removeUpdates(locationListener)
+            } catch (e: Exception) {
+                // Location manager already cleaned up or permission revoked
+            }
+
+            try {
+                sensorManager.unregisterListener(sensorEventListener)
+            } catch (e: Exception) {
+                // Sensor manager already cleaned up
+            }
+        }
+    }
+
+    private fun resetState() {
+        altitudeFilter.reset()
+        lastLocation.set(null)
+        barometricValue.set(null)
+        lastGpsAltitude.set(Double.NaN)
+        lastBarometerAltitude.set(Double.NaN)
+        lastGpsAccuracy.set(10f)
+        lastReportedAltitude.set(Double.NaN)
+        lastAltitudeUpdateTime = 0L
+        lastEmittedAltitude = 0
+    }
+
+    fun getLocation(): Location? = lastLocation.get()
+    fun getBarometricValue(): Float? = barometricValue.get()
 
     fun getFilteredAltitude(altitudePrecision: Int): Int {
+        if (!isInitialized.get()) return 0
+
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastAltitudeUpdateTime < ALTITUDE_UPDATE_INTERVAL_MS && lastAltitudeUpdateTime != 0L) {
             return lastEmittedAltitude
         }
 
-        val currentAltitude = altitudeFilter.update(lastGpsAltitude, lastBarometerAltitude, lastGpsAccuracy)
+        val gpsAlt = lastGpsAltitude.get()
+        val baroAlt = lastBarometerAltitude.get()
+        val gpsAcc = lastGpsAccuracy.get()
 
-        if (lastReportedAltitude.isNaN()) {
-            lastReportedAltitude = currentAltitude
+        val currentAltitude = altitudeFilter.update(gpsAlt, baroAlt, gpsAcc)
+
+        val reportedAlt = lastReportedAltitude.get()
+        val newReportedAlt = if (reportedAlt.isNaN()) {
+            currentAltitude
         } else {
-            val change = currentAltitude - lastReportedAltitude
+            val change = currentAltitude - reportedAlt
             if (Math.abs(change) > MAX_ALTITUDE_CHANGE_PER_TICK) {
-                lastReportedAltitude += Math.signum(change) * MAX_ALTITUDE_CHANGE_PER_TICK
+                reportedAlt + Math.signum(change) * MAX_ALTITUDE_CHANGE_PER_TICK
             } else {
-                lastReportedAltitude = currentAltitude
+                currentAltitude
             }
         }
 
+        lastReportedAltitude.set(newReportedAlt)
+
         val processedAltitude = when (altitudePrecision) {
-            0 -> lastReportedAltitude.toInt()
-            -1 -> altitudeFilter.applySmartRounding(lastReportedAltitude, -1)
-            else -> (Math.floor(lastReportedAltitude / altitudePrecision) * altitudePrecision).toInt()
+            0 -> newReportedAlt.toInt()
+            -1 -> altitudeFilter.applySmartRounding(newReportedAlt, -1)
+            else -> (Math.floor(newReportedAlt / altitudePrecision) * altitudePrecision).toInt()
         }
 
         lastEmittedAltitude = max(0, processedAltitude)
         lastAltitudeUpdateTime = currentTime
 
         return lastEmittedAltitude
+    }
+
+    fun isLocationAvailable(): Boolean {
+        return isInitialized.get() && lastLocation.get() != null
+    }
+
+    fun isSensorAvailable(): Boolean {
+        return isInitialized.get() && barometricValue.get() != null
     }
 }

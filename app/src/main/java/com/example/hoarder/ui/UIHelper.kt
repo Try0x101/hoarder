@@ -10,7 +10,7 @@ import com.example.hoarder.data.Prefs
 import com.example.hoarder.utils.ToastHelper
 
 class UIHelper(private val a: MainActivity, private val p: Prefs) {
-    private val layoutManager = LayoutManager(a, p)
+    private val layoutManager = LayoutManager(a, p) { updateAllPrecisionLabels() }
     private val statusManager = StatusManager(a, p)
     private val dialogManager = DialogManager(a, p, statusManager)
 

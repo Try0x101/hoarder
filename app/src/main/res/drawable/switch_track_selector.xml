@@ -1,15 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_checked="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/amoled_true_blue" />
-            <corners android:radius="100dp" />
+            <corners android:radius="14dp"/>
+            <solid android:color="@color/amoled_true_blue"/>
         </shape>
     </item>
-    <item android:state_checked="false">
+    <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/amoled_medium_gray" />
-            <corners android:radius="100dp" />
+            <corners android:radius="14dp"/>
+            <solid android:color="@color/amoled_medium_gray"/>
         </shape>
     </item>
 </selector>

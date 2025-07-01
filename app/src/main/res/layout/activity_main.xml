@@ -30,7 +30,7 @@
                     <ImageView
                         android:id="@+id/dataCollectionIcon"
                         style="@style/SettingsIcon"
-                        android:src="@drawable/ic_server_upload" />
+                        android:src="@android:drawable/ic_menu_mylocation" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -57,7 +57,7 @@
                         android:layout_toStartOf="@id/dataCollectionSwitch"
                         android:layout_marginEnd="8dp"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/ic_arrow_down" />
+                        android:src="@android:drawable/arrow_down_float" />
 
                     <Switch
                         android:id="@+id/dataCollectionSwitch"
@@ -99,7 +99,7 @@
                     <ImageView
                         android:id="@+id/dataDescriptionIcon"
                         style="@style/SettingsIcon"
-                        android:src="@drawable/ic_precision_settings" />
+                        android:src="@android:drawable/ic_menu_info_details" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -124,7 +124,7 @@
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/ic_arrow_down" />
+                        android:src="@android:drawable/arrow_down_float" />
                 </RelativeLayout>
 
                 <LinearLayout
@@ -216,7 +216,7 @@
                     <ImageView
                         android:id="@+id/precisionSettingsIcon"
                         style="@style/SettingsIcon"
-                        android:src="@drawable/ic_precision_settings" />
+                        android:src="@android:drawable/ic_menu_preferences" />
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -241,7 +241,7 @@
                         android:layout_height="wrap_content"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/ic_arrow_down" />
+                        android:src="@android:drawable/arrow_down_float" />
                 </RelativeLayout>
 
                 <LinearLayout
@@ -310,7 +310,7 @@
                 <ImageView
                     android:id="@+id/serverUploadIcon"
                     style="@style/SettingsIcon"
-                    android:src="@drawable/ic_data_collection" />
+                    android:src="@android:drawable/stat_sys_upload" />
 
                 <LinearLayout
                     android:layout_width="0dp"

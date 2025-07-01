@@ -10,18 +10,52 @@ import android.os.Build
 import android.os.Handler
 import android.provider.Settings
 import com.example.hoarder.data.DataUtils
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
-class DataCollector(private val ctx: Context, private val h: Handler, private val callback: (String) -> Unit) {
+class DataCollector(
+    private val ctx: Context,
+    private val h: Handler,
+    private val callback: (String) -> Unit
+) {
     private lateinit var bm: BatteryManager
-    private var bd: Map<String, Any>? = null
-    private var ca = false
+    private val bd = AtomicReference<Map<String, Any>?>(null)
+    private val ca = AtomicBoolean(false)
+    private val isInitialized = AtomicBoolean(false)
+    private var receiverRegistered = AtomicBoolean(false)
+
+    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
+    private val deviceId: String by lazy {
+        Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID).take(4)
+    }
+    private val deviceModel: String = Build.MODEL
+    private val sharedPrefs: SharedPreferences by lazy {
+        ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+    }
+
+    private val stringBuilder = StringBuilder(512)
+    private val reusableDataMap = mutableMapOf<String, Any>()
+    private val reusableStringMap = mutableMapOf<String, String>()
+
+    private val precisionCache = mutableMapOf<String, Int>()
+    private var lastPrecisionUpdate = 0L
+    private val PRECISION_CACHE_TTL = 10000L
+
     private val dr = object : Runnable {
         override fun run() {
-            if (ca) {
-                collectData(); h.postDelayed(this, 1000L)
+            if (ca.get()) {
+                try {
+                    collectData()
+                } catch (e: Exception) {
+                    // Log error but continue collection
+                }
+                if (ca.get()) {
+                    h.postDelayed(this, 1000L)
+                }
             }
         }
     }
@@ -32,70 +66,133 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
     private val br = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             if (i?.action == Intent.ACTION_BATTERY_CHANGED) {
-                val l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                val s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                val p = l * 100 / s.toFloat()
-                var c2: Int? = null
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    val cc = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                    val cp = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                    if (cc > 0 && cp > 0) {
-                        c2 = (cc / 1000 * 100) / cp; c2 = (c2 / 100) * 100
+                try {
+                    val l = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                    val s = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    if (l >= 0 && s > 0) {
+                        val p = l * 100 / s.toFloat()
+                        var c2: Int? = null
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            try {
+                                val cc = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+                                val cp = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                                if (cc > 0 && cp > 0) {
+                                    c2 = (cc / 1000 * 100) / cp
+                                    c2 = (c2 / 100) * 100
+                                }
+                            } catch (e: Exception) {
+                                // Battery properties not available
+                            }
+                        }
+
+                        val batteryData = if (c2 != null) {
+                            mapOf("perc" to p.toInt(), "cap" to c2)
+                        } else {
+                            mapOf("perc" to p.toInt())
+                        }
+                        bd.set(batteryData)
                     }
-                }
-                bd = buildMap {
-                    put("perc", p.toInt());
-                    if (c2 != null) put("cap", c2)
+                } catch (e: Exception) {
+                    // Error processing battery data
                 }
             }
         }
     }
 
     fun init() {
-        bm = ctx.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        sensorMgr.init()
-        networkCollector.init()
-        ctx.registerReceiver(br, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        if (isInitialized.compareAndSet(false, true)) {
+            try {
+                bm = ctx.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                sensorMgr.init()
+                networkCollector.init()
+
+                if (receiverRegistered.compareAndSet(false, true)) {
+                    ctx.registerReceiver(br, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                }
+
+                updatePrecisionCache()
+            } catch (e: Exception) {
+                isInitialized.set(false)
+                throw e
+            }
+        }
     }
 
     fun start() {
-        h.removeCallbacks(dr); ca = true; h.post(dr)
+        if (!isInitialized.get()) {
+            init()
+        }
+        h.removeCallbacks(dr)
+        ca.set(true)
+        h.post(dr)
     }
 
     fun stop() {
-        ca = false; h.removeCallbacks(dr)
+        ca.set(false)
+        h.removeCallbacks(dr)
     }
 
     fun cleanup() {
         stop()
         try {
-            ctx.unregisterReceiver(br)
+            if (receiverRegistered.compareAndSet(true, false)) {
+                ctx.unregisterReceiver(br)
+            }
             sensorMgr.cleanup()
-        } catch (e: Exception) {}
+            isInitialized.set(false)
+        } catch (e: Exception) {
+            // Already unregistered or other cleanup error
+        }
+    }
+
+    private fun updatePrecisionCache() {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastPrecisionUpdate > PRECISION_CACHE_TTL) {
+            precisionCache.clear()
+            precisionCache["battery"] = sharedPrefs.getInt("batteryPrecision", 5)
+            precisionCache["gps"] = sharedPrefs.getInt("gpsPrecision", -1)
+            precisionCache["speed"] = sharedPrefs.getInt("speedPrecision", -1)
+            precisionCache["altitude"] = sharedPrefs.getInt("gpsAltitudePrecision", -1)
+            lastPrecisionUpdate = currentTime
+        }
     }
 
     private fun collectData() {
-        if (!ca) return
-        val dm = mutableMapOf<String, Any>()
+        if (!ca.get() || !isInitialized.get()) return
 
-        dm["id"] = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID).take(4)
-        dm["n"] = Build.MODEL
+        reusableDataMap.clear()
 
-        val sp = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
-        collectBatteryData(dm, sp)
-        collectLocationData(dm, sp)
-        networkCollector.collectNetworkData(dm, sp)
-        networkCollector.collectWifiData(dm)
-        networkCollector.collectMobileNetworkData(dm)
+        try {
+            reusableDataMap["id"] = deviceId
+            reusableDataMap["n"] = deviceModel
 
-        val stringMap = convertToStringMap(dm)
-        callback(GsonBuilder().setPrettyPrinting().create().toJson(stringMap))
+            // NO timestamp for real-time uploads - server records received time
+
+            updatePrecisionCache()
+            collectBatteryData(reusableDataMap)
+            collectLocationData(reusableDataMap)
+            networkCollector.collectNetworkData(reusableDataMap, sharedPrefs)
+            networkCollector.collectWifiData(reusableDataMap)
+            networkCollector.collectMobileNetworkData(reusableDataMap)
+
+            convertToStringMapOptimized(reusableDataMap, reusableStringMap)
+            val json = gson.toJson(reusableStringMap)
+
+            h.post {
+                if (ca.get()) {
+                    callback(json)
+                }
+            }
+        } catch (e: Exception) {
+            // Error in data collection, skip this cycle
+        }
     }
 
-    private fun collectBatteryData(dm: MutableMap<String, Any>, sp: SharedPreferences) {
-        val bp = sp.getInt("batteryPrecision", 5)
-        bd?.let {
-            it["perc"]?.let { v ->
+    private fun collectBatteryData(dm: MutableMap<String, Any>) {
+        val bp = precisionCache["battery"] ?: 5
+        bd.get()?.let { batteryData ->
+            batteryData["perc"]?.let { v ->
                 when (v) {
                     is Int -> {
                         dm["perc"] = if (bp == -1) DataUtils.smartBattery(v) else DataUtils.rb(v, bp)
@@ -103,79 +200,94 @@ class DataCollector(private val ctx: Context, private val h: Handler, private va
                     else -> dm["perc"] = v
                 }
             }
-            it["cap"]?.let { v -> dm["cap"] = v }
+            batteryData["cap"]?.let { v -> dm["cap"] = v }
         }
     }
 
-    private fun collectLocationData(dm: MutableMap<String, Any>, sp: SharedPreferences) {
-        sensorMgr.getLocation()?.let { location ->
-            val gp = sp.getInt("gpsPrecision", -1)
-            val spdp = sp.getInt("speedPrecision", -1)
-            val altP = sp.getInt("gpsAltitudePrecision", -1)
+    private fun collectLocationData(dm: MutableMap<String, Any>) {
+        try {
+            sensorMgr.getLocation()?.let { location ->
+                val gp = precisionCache["gps"] ?: -1
+                val spdp = precisionCache["speed"] ?: -1
+                val altP = precisionCache["altitude"] ?: -1
 
-            dm["alt"] = sensorMgr.getFilteredAltitude(altP)
+                dm["alt"] = sensorMgr.getFilteredAltitude(altP)
 
-            val sk = (location.speed * 3.6).roundToInt()
-            val rs = DataUtils.rsp(sk, spdp)
-            val (prec, acc2) = if (gp == -1) DataUtils.smartGPSPrecision(location.speed) else Pair(gp, gp)
+                val sk = (location.speed * 3.6).roundToInt()
+                val rs = DataUtils.rsp(sk, spdp)
+                val (prec, _) = if (gp == -1) DataUtils.smartGPSPrecision(location.speed) else Pair(gp, gp)
 
-            val (rl, rlo, ac) = calculateLocationPrecision(location, prec)
-            dm["lat"] = rl; dm["lon"] = rlo; dm["acc"] = ac; dm["spd"] = rs
+                val (rl, rlo, ac) = calculateLocationPrecisionOptimized(location, prec)
+                dm["lat"] = rl
+                dm["lon"] = rlo
+                dm["acc"] = ac
+                dm["spd"] = rs
+            }
+        } catch (e: Exception) {
+            // Location data not available
         }
     }
 
-    private fun calculateLocationPrecision(location: android.location.Location, prec: Int): Triple<Double, Double, Int> {
-        return when (prec) {
-            0 -> {
-                Triple(
-                    String.Companion.format(Locale.US, "%.6f", location.latitude).toDouble(),
-                    String.Companion.format(Locale.US, "%.6f", location.longitude).toDouble(),
-                    (location.accuracy / 1).roundToInt() * 1
-                )
+    private fun calculateLocationPrecisionOptimized(location: android.location.Location, prec: Int): Triple<Double, Double, Int> {
+        return try {
+            when (prec) {
+                0 -> {
+                    Triple(
+                        Math.round(location.latitude * 1000000.0) / 1000000.0,
+                        Math.round(location.longitude * 1000000.0) / 1000000.0,
+                        location.accuracy.roundToInt()
+                    )
+                }
+                20 -> {
+                    Triple(
+                        (location.latitude * 10000).roundToInt() / 10000.0,
+                        (location.longitude * 10000).roundToInt() / 10000.0,
+                        Math.max(20, (location.accuracy / 20).roundToInt() * 20)
+                    )
+                }
+                100 -> {
+                    Triple(
+                        (location.latitude * 1000).roundToInt() / 1000.0,
+                        (location.longitude * 1000).roundToInt() / 1000.0,
+                        Math.max(100, (location.accuracy / 100).roundToInt() * 100)
+                    )
+                }
+                1000 -> {
+                    Triple(
+                        (location.latitude * 100).roundToInt() / 100.0,
+                        (location.longitude * 100).roundToInt() / 100.0,
+                        Math.max(1000, (location.accuracy / 1000).roundToInt() * 1000)
+                    )
+                }
+                10000 -> {
+                    Triple(
+                        (location.latitude * 10).roundToInt() / 10.0,
+                        (location.longitude * 10).roundToInt() / 10.0,
+                        Math.max(10000, (location.accuracy / 10000).roundToInt() * 10000)
+                    )
+                }
+                else -> {
+                    Triple(
+                        Math.round(location.latitude * 1000000.0) / 1000000.0,
+                        Math.round(location.longitude * 1000000.0) / 1000000.0,
+                        location.accuracy.roundToInt()
+                    )
+                }
             }
-            20 -> {
-                Triple(
-                    (location.latitude * 10000).roundToInt() / 10000.0,
-                    (location.longitude * 10000).roundToInt() / 10000.0,
-                    Math.max(20, (location.accuracy / 20).roundToInt() * 20)
-                )
-            }
-            100 -> {
-                Triple(
-                    (location.latitude * 1000).roundToInt() / 1000.0,
-                    (location.longitude * 1000).roundToInt() / 1000.0,
-                    Math.max(100, (location.accuracy / 100).roundToInt() * 100)
-                )
-            }
-            1000 -> {
-                Triple(
-                    (location.latitude * 100).roundToInt() / 100.0,
-                    (location.longitude * 100).roundToInt() / 100.0,
-                    Math.max(1000, (location.accuracy / 1000).roundToInt() * 1000)
-                )
-            }
-            10000 -> {
-                Triple(
-                    (location.latitude * 10).roundToInt() / 10.0,
-                    (location.longitude * 10).roundToInt() / 10.0,
-                    Math.max(10000, (location.accuracy / 10000).roundToInt() * 10000)
-                )
-            }
-            else -> {
-                Triple(
-                    String.Companion.format(Locale.US, "%.6f", location.latitude).toDouble(),
-                    String.Companion.format(Locale.US, "%.6f", location.longitude).toDouble(),
-                    (location.accuracy / 1).roundToInt() * 1
-                )
-            }
+        } catch (e: Exception) {
+            Triple(0.0, 0.0, 0)
         }
     }
 
-    private fun convertToStringMap(data: Map<String, Any>): Map<String, String> {
-        return data.mapValues { (_, value) ->
-            when (value) {
+    private fun convertToStringMapOptimized(data: Map<String, Any>, target: MutableMap<String, String>) {
+        target.clear()
+        data.forEach { (key, value) ->
+            target[key] = when (value) {
                 is String -> value
-                is Number -> value.toString()
+                is Int -> value.toString()
+                is Long -> value.toString()
+                is Float -> value.toString()
+                is Double -> value.toString()
                 else -> value.toString()
             }
         }
