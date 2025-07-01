@@ -10,8 +10,10 @@ import android.os.Build
 import android.os.Handler
 import android.provider.Settings
 import com.example.hoarder.data.DataUtils
+import com.example.hoarder.data.RealTimeDeltaManager
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import kotlinx.coroutines.*
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -44,6 +46,9 @@ class DataCollector(
     private val precisionCache = mutableMapOf<String, Int>()
     private var lastPrecisionUpdate = 0L
     private val PRECISION_CACHE_TTL = 10000L
+
+    private val deltaManager = AtomicReference<RealTimeDeltaManager?>(null)
+    private val collectionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val dr = object : Runnable {
         override fun run() {
@@ -131,6 +136,7 @@ class DataCollector(
     fun stop() {
         ca.set(false)
         h.removeCallbacks(dr)
+        deltaManager.get()?.stop()
     }
 
     fun cleanup() {
@@ -140,10 +146,16 @@ class DataCollector(
                 ctx.unregisterReceiver(br)
             }
             sensorMgr.cleanup()
+            collectionScope.cancel()
             isInitialized.set(false)
         } catch (e: Exception) {
             // Already unregistered or other cleanup error
         }
+    }
+
+    fun setDeltaManager(manager: RealTimeDeltaManager) {
+        deltaManager.set(manager)
+        manager.start(deviceId)
     }
 
     private fun updatePrecisionCache() {
@@ -167,8 +179,6 @@ class DataCollector(
             reusableDataMap["id"] = deviceId
             reusableDataMap["n"] = deviceModel
 
-            // NO timestamp for real-time uploads - server records received time
-
             updatePrecisionCache()
             collectBatteryData(reusableDataMap)
             collectLocationData(reusableDataMap)
@@ -179,13 +189,39 @@ class DataCollector(
             convertToStringMapOptimized(reusableDataMap, reusableStringMap)
             val json = gson.toJson(reusableStringMap)
 
-            h.post {
-                if (ca.get()) {
-                    callback(json)
-                }
-            }
+            processCollectedData(json)
+
         } catch (e: Exception) {
             // Error in data collection, skip this cycle
+        }
+    }
+
+    private fun processCollectedData(json: String) {
+        collectionScope.launch {
+            try {
+                val manager = deltaManager.get()
+                if (manager != null) {
+                    val deltaJson = manager.processTelemetryData(json)
+
+                    h.post {
+                        if (ca.get()) {
+                            callback(json)
+                        }
+                    }
+                } else {
+                    h.post {
+                        if (ca.get()) {
+                            callback(json)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                h.post {
+                    if (ca.get()) {
+                        callback(json)
+                    }
+                }
+            }
         }
     }
 

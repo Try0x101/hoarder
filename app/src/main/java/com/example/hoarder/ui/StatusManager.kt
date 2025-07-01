@@ -11,6 +11,7 @@ import java.util.Locale
 
 class StatusManager(private val a: MainActivity, private val p: Prefs) {
     private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
+    private var lastBufferSize = 0L
 
     fun updateDataCollectionUI(isActive: Boolean) {
         val subtitle = a.findViewById<TextView>(R.id.dataCollectionSubtitle)
@@ -21,9 +22,14 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         val statusView = a.findViewById<TextView>(R.id.serverUploadStatus)
         val bytesView = a.findViewById<TextView>(R.id.serverUploadBytes)
 
+        if (bufferedSize > 0) {
+            lastBufferSize = bufferedSize
+        }
+
         if (!isActive) {
             statusView.text = "Inactive"
             bytesView.visibility = View.GONE
+            lastBufferSize = 0L
             return
         }
 
@@ -31,10 +37,11 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         if (!NetUtils.isValidIpPort(serverAddress)) {
             statusView.text = "Invalid Address"
             bytesView.visibility = View.GONE
+            lastBufferSize = 0L
             return
         }
 
-        val statusText = formatStatusText(status, message, bufferedSize)
+        val statusText = formatStatusText(status, message, lastBufferSize)
         statusView.text = statusText
         bytesView.text = "Uploaded: ${formatBytes(totalBytes ?: 0)}"
         bytesView.visibility = View.VISIBLE
@@ -43,7 +50,10 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
     private fun formatStatusText(status: String?, message: String?, bufferedSize: Long): String {
         return when {
             status == "Saving Locally" -> {
-                var localStatus = "Saving locally: ${formatBytes(bufferedSize)}"
+                var localStatus = "Saving locally"
+                if (bufferedSize > 0) {
+                    localStatus += " | Local: ${formatBytes(bufferedSize)}"
+                }
                 if (bufferedSize > 5120) {
                     localStatus += "\nBuffer large, confirm send in settings."
                 }
@@ -57,12 +67,26 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
                 connectedStatus
             }
             status == "Network Error" && message == "Internet not accessible" -> {
-                message
+                var offlineStatus = message
+                if (bufferedSize > 0) {
+                    offlineStatus += " | Local: ${formatBytes(bufferedSize)}"
+                }
+                offlineStatus
             }
             status == "HTTP Error" || status == "Network Error" -> {
-                "Error (Check logs)"
+                var errorStatus = "Error (Check logs)"
+                if (bufferedSize > 0) {
+                    errorStatus += " | Local: ${formatBytes(bufferedSize)}"
+                }
+                errorStatus
             }
-            else -> "Connected"
+            else -> {
+                var defaultStatus = "Connected"
+                if (bufferedSize > 0) {
+                    defaultStatus += " | Local: ${formatBytes(bufferedSize)}"
+                }
+                defaultStatus
+            }
         }
     }
 
@@ -145,10 +169,10 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
     }
 
-    private fun getGpsPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 20 -> "20m"; 100 -> "100m"; 1000 -> "1km"; 10000 -> "10km"; else -> "Unknown" }
-    private fun getGpsAltitudePrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2m"; 10 -> "10m"; 25 -> "25m"; 50 -> "50m"; 100 -> "100m"; else -> "Unknown" }
-    private fun getRssiPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 3 -> "3dBm"; 5 -> "5dBm"; 10 -> "10dBm"; else -> "Unknown" }
-    private fun getBatteryPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2%"; 5 -> "5%"; 10 -> "10%"; else -> "Unknown" }
-    private fun getNetworkPrecisionString(v: Int) = when(v) { 0 -> "Smart"; -2 -> "Float"; 1 -> "1Mbps"; 2 -> "2Mbps"; 5 -> "5Mbps"; else -> "Unknown" }
-    private fun getSpeedPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 1 -> "1km/h"; 3 -> "3km/h"; 5 -> "5km/h"; 10 -> "10km/h"; else -> "Unknown" }
+    private fun getGpsPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 20 -> "20 Meters"; 100 -> "100 Meters"; 1000 -> "1 Kilometer"; 10000 -> "10 Kilometers"; else -> "Unknown" }
+    private fun getGpsAltitudePrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2 Meters"; 10 -> "10 Meters"; 25 -> "25 Meters"; 50 -> "50 Meters"; 100 -> "100 Meters"; else -> "Unknown" }
+    private fun getRssiPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 3 -> "3 dBm"; 5 -> "5 dBm"; 10 -> "10 dBm"; else -> "Unknown" }
+    private fun getBatteryPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 2 -> "2 Percent"; 5 -> "5 Percent"; 10 -> "10 Percent"; else -> "Unknown" }
+    private fun getNetworkPrecisionString(v: Int) = when(v) { 0 -> "Smart"; -2 -> "Float"; 1 -> "1 Mbps"; 2 -> "2 Mbps"; 5 -> "5 Mbps"; else -> "Unknown" }
+    private fun getSpeedPrecisionString(v: Int) = when(v) { -1 -> "Smart"; 0 -> "Maximum"; 1 -> "1 km/h"; 3 -> "3 km/h"; 5 -> "5 km/h"; 10 -> "10 km/h"; else -> "Unknown" }
 }

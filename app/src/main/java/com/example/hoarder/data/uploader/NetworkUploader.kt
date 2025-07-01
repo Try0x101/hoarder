@@ -1,101 +1,273 @@
 package com.example.hoarder.data.uploader
 
 import android.content.Context
-import com.example.hoarder.utils.NetUtils
-import java.io.OutputStreamWriter
+import android.util.Log
+import java.io.*
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
-class NetworkUploader(private val ctx: Context) {
+data class UploadResult(
+    val success: Boolean,
+    val uploadedBytes: Long,
+    val statusMessage: String,
+    val errorMessage: String? = null,
+    val compressionStats: String? = null
+)
 
-    data class UploadResult(
-        val success: Boolean,
-        val uploadedBytes: Long = 0,
-        val statusMessage: String = "",
-        val errorMessage: String? = null
-    )
+class NetworkUploader(private val context: Context) {
 
-    fun uploadSingle(jsonString: String, isDelta: Boolean, ip: String, port: Int): UploadResult {
-        if (!NetUtils.isNetworkAvailable(ctx)) {
-            return UploadResult(false, 0, "Saving Locally", "Internet not accessible")
-        }
+    companion object {
+        private const val SINGLE_TIMEOUT_MS = 5000
+        private const val BATCH_TIMEOUT_MS = 10000
+        private const val CONNECT_TIMEOUT_MS = 3000
+    }
 
+    fun uploadSingle(jsonData: String, isDelta: Boolean, serverIp: String, serverPort: Int): UploadResult {
         return try {
-            val url = URL("http://$ip:$port/api/telemetry")
+            val compressionResult = CompressionUtils.compressData(jsonData)
+            val url = URL("http://$serverIp:$serverPort/api/telemetry")
             val connection = url.openConnection() as HttpURLConnection
 
             connection.apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("X-Data-Type", if (isDelta) "delta" else "full")
+                setRequestProperty("Content-Encoding", "deflate")
+                setRequestProperty("X-Original-Size", compressionResult.originalSize.toString())
+                setRequestProperty("X-Compression-Ratio", String.format("%.2f", compressionResult.compressionRatio))
                 doOutput = true
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = SINGLE_TIMEOUT_MS
             }
 
-            val bytes = jsonString.toByteArray(StandardCharsets.UTF_8)
-            connection.outputStream.use { os ->
-                OutputStreamWriter(os, StandardCharsets.UTF_8).use { writer ->
-                    writer.write(jsonString)
-                    writer.flush()
-                }
+            connection.outputStream.use { outputStream ->
+                outputStream.write(compressionResult.compressed)
+                outputStream.flush()
             }
 
             val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                UploadResult(true, bytes.size.toLong(), if (isDelta) "OK (Delta)" else "OK (Full)")
-            } else {
-                UploadResult(false, 0, "HTTP Error", "HTTP $responseCode")
+            val responseMessage = connection.responseMessage ?: "Unknown"
+
+            when (responseCode) {
+                200 -> {
+                    val response = connection.inputStream.use { inputStream ->
+                        inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                    }
+                    UploadResult(
+                        success = true,
+                        uploadedBytes = compressionResult.compressedSize.toLong(),
+                        statusMessage = if (isDelta) "OK (Delta)" else "OK (Full)",
+                        errorMessage = null,
+                        compressionStats = CompressionUtils.formatCompressionStats(compressionResult)
+                    )
+                }
+                else -> {
+                    val errorResponse = try {
+                        connection.errorStream?.use { errorStream ->
+                            errorStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                        } ?: responseMessage
+                    } catch (e: Exception) {
+                        responseMessage
+                    }
+
+                    UploadResult(
+                        success = false,
+                        uploadedBytes = 0L,
+                        statusMessage = "HTTP Error",
+                        errorMessage = "HTTP $responseCode: $errorResponse",
+                        compressionStats = CompressionUtils.formatCompressionStats(compressionResult)
+                    )
+                }
             }
-        } catch (e: java.net.ConnectException) {
-            UploadResult(false, 0, "Network Error", "Server unreachable")
-        } catch (e: java.net.SocketTimeoutException) {
-            UploadResult(false, 0, "Network Error", "Connection timeout")
+        } catch (e: ConnectException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Connection refused to $serverIp:$serverPort"
+            )
+        } catch (e: SocketTimeoutException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Connection timeout to $serverIp:$serverPort"
+            )
+        } catch (e: IOException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Network error: ${e.message}"
+            )
         } catch (e: Exception) {
-            UploadResult(false, 0, "Network Error", e.message ?: "Unknown error")
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Error",
+                errorMessage = "Upload failed: ${e.message}"
+            )
         }
     }
 
-    fun uploadBatch(batch: List<String>, ip: String, port: Int): UploadResult {
-        if (!NetUtils.isNetworkAvailable(ctx)) {
-            return UploadResult(false, 0, "Saving Locally", "Internet not accessible")
-        }
-
+    fun uploadBatch(batchData: List<String>, serverIp: String, serverPort: Int): UploadResult {
         return try {
-            val url = URL("http://$ip:$port/api/batch")
+            val batchJson = createBatchJson(batchData)
+            val compressionResult = CompressionUtils.compressData(batchJson)
+
+            val url = URL("http://$serverIp:$serverPort/api/batch")
             val connection = url.openConnection() as HttpURLConnection
 
             connection.apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("X-Data-Type", "batch")
+                setRequestProperty("X-Record-Count", batchData.size.toString())
+                setRequestProperty("Content-Encoding", "deflate")
+                setRequestProperty("X-Original-Size", compressionResult.originalSize.toString())
+                setRequestProperty("X-Compression-Ratio", String.format("%.2f", compressionResult.compressionRatio))
                 doOutput = true
-                connectTimeout = 10000
-                readTimeout = 10000
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = BATCH_TIMEOUT_MS
             }
 
-            val batchJson = "[${batch.joinToString(",")}]"
-            val bytes = batchJson.toByteArray(StandardCharsets.UTF_8)
-
-            connection.outputStream.use { os ->
-                OutputStreamWriter(os, StandardCharsets.UTF_8).use { writer ->
-                    writer.write(batchJson)
-                    writer.flush()
-                }
+            connection.outputStream.use { outputStream ->
+                outputStream.write(compressionResult.compressed)
+                outputStream.flush()
             }
 
             val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                UploadResult(true, bytes.size.toLong(), "OK (Batch)")
-            } else {
-                UploadResult(false, 0, "HTTP Error", "HTTP $responseCode")
+            val responseMessage = connection.responseMessage ?: "Unknown"
+
+            when (responseCode) {
+                200 -> {
+                    val response = connection.inputStream.use { inputStream ->
+                        inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                    }
+                    UploadResult(
+                        success = true,
+                        uploadedBytes = compressionResult.compressedSize.toLong(),
+                        statusMessage = "OK (Batch)",
+                        errorMessage = null,
+                        compressionStats = CompressionUtils.formatCompressionStats(compressionResult)
+                    )
+                }
+                else -> {
+                    val errorResponse = try {
+                        connection.errorStream?.use { errorStream ->
+                            errorStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                        } ?: responseMessage
+                    } catch (e: Exception) {
+                        responseMessage
+                    }
+
+                    UploadResult(
+                        success = false,
+                        uploadedBytes = 0L,
+                        statusMessage = "HTTP Error",
+                        errorMessage = "Batch HTTP $responseCode: $errorResponse",
+                        compressionStats = CompressionUtils.formatCompressionStats(compressionResult)
+                    )
+                }
             }
-        } catch (e: java.net.ConnectException) {
-            UploadResult(false, 0, "Network Error", "Server unreachable")
-        } catch (e: java.net.SocketTimeoutException) {
-            UploadResult(false, 0, "Network Error", "Timeout")
+        } catch (e: ConnectException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Batch connection refused to $serverIp:$serverPort"
+            )
+        } catch (e: SocketTimeoutException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Batch connection timeout to $serverIp:$serverPort"
+            )
+        } catch (e: IOException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Batch network error: ${e.message}"
+            )
         } catch (e: Exception) {
-            UploadResult(false, 0, "Network Error", e.message ?: "Unknown error")
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Error",
+                errorMessage = "Batch upload failed: ${e.message}"
+            )
+        }
+    }
+
+    private fun createBatchJson(batchData: List<String>): String {
+        val jsonBuilder = StringBuilder()
+        jsonBuilder.append("[")
+
+        batchData.forEachIndexed { index, record ->
+            jsonBuilder.append(record)
+            if (index < batchData.size - 1) {
+                jsonBuilder.append(",")
+            }
+        }
+
+        jsonBuilder.append("]")
+        return jsonBuilder.toString()
+    }
+
+    fun testConnection(serverIp: String, serverPort: Int): UploadResult {
+        return try {
+            val url = URL("http://$serverIp:$serverPort/api/telemetry")
+            val connection = url.openConnection() as HttpURLConnection
+
+            connection.apply {
+                requestMethod = "HEAD"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = 2000
+            }
+
+            val responseCode = connection.responseCode
+
+            if (responseCode in 200..299 || responseCode == 404 || responseCode == 405) {
+                UploadResult(
+                    success = true,
+                    uploadedBytes = 0L,
+                    statusMessage = "Connected",
+                    errorMessage = null
+                )
+            } else {
+                UploadResult(
+                    success = false,
+                    uploadedBytes = 0L,
+                    statusMessage = "HTTP Error",
+                    errorMessage = "Server responded with HTTP $responseCode"
+                )
+            }
+        } catch (e: ConnectException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Cannot connect to $serverIp:$serverPort"
+            )
+        } catch (e: SocketTimeoutException) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Network Error",
+                errorMessage = "Connection timeout to $serverIp:$serverPort"
+            )
+        } catch (e: Exception) {
+            UploadResult(
+                success = false,
+                uploadedBytes = 0L,
+                statusMessage = "Error",
+                errorMessage = "Connection test failed: ${e.message}"
+            )
         }
     }
 }

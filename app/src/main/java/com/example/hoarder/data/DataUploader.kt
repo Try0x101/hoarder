@@ -187,8 +187,8 @@ class DataUploader(
 
         return try {
             val type = object : TypeToken<Map<String, Any?>>() {}.type
-            val previous = g.fromJson(lastUpload, type) as Map<String, Any?>
-            val current = g.fromJson(currentFrame, type) as Map<String, Any?>
+            val previous = g.fromJson<Map<String, Any?>>(lastUpload, type)
+            val current = g.fromJson<Map<String, Any?>>(currentFrame, type)
             val delta = mutableMapOf<String, Any?>()
 
             for ((key, value) in current.entries) {

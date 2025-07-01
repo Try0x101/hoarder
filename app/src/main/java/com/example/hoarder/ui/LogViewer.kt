@@ -36,8 +36,10 @@ class LogViewer(private val ctx: Context) {
     private val RECORDS_PER_PAGE = 20
     private val MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB limit
     private val MAX_LOG_ENTRIES = 1000 // Memory protection
+    private var currentLogType: String = ""
 
     fun showLogDialog(logType: String) {
+        currentLogType = logType
         val builder = AlertDialog.Builder(ctx, R.style.AlertDialogTheme)
         val view = LayoutInflater.from(ctx).inflate(R.layout.dialog_log_viewer, null)
         val container = view.findViewById<LinearLayout>(R.id.logViewerContainer)
@@ -46,11 +48,12 @@ class LogViewer(private val ctx: Context) {
         val nextButton = view.findViewById<Button>(R.id.nextButton)
         val pageIndicator = view.findViewById<TextView>(R.id.pageIndicator)
         val copyPageButton = view.findViewById<Button>(R.id.copyPageButton)
+        val refreshButton = view.findViewById<Button>(R.id.refreshButton)
         builder.setView(view)
 
-        val logEntries = getLogEntries(logType)
+        var logEntries = getLogEntries(logType)
         var currentPage = 0
-        val totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
+        var totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
 
         fun renderPage(page: Int) {
             currentPage = page.coerceIn(0, totalPages - 1)
@@ -102,6 +105,13 @@ class LogViewer(private val ctx: Context) {
             updatePaginationControls(currentPage, totalPages, prevButton, nextButton, pageIndicator, copyPageButton, logEntries.isNotEmpty() && startIndex < logEntries.size)
         }
 
+        fun refreshLogs() {
+            logEntries = getLogEntries(currentLogType)
+            totalPages = if (logEntries.isEmpty()) 1 else ceil(logEntries.size.toDouble() / RECORDS_PER_PAGE).toInt()
+            currentPage = 0
+            renderPage(0)
+        }
+
         controlsContainer.visibility = android.view.View.VISIBLE
         renderPage(0)
 
@@ -121,8 +131,12 @@ class LogViewer(private val ctx: Context) {
             copyCurrentPage(logType, logEntries, currentPage)
         }
 
+        refreshButton.setOnClickListener {
+            refreshLogs()
+        }
+
         val title = when(logType) {
-            "cached" -> "Last Cached Upload Details"
+            "cached" -> "Buffered Batch Uploads"
             "success" -> "Upload Log"
             "error" -> "Error Log"
             else -> "Log"
@@ -399,4 +413,5 @@ class LogViewer(private val ctx: Context) {
         val p = "KMGTPE"[e - 1]
         return String.format(Locale.getDefault(), "%.1f %sB", b / Math.pow(1024.0, e.toDouble()), p)
     }
+
 }

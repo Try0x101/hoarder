@@ -37,6 +37,8 @@ class DialogManager(private val a: MainActivity, private val p: Prefs, private v
         val viewErrorLogButton = view.findViewById<Button>(R.id.viewErrorLogButton)
         val servicePrefs = a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
 
+        viewCachedUploadLogButton.text = "View Buffered Batch Uploads"
+
         fun updateButtonsState() {
             val bufferSize = servicePrefs.getStringSet("data_buffer", emptySet())?.sumOf { it.toByteArray().size }?.toLong() ?: 0L
             if (bufferSize > 0) {

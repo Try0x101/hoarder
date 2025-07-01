@@ -23,13 +23,16 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.DataUploader
+import com.example.hoarder.data.RealTimeDeltaManager
 import com.example.hoarder.sensors.DataCollector
+import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BackgroundService: Service(){
     private lateinit var h: Handler
     private lateinit var dataCollector: DataCollector
     private lateinit var dataUploader: DataUploader
+    private lateinit var deltaManager: RealTimeDeltaManager
     private lateinit var servicePrefs: SharedPreferences
     private lateinit var appPrefs: SharedPreferences
 
@@ -37,6 +40,8 @@ class BackgroundService: Service(){
     private val ua = AtomicBoolean(false)
     private val isInitialized = AtomicBoolean(false)
     private val receiverRegistered = AtomicBoolean(false)
+
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val cr = object: BroadcastReceiver(){
         override fun onReceive(c: Context?, i: Intent?){
@@ -93,6 +98,28 @@ class BackgroundService: Service(){
                 "com.example.hoarder.GET_STATE" -> {
                     broadcastStateUpdate()
                 }
+                "com.example.hoarder.GET_DB_STATS" -> {
+                    serviceScope.launch {
+                        try {
+                            val pendingCount = deltaManager.getPendingRecordsCount()
+                            LocalBroadcastManager.getInstance(applicationContext)
+                                .sendBroadcast(Intent("com.example.hoarder.DB_STATS_UPDATE").apply {
+                                    putExtra("pendingRecords", pendingCount)
+                                })
+                        } catch (e: Exception) {
+                            // Error getting stats
+                        }
+                    }
+                }
+                "com.example.hoarder.CLEANUP_OLD_RECORDS" -> {
+                    serviceScope.launch {
+                        try {
+                            deltaManager.cleanupOldRecords(7)
+                        } catch (e: Exception) {
+                            // Error during cleanup
+                        }
+                    }
+                }
             }
         }
     }
@@ -103,6 +130,9 @@ class BackgroundService: Service(){
         servicePrefs = getSharedPreferences("HoarderServicePrefs", MODE_PRIVATE)
         appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
 
+        dataUploader = DataUploader(this, h, servicePrefs)
+        deltaManager = RealTimeDeltaManager(this, dataUploader)
+
         dataCollector = DataCollector(this, h) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
                 .sendBroadcast(
@@ -111,10 +141,9 @@ class BackgroundService: Service(){
                         json
                     )
                 )
-            if (ua.get()) dataUploader.queueData(json)
         }
 
-        dataUploader = DataUploader(this, h, servicePrefs)
+        dataCollector.setDeltaManager(deltaManager)
 
         registerServiceReceiver()
     }
@@ -128,6 +157,8 @@ class BackgroundService: Service(){
                 addAction("com.example.hoarder.STOP_UPLOAD")
                 addAction("com.example.hoarder.SEND_BUFFER")
                 addAction("com.example.hoarder.GET_STATE")
+                addAction("com.example.hoarder.GET_DB_STATS")
+                addAction("com.example.hoarder.CLEANUP_OLD_RECORDS")
             })
         }
     }
@@ -178,7 +209,23 @@ class BackgroundService: Service(){
             dataUploader.start()
         }
 
-        h.postDelayed({ broadcastStateUpdate() }, 1000)
+        h.postDelayed({
+            broadcastStateUpdate()
+            schedulePeriodicCleanup()
+        }, 1000)
+    }
+
+    private fun schedulePeriodicCleanup() {
+        serviceScope.launch {
+            while (isInitialized.get()) {
+                try {
+                    delay(24 * 60 * 60 * 1000L) // 24 hours
+                    deltaManager.cleanupOldRecords(7)
+                } catch (e: Exception) {
+                    // Cleanup error, continue
+                }
+            }
+        }
     }
 
     private fun updateAppPreferences(key: String, value: Any) {
@@ -221,6 +268,8 @@ class BackgroundService: Service(){
         try {
             dataCollector.cleanup()
             dataUploader.cleanup()
+            deltaManager.stop()
+            serviceScope.cancel()
         } catch (e: Exception) {
             // Cleanup error
         }
