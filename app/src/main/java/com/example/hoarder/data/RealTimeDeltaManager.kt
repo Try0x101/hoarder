@@ -103,6 +103,10 @@ class RealTimeDeltaManager(
             delta["id"] = current["id"]!!
         }
 
+        if (delta.size == 1 && delta.containsKey("id")) {
+            return emptyMap()
+        }
+
         return delta
     }
 

@@ -90,6 +90,14 @@ class BackgroundService: Service(){
                         broadcastStateUpdate()
                     }
                 }
+                "com.example.hoarder.FORCE_UPLOAD" -> {
+                    if (ua.get()) {
+                        val forcedData = i?.getStringExtra("forcedData")
+                        if (forcedData != null && forcedData.isNotBlank()) {
+                            dataUploader.queueForcedData(forcedData)
+                        }
+                    }
+                }
                 "com.example.hoarder.SEND_BUFFER" -> {
                     if (ua.get()) {
                         dataUploader.forceSendBuffer()
@@ -155,6 +163,7 @@ class BackgroundService: Service(){
                 addAction("com.example.hoarder.STOP_COLLECTION")
                 addAction("com.example.hoarder.START_UPLOAD")
                 addAction("com.example.hoarder.STOP_UPLOAD")
+                addAction("com.example.hoarder.FORCE_UPLOAD")
                 addAction("com.example.hoarder.SEND_BUFFER")
                 addAction("com.example.hoarder.GET_STATE")
                 addAction("com.example.hoarder.GET_DB_STATS")

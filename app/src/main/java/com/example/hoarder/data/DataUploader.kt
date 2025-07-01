@@ -27,6 +27,8 @@ class DataUploader(
     private var ip = ""
     private var port = 5000
     private val ld = AtomicReference<String?>(null)
+    private val forcedData = AtomicReference<String?>(null)
+    private val waitingForForcedData = AtomicBoolean(false)
     private val lu = AtomicReference<String?>(null)
     private val g = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private val tb = AtomicLong(sp.getLong("totalUploadedBytes", 0L))
@@ -43,17 +45,34 @@ class DataUploader(
     private val ur = object : Runnable {
         override fun run() {
             if (ua.get() && ip.isNotBlank() && port > 0) {
-                val dataToProcess = ld.getAndSet(null)
+                val forcedDataToProcess = forcedData.getAndSet(null)
+                val regularDataToProcess = if (forcedDataToProcess != null) {
+                    waitingForForcedData.set(false)
+                    null
+                } else if (!waitingForForcedData.get()) {
+                    ld.getAndSet(null)
+                } else {
+                    null
+                }
+
+                val dataToProcess = forcedDataToProcess ?: regularDataToProcess
+                val isForcedUpload = forcedDataToProcess != null
+
                 if (dataToProcess != null) {
                     currentUploadTask?.cancel(false)
                     currentUploadTask = executor.submit {
-                        val (d, delta) = generateJson(dataToProcess)
-                        if (d != null) {
-                            lu.set(dataToProcess)
-                            processUpload(d, delta)
+                        if (isForcedUpload) {
+                            lu.set(null)
+                            processUpload(dataToProcess, false)
                         } else {
-                            h.post {
-                                notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), bufferManager.getBufferedDataSize())
+                            val (d, delta) = generateJson(dataToProcess)
+                            if (d != null) {
+                                lu.set(dataToProcess)
+                                processUpload(d, delta)
+                            } else {
+                                h.post {
+                                    notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), bufferManager.getBufferedDataSize())
+                                }
                             }
                         }
                     }
@@ -82,12 +101,22 @@ class DataUploader(
     }
 
     fun queueData(data: String) {
-        ld.set(data)
+        if (!waitingForForcedData.get()) {
+            ld.set(data)
+        }
+    }
+
+    fun queueForcedData(data: String) {
+        forcedData.set(data)
+        waitingForForcedData.set(true)
+        ld.set(null)
     }
 
     fun start() {
         h.removeCallbacks(ur)
         lu.set(null)
+        waitingForForcedData.set(false)
+        forcedData.set(null)
         ua.set(true)
         h.post {
             notifyStatus("Connecting", "Attempting to connect...", tb.get(), bufferManager.getBufferedDataSize())
@@ -97,6 +126,8 @@ class DataUploader(
 
     fun stop() {
         ua.set(false)
+        waitingForForcedData.set(false)
+        forcedData.set(null)
         h.removeCallbacks(ur)
         currentUploadTask?.cancel(true)
     }
@@ -104,6 +135,8 @@ class DataUploader(
     fun resetCounter() {
         tb.set(0L)
         lu.set(null)
+        waitingForForcedData.set(false)
+        forcedData.set(null)
         sp.edit().putLong("totalUploadedBytes", 0L).apply()
         h.post {
             notifyStatus("Paused", "Upload paused.", tb.get(), bufferManager.getBufferedDataSize())
@@ -135,7 +168,7 @@ class DataUploader(
             bufferManager.saveToBuffer(jsonString)
             bufferManager.addErrorLog("Internet not accessible")
             h.post {
-                notifyStatus("Saving Locally", "Internet not accessible. Delta saved locally.", tb.get(), bufferManager.getBufferedDataSize())
+                notifyStatus("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), bufferManager.getBufferedDataSize())
             }
             return
         }
@@ -148,8 +181,13 @@ class DataUploader(
                 sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
                 bufferManager.addUploadRecord(result.uploadedBytes)
                 bufferManager.addSuccessLog(jsonString, result.uploadedBytes)
+                val statusText = when {
+                    isDelta -> "OK (Delta)"
+                    !isDelta && lu.get() == null -> "OK (Full Init)"
+                    else -> "OK (Full)"
+                }
                 notifyStatus(
-                    if (isDelta) "OK (Delta)" else "OK (Full)",
+                    statusText,
                     "Uploaded successfully.",
                     tb.get(),
                     bufferManager.getBufferedDataSize(),

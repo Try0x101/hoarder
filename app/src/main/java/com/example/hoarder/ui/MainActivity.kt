@@ -167,6 +167,14 @@ class MainActivity : AppCompatActivity() {
         if (NetUtils.isValidIpPort(sa)) {
             LocalBroadcastManager.getInstance(this)
                 .sendBroadcast(Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", sa))
+
+            val currentData = getLastData()
+            if (currentData != null && currentData.isNotBlank()) {
+                h.postDelayed({
+                    LocalBroadcastManager.getInstance(this)
+                        .sendBroadcast(Intent("com.example.hoarder.FORCE_UPLOAD").putExtra("forcedData", currentData))
+                }, 500)
+            }
         }
     }
 
