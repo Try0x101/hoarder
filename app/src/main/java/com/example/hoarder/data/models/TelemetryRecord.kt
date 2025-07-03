@@ -28,3 +28,19 @@ data class TelemetryRecord(
     val lastModified: Long = System.currentTimeMillis(),
     val syncStatus: String = "PENDING"
 )
+
+@Entity(tableName = "log_entries")
+data class LogEntry(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long,
+    val type: String, // "SUCCESS", "ERROR"
+    val message: String,
+    val sizeBytes: Long? = null
+)
+
+@Entity(tableName = "buffered_payloads")
+data class BufferedPayload(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long,
+    val payload: String // The JSON string
+)

@@ -17,9 +17,9 @@ class LogEntryFormatter(private val gson: Gson) {
     fun formatLogEntry(logType: String, entry: String): FormattedLogEntry {
         return try {
             when (logType) {
-                "cached" -> formatCachedEntry(entry)
                 "success" -> formatSuccessEntry(entry)
                 "error" -> formatErrorEntry(entry)
+                "batch_success" -> formatIndividualRecord(entry)
                 else -> FormattedLogEntry("", entry, entry)
             }
         } catch (e: Exception) {
@@ -27,7 +27,7 @@ class LogEntryFormatter(private val gson: Gson) {
         }
     }
 
-    private fun formatCachedEntry(entry: String): FormattedLogEntry {
+    private fun formatIndividualRecord(entry: String): FormattedLogEntry {
         return try {
             val entrySize = entry.toByteArray(Charsets.UTF_8).size.toLong()
             val jsonObject = gson.fromJson(entry, Map::class.java) as? Map<String, Any>
@@ -35,10 +35,11 @@ class LogEntryFormatter(private val gson: Gson) {
 
             val timestampStr = formatTimestamp(timestamp)
             val header = "[${timestampStr}] [${ByteFormatter.format(entrySize)}]"
+            val content = gson.toJson(JsonParser.parseString(entry))
 
-            FormattedLogEntry(header, entry, entry)
+            FormattedLogEntry(header, content, entry)
         } catch (e: Exception) {
-            FormattedLogEntry("Error", "Error formatting cached entry: ${e.message}", entry)
+            FormattedLogEntry("Error", "Error formatting record: ${e.message}", entry)
         }
     }
 
@@ -50,14 +51,10 @@ class LogEntryFormatter(private val gson: Gson) {
             val json = parts.getOrElse(2) { "" }
 
             val header = "[${timestamp}] [${ByteFormatter.format(size)}]"
-            val content = if (json.startsWith("Batch upload")) {
+            val content = try {
+                gson.toJson(JsonParser.parseString(json))
+            } catch (e: Exception) {
                 json
-            } else {
-                try {
-                    gson.toJson(JsonParser.parseString(json))
-                } catch (e: Exception) {
-                    json
-                }
             }
 
             FormattedLogEntry(header, content, json)

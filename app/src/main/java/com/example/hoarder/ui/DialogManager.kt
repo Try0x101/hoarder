@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.view.LayoutInflater
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.TextView
@@ -13,14 +14,24 @@ import android.widget.Toast
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.example.hoarder.transport.network.NetUtils
+import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.ui.dialogs.server.ServerStatsManager
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.example.hoarder.utils.ToastHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
     private val serverStatsManager = ServerStatsManager(a)
+    private val db = TelemetryDatabase.getDatabase(a)
+    private val logDao = db.logDao()
+    private val logRepository = LogRepository(logDao)
+    private val scope = CoroutineScope(Dispatchers.Main)
 
     fun showServerSettingsDialog() {
         val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
@@ -39,21 +50,25 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         val viewCachedUploadLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
         val viewSuccessLogButton = view.findViewById<Button>(R.id.viewSuccessLogButton)
         val viewErrorLogButton = view.findViewById<Button>(R.id.viewErrorLogButton)
-        val servicePrefs = a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-
-        viewCachedUploadLogButton.text = "View Buffered Batch Uploads"
 
         fun updateButtonsState() {
-            val bufferSize = servicePrefs.getStringSet("data_buffer", emptySet())?.sumOf { it.toByteArray().size }?.toLong() ?: 0L
-            if (bufferSize > 0) {
-                sendBufferButton.visibility = android.view.View.VISIBLE
-                sendBufferButton.text = "Send Buffered Data (${ByteFormatter.format(bufferSize)})"
-                sendBufferButton.isEnabled = true
-            } else {
-                sendBufferButton.visibility = android.view.View.GONE
+            scope.launch {
+                val bufferSize = withContext(Dispatchers.IO) {
+                    logDao.getBufferedPayloads().sumOf { it.payload.toByteArray().size.toLong() }
+                }
+                if (bufferSize > 0) {
+                    sendBufferButton.visibility = View.VISIBLE
+                    sendBufferButton.text = "Send Buffered Data (${ByteFormatter.format(bufferSize)})"
+                    sendBufferButton.isEnabled = true
+                } else {
+                    sendBufferButton.visibility = View.GONE
+                }
+
+                val batchLogCount = withContext(Dispatchers.IO) {
+                    logDao.getLogsByType("BATCH_SUCCESS", 1).size
+                }
+                viewCachedUploadLogButton.visibility = if (batchLogCount > 0) View.VISIBLE else View.GONE
             }
-            val lastUploadFile = java.io.File(a.cacheDir, "last_upload_details.json")
-            viewCachedUploadLogButton.visibility = if (lastUploadFile.exists()) android.view.View.VISIBLE else android.view.View.GONE
         }
 
         updateButtonsState()
@@ -64,7 +79,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
             (it as Button).text = "Sending..."
         }
 
-        viewCachedUploadLogButton.setOnClickListener { showDetailedLogDialog("cached") }
+        viewCachedUploadLogButton.setOnClickListener { showDetailedLogDialog("batch_success") }
         viewSuccessLogButton.setOnClickListener { showDetailedLogDialog("success") }
         viewErrorLogButton.setOnClickListener { showDetailedLogDialog("error") }
 
@@ -130,21 +145,14 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun clearAllLogs() {
-        val prefs = a.getSharedPreferences("HoarderServicePrefs", Context.MODE_PRIVATE)
-        prefs.edit()
-            .remove("error_logs")
-            .remove("success_logs")
-            .remove("uploadRecords")
-            .remove("data_buffer")
-            .apply()
-        try {
-            java.io.File(a.cacheDir, "last_upload_details.json").delete()
-        } catch (e: Exception) {
+        scope.launch(Dispatchers.IO) {
+            logDao.clearAllLogs()
+            logDao.clearAllBufferedPayloads()
         }
     }
 
     fun showDetailedLogDialog(logType: String) {
-        val logViewer = LogViewer(a)
+        val logViewer = LogViewer(a, logRepository)
         logViewer.showLogDialog(logType)
     }
 }

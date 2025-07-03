@@ -105,16 +105,6 @@
             android:layout_marginBottom="8dp"/>
 
         <Button
-            android:id="@+id/viewCachedUploadLogButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="View Last Cached Upload"
-            android:backgroundTint="@color/amoled_medium_gray"
-            android:textColor="@color/amoled_white"
-            app:cornerRadius="16dp"
-            android:layout_marginBottom="8dp"/>
-
-        <Button
             android:id="@+id/viewSuccessLogButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -129,6 +119,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="View Error Log"
+            android:backgroundTint="@color/amoled_medium_gray"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
+            android:layout_marginBottom="8dp"/>
+
+        <Button
+            android:id="@+id/viewCachedUploadLogButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="View Batch Upload Log"
             android:backgroundTint="@color/amoled_medium_gray"
             android:textColor="@color/amoled_white"
             app:cornerRadius="16dp"

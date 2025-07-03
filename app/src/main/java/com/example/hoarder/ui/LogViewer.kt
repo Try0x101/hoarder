@@ -17,21 +17,32 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.hoarder.R
+import com.example.hoarder.data.models.LogEntry
+import com.example.hoarder.transport.buffer.UploadLogger
 import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
 import com.example.hoarder.ui.dialogs.log.LogPaginator
 import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.utils.ToastHelper
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
-class LogViewer(private val ctx: Context) {
+class LogViewer(
+    private val ctx: Context,
+    private val logRepository: LogRepository
+) {
+    private val scope = CoroutineScope(Dispatchers.Main)
     private val gson by lazy {
         GsonBuilder()
             .setPrettyPrinting()
             .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
             .create()
     }
-    private val logRepository = LogRepository(ctx, gson)
     private val logEntryFormatter = LogEntryFormatter(gson)
     private val logPaginator = LogPaginator()
     private var currentLogType: String = ""
@@ -63,8 +74,16 @@ class LogViewer(private val ctx: Context) {
         }
 
         fun refreshLogs() {
-            logPaginator.setData(logRepository.getLogEntries(currentLogType))
-            renderPage()
+            scope.launch {
+                val rawEntries = logRepository.getLogEntries(currentLogType)
+                val displayStrings = if (currentLogType == "batch_success") {
+                    flattenBatchEntries(rawEntries)
+                } else {
+                    formatLogEntries(rawEntries)
+                }
+                logPaginator.setData(displayStrings)
+                renderPage()
+            }
         }
 
         controlsContainer.visibility = View.VISIBLE
@@ -89,7 +108,7 @@ class LogViewer(private val ctx: Context) {
         }
 
         val title = when(logType) {
-            "cached" -> "Buffered Batch Uploads"
+            "batch_success" -> "Batch Log"
             "success" -> "Upload Log"
             "error" -> "Error Log"
             else -> "Log"
@@ -98,6 +117,32 @@ class LogViewer(private val ctx: Context) {
         builder.setTitle(title)
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    private fun flattenBatchEntries(batchEntries: List<LogEntry>): List<String> {
+        val allIndividualRecords = mutableListOf<String>()
+        val type = object : TypeToken<List<Map<String, Any>>>() {}.type
+        batchEntries.forEach { logEntry ->
+            try {
+                val records = gson.fromJson<List<Map<String, Any>>>(logEntry.message, type)
+                records.forEach { recordMap ->
+                    allIndividualRecords.add(gson.toJson(recordMap))
+                }
+            } catch (e: Exception) { /* ignore malformed */ }
+        }
+        return allIndividualRecords
+    }
+
+    private fun formatLogEntries(entries: List<LogEntry>): List<String> {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return entries.map { log ->
+            val timestamp = dateFormat.format(Date(log.timestamp))
+            when (log.type) {
+                UploadLogger.TYPE_SUCCESS -> "$timestamp|${log.sizeBytes}|${log.message}"
+                UploadLogger.TYPE_ERROR -> "$timestamp|${log.message}"
+                else -> ""
+            }
+        }
     }
 
     private fun copyCurrentPage() {
