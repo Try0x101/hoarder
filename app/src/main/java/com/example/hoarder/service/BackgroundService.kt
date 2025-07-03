@@ -151,7 +151,9 @@ class BackgroundService: Service(){
             while (isInitialized.get()) {
                 try {
                     delay(24 * 60 * 60 * 1000L) // 24 hours
-                    deltaManager.cleanupOldRecords(7)
+                    withContext(Dispatchers.IO) {
+                        deltaManager.cleanupOldRecords(7)
+                    }
                 } catch (e: Exception) {
                     // Cleanup error, continue
                 }

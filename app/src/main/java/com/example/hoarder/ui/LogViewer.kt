@@ -7,11 +7,15 @@ import android.content.Context
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.hoarder.R
 import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
 import com.example.hoarder.ui.dialogs.log.LogPaginator
@@ -31,12 +35,13 @@ class LogViewer(private val ctx: Context) {
     private val logEntryFormatter = LogEntryFormatter(gson)
     private val logPaginator = LogPaginator()
     private var currentLogType: String = ""
+    private var noDataView: TextView? = null
 
     fun showLogDialog(logType: String) {
         currentLogType = logType
         val builder = AlertDialog.Builder(ctx, R.style.AlertDialogTheme)
         val view = LayoutInflater.from(ctx).inflate(R.layout.dialog_log_viewer, null)
-        val container = view.findViewById<LinearLayout>(R.id.logViewerContainer)
+        val recyclerView = view.findViewById<RecyclerView>(R.id.logRecyclerView)
         val controlsContainer = view.findViewById<LinearLayout>(R.id.controlsContainer)
         val prevButton = view.findViewById<Button>(R.id.prevButton)
         val nextButton = view.findViewById<Button>(R.id.nextButton)
@@ -45,41 +50,15 @@ class LogViewer(private val ctx: Context) {
         val refreshButton = view.findViewById<Button>(R.id.refreshButton)
         builder.setView(view)
 
+        val logAdapter = LogAdapter(emptyList())
+        recyclerView.layoutManager = LinearLayoutManager(ctx)
+        recyclerView.adapter = logAdapter
+
         fun renderPage() {
-            container.removeAllViews()
             val pageEntries = logPaginator.getCurrentPageEntries()
-
-            if (pageEntries.isNotEmpty()) {
-                pageEntries.forEachIndexed { index, entry ->
-                    try {
-                        val formatted = logEntryFormatter.formatLogEntry(logType, entry)
-                        val header = TextView(ctx).apply {
-                            text = formatted.header
-                            textSize = 16f
-                            setTypeface(null, Typeface.BOLD)
-                            setTextColor(ContextCompat.getColor(ctx, R.color.amoled_white))
-                            setPadding(0, if (index > 0) 24 else 0, 0, 8)
-                        }
-                        container.addView(header)
-
-                        val content = TextView(ctx).apply {
-                            text = formatted.content
-                            textSize = 12f
-                            typeface = Typeface.MONOSPACE
-                            setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
-                            setOnLongClickListener {
-                                copyToClipboard("Hoarder Log Record", formatted.copyText)
-                                true
-                            }
-                        }
-                        container.addView(content)
-                    } catch (e: Exception) {
-                        showErrorView(container, "Error displaying entry: ${e.message}")
-                    }
-                }
-            } else {
-                showNoDataView(container)
-            }
+            updateNoDataView(view as ViewGroup, pageEntries.isEmpty())
+            recyclerView.visibility = if (pageEntries.isEmpty()) View.GONE else View.VISIBLE
+            logAdapter.updateData(pageEntries)
             updatePaginationControls(prevButton, nextButton, pageIndicator, copyPageButton, pageEntries.isNotEmpty())
         }
 
@@ -88,7 +67,7 @@ class LogViewer(private val ctx: Context) {
             renderPage()
         }
 
-        controlsContainer.visibility = android.view.View.VISIBLE
+        controlsContainer.visibility = View.VISIBLE
         refreshLogs()
 
         prevButton.setOnClickListener {
@@ -146,25 +125,18 @@ class LogViewer(private val ctx: Context) {
         }
     }
 
-    private fun showErrorView(container: LinearLayout, message: String) {
-        val errorView = TextView(ctx).apply {
-            text = message
-            textSize = 12f
-            setTextColor(ContextCompat.getColor(ctx, R.color.amoled_red))
-            setPadding(0, 16, 0, 16)
+    private fun updateNoDataView(parent: ViewGroup, show: Boolean) {
+        if (noDataView == null) {
+            noDataView = TextView(ctx).apply {
+                text = "No logs found for this page."
+                textSize = 14f
+                setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
+                gravity = Gravity.CENTER
+                setPadding(0, 50, 0, 50)
+            }
+            parent.addView(noDataView, 1)
         }
-        container.addView(errorView)
-    }
-
-    private fun showNoDataView(container: LinearLayout) {
-        val noDataView = TextView(ctx).apply {
-            text = "No logs found for this page."
-            textSize = 14f
-            setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
-            gravity = Gravity.CENTER
-            setPadding(0, 50, 0, 0)
-        }
-        container.addView(noDataView)
+        noDataView?.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     private fun updatePaginationControls(prevButton: Button, nextButton: Button, pageIndicator: TextView, copyPageButton: Button, hasData: Boolean) {
@@ -172,5 +144,63 @@ class LogViewer(private val ctx: Context) {
         prevButton.isEnabled = logPaginator.hasPrevPage()
         nextButton.isEnabled = logPaginator.hasNextPage()
         copyPageButton.isEnabled = hasData
+    }
+
+    private inner class LogAdapter(private var entries: List<String>) : RecyclerView.Adapter<LogAdapter.LogViewHolder>() {
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LogViewHolder {
+            val container = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT,
+                    RecyclerView.LayoutParams.WRAP_CONTENT
+                )
+            }
+            return LogViewHolder(container)
+        }
+
+        override fun onBindViewHolder(holder: LogViewHolder, position: Int) {
+            holder.bind(entries[position], position)
+        }
+
+        override fun getItemCount(): Int = entries.size
+
+        fun updateData(newEntries: List<String>) {
+            entries = newEntries
+            notifyDataSetChanged()
+        }
+
+        private inner class LogViewHolder(itemView: LinearLayout) : RecyclerView.ViewHolder(itemView) {
+            private val header: TextView = TextView(ctx).apply {
+                textSize = 16f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(ContextCompat.getColor(ctx, R.color.amoled_white))
+                setPadding(0, 0, 0, 8)
+                itemView.addView(this)
+            }
+
+            private val content: TextView = TextView(ctx).apply {
+                textSize = 12f
+                typeface = Typeface.MONOSPACE
+                setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
+                itemView.addView(this)
+            }
+
+            fun bind(entry: String, position: Int) {
+                (itemView.layoutParams as? RecyclerView.LayoutParams)?.topMargin = if (position > 0) 24 else 0
+                try {
+                    val formatted = logEntryFormatter.formatLogEntry(currentLogType, entry)
+                    header.text = formatted.header
+                    content.text = formatted.content
+                    itemView.setOnLongClickListener {
+                        copyToClipboard("Hoarder Log Record", formatted.copyText)
+                        true
+                    }
+                } catch (e: Exception) {
+                    header.text = "Format Error"
+                    content.text = e.message ?: "Could not display entry."
+                }
+            }
+        }
     }
 }

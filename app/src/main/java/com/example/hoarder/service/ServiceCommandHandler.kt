@@ -7,7 +7,9 @@ import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.processing.DeltaManager
 import com.example.hoarder.sensors.DataCollector
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ServiceCommandHandler(
@@ -101,7 +103,9 @@ class ServiceCommandHandler(
     private fun handleGetDbStats() {
         serviceScope.launch {
             try {
-                val pendingCount = deltaManager.getPendingRecordsCount()
+                val pendingCount = withContext(Dispatchers.IO) {
+                    deltaManager.getPendingRecordsCount()
+                }
                 LocalBroadcastManager.getInstance(context)
                     .sendBroadcast(Intent("com.example.hoarder.DB_STATS_UPDATE").apply {
                         putExtra("pendingRecords", pendingCount)
@@ -115,7 +119,9 @@ class ServiceCommandHandler(
     private fun handleCleanupOldRecords() {
         serviceScope.launch {
             try {
-                deltaManager.cleanupOldRecords(7)
+                withContext(Dispatchers.IO) {
+                    deltaManager.cleanupOldRecords(7)
+                }
             } catch (e: Exception) {
                 // Error during cleanup
             }

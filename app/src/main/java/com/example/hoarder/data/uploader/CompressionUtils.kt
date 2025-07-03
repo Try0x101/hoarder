@@ -16,11 +16,8 @@ data class CompressionResult(
 
 object CompressionUtils {
 
-    private const val NO_COMPRESSION_THRESHOLD = 35
-    private const val FAST_COMPRESSION_THRESHOLD = 75
-
-    private const val FAST_COMPRESSION_LEVEL = Deflater.BEST_SPEED
-    private const val HEAVY_COMPRESSION_LEVEL = Deflater.BEST_COMPRESSION
+    private const val NO_COMPRESSION_THRESHOLD = 25
+    private const val COMPRESSION_LEVEL = Deflater.BEST_COMPRESSION
 
     fun compressData(jsonData: String): CompressionResult {
         val originalBytes = jsonData.toByteArray(StandardCharsets.UTF_8)
@@ -37,23 +34,18 @@ object CompressionUtils {
                     wasCompressed = false
                 )
             }
-            originalSize < FAST_COMPRESSION_THRESHOLD -> {
-                compressWithAdaptiveLevel(originalBytes, originalSize, FAST_COMPRESSION_LEVEL, "deflate-fast")
-            }
             else -> {
-                compressWithAdaptiveLevel(originalBytes, originalSize, HEAVY_COMPRESSION_LEVEL, "deflate-best")
+                compressWithBestLevel(originalBytes, originalSize)
             }
         }
     }
 
-    private fun compressWithAdaptiveLevel(
+    private fun compressWithBestLevel(
         originalBytes: ByteArray,
-        originalSize: Int,
-        compressionLevel: Int,
-        methodName: String
+        originalSize: Int
     ): CompressionResult {
         return try {
-            val compressedBytes = compressWithZlib(originalBytes, compressionLevel)
+            val compressedBytes = compressWithZlib(originalBytes, COMPRESSION_LEVEL)
             val compressedSize = compressedBytes.size
             val compressionRatio = compressedSize.toFloat() / originalSize.toFloat()
 
@@ -72,7 +64,7 @@ object CompressionUtils {
                     originalSize = originalSize,
                     compressedSize = compressedSize,
                     compressionRatio = compressionRatio,
-                    method = methodName,
+                    method = "deflate-best",
                     wasCompressed = true
                 )
             }

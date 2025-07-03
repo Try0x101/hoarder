@@ -135,7 +135,9 @@ class DataCollector(
     private fun processCollectedData(json: String) {
         collectionScope.launch {
             try {
-                deltaManager.get()?.processTelemetryData(json)
+                withContext(Dispatchers.IO) {
+                    deltaManager.get()?.processTelemetryData(json)
+                }
             } finally {
                 h.post {
                     if (ca.get()) callback(json)

@@ -12,8 +12,10 @@ import com.example.hoarder.transport.buffer.UploadLogger
 import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.transport.queue.UploadQueue
 import com.example.hoarder.transport.queue.UploadScheduler
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
+import com.google.gson.reflect.TypeToken
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -27,8 +29,9 @@ class DataUploader(
     private var ip = ""
     private var port = 5000
     private val uploadQueue = UploadQueue()
-    private val lu = AtomicReference<String?>(null)
-    private val g = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
+    private val lastUploadedMap = AtomicReference<Map<String, Any>?>(null)
+    private val g: Gson = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
+    private val mapType = object : TypeToken<Map<String, Any>>() {}.type
     private val tb = AtomicLong(sp.getLong("totalUploadedBytes", 0L))
     private var ls: String? = null
     private var lm2: Pair<String, String>? = null
@@ -42,20 +45,40 @@ class DataUploader(
 
     private fun processQueue() {
         if (ua.get() && ip.isNotBlank() && port > 0) {
-            val (dataToProcess, isForcedUpload) = uploadQueue.getNextItem()
-            if (dataToProcess != null) {
+            val (dataToProcessString, isForcedUpload) = uploadQueue.getNextItem()
+            if (dataToProcessString != null) {
                 if (isForcedUpload) {
-                    lu.set(null)
-                    processUpload(dataToProcess, false)
+                    lastUploadedMap.set(null)
+                    processUpload(dataToProcessString, false)
+                    return
+                }
+
+                val currentDataMap: Map<String, Any> = g.fromJson(dataToProcessString, mapType)
+                val previousDataMap = lastUploadedMap.get()
+
+                if (previousDataMap == null) {
+                    lastUploadedMap.set(currentDataMap)
+                    processUpload(dataToProcessString, false)
+                    return
+                }
+
+                val deltaMap = mutableMapOf<String, Any>()
+                currentDataMap["id"]?.let { deltaMap["id"] = it }
+
+                for ((key, value) in currentDataMap) {
+                    if (previousDataMap[key] != value) {
+                        deltaMap[key] = value
+                    }
+                }
+
+                if (deltaMap.size <= 1 && deltaMap.containsKey("id")) {
+                    h.post {
+                        notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), dataBuffer.getBufferedDataSize())
+                    }
                 } else {
-                    val (d, delta) = DeltaComputer.generateJsonDelta(g, lu.get(), dataToProcess)
-                    if (d != null) {
-                        lu.set(dataToProcess)
-                        processUpload(d, delta)
-                    } else {
-                        h.post {
-                            notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), dataBuffer.getBufferedDataSize())
-                        }
+                    val deltaJson = g.toJson(deltaMap)
+                    if (processUpload(deltaJson, true)) {
+                        lastUploadedMap.set(currentDataMap)
                     }
                 }
             }
@@ -90,7 +113,7 @@ class DataUploader(
 
     fun start() {
         ua.set(true)
-        lu.set(null)
+        lastUploadedMap.set(null)
         uploadQueue.clear()
         h.post {
             notifyStatus("Connecting", "Attempting to connect...", tb.get(), dataBuffer.getBufferedDataSize())
@@ -106,7 +129,7 @@ class DataUploader(
 
     fun resetCounter() {
         tb.set(0L)
-        lu.set(null)
+        lastUploadedMap.set(null)
         uploadQueue.clear()
         sp.edit().putLong("totalUploadedBytes", 0L).apply()
         h.post {
@@ -129,14 +152,14 @@ class DataUploader(
         scheduler.cleanup()
     }
 
-    private fun processUpload(jsonString: String, isDelta: Boolean) {
+    private fun processUpload(jsonString: String, isDelta: Boolean): Boolean {
         if (!NetUtils.isNetworkAvailable(ctx)) {
             dataBuffer.saveToBuffer(jsonString)
             uploadLogger.addErrorLog("Internet not accessible")
             h.post {
                 notifyStatus("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), dataBuffer.getBufferedDataSize())
             }
-            return
+            return false
         }
 
         val result = networkUploader.uploadSingle(jsonString, isDelta, ip, port)
@@ -149,7 +172,7 @@ class DataUploader(
                 uploadLogger.addSuccessLog(jsonString, result.uploadedBytes)
                 val statusText = when {
                     isDelta -> "OK (Delta)"
-                    !isDelta && lu.get() == null -> "OK (Full Init)"
+                    !isDelta && lastUploadedMap.get() == null -> "OK (Full Init)"
                     else -> "OK (Full)"
                 }
                 notifyStatus(statusText, "Uploaded successfully.", tb.get(), dataBuffer.getBufferedDataSize(), result.uploadedBytes)
@@ -159,6 +182,7 @@ class DataUploader(
                 notifyStatus(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), dataBuffer.getBufferedDataSize())
             }
         }
+        return result.success
     }
 
     private fun processBatchUpload(batch: List<String>) {
