@@ -4,12 +4,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.data.DataUploader
-import com.example.hoarder.data.processing.DeltaManager
 import com.example.hoarder.sensors.DataCollector
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ServiceCommandHandler(
@@ -17,7 +13,6 @@ class ServiceCommandHandler(
     private val serviceScope: CoroutineScope,
     private val dataCollector: DataCollector,
     private val dataUploader: DataUploader,
-    private val deltaManager: DeltaManager,
     private val collectionActive: AtomicBoolean,
     private val uploadActive: AtomicBoolean,
     private val updateAppPreferences: (String, Any) -> Unit,
@@ -32,8 +27,6 @@ class ServiceCommandHandler(
             "com.example.hoarder.FORCE_UPLOAD" -> handleForceUpload(intent)
             "com.example.hoarder.SEND_BUFFER" -> handleSendBuffer()
             "com.example.hoarder.GET_STATE" -> broadcastStateUpdate()
-            "com.example.hoarder.GET_DB_STATS" -> handleGetDbStats()
-            "com.example.hoarder.CLEANUP_OLD_RECORDS" -> handleCleanupOldRecords()
         }
     }
 
@@ -97,34 +90,6 @@ class ServiceCommandHandler(
     private fun handleSendBuffer() {
         if (uploadActive.get()) {
             dataUploader.forceSendBuffer()
-        }
-    }
-
-    private fun handleGetDbStats() {
-        serviceScope.launch {
-            try {
-                val pendingCount = withContext(Dispatchers.IO) {
-                    deltaManager.getPendingRecordsCount()
-                }
-                LocalBroadcastManager.getInstance(context)
-                    .sendBroadcast(Intent("com.example.hoarder.DB_STATS_UPDATE").apply {
-                        putExtra("pendingRecords", pendingCount)
-                    })
-            } catch (e: Exception) {
-                // Error getting stats
-            }
-        }
-    }
-
-    private fun handleCleanupOldRecords() {
-        serviceScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    deltaManager.cleanupOldRecords(7)
-                }
-            } catch (e: Exception) {
-                // Error during cleanup
-            }
         }
     }
 }

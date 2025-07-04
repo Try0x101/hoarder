@@ -19,6 +19,8 @@ class UploadScheduler(
             executor.submit {
                 try {
                     task()
+                } catch (e: Exception) {
+                    // Catch exceptions to prevent silent failures of the scheduler
                 } finally {
                     if (isActive.get()) {
                         handler.postDelayed(this, 1000L)
@@ -44,5 +46,17 @@ class UploadScheduler(
     fun cleanup() {
         stop()
         executor.shutdownNow()
+    }
+
+    fun submitOneTimeTask(oneTimeTask: () -> Unit) {
+        if (isActive.get()) {
+            executor.submit {
+                try {
+                    oneTimeTask()
+                } catch (e: Exception) {
+                    // Catch exceptions from one-time tasks
+                }
+            }
+        }
     }
 }

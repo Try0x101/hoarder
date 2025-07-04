@@ -22,7 +22,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.DataUploader
-import com.example.hoarder.data.processing.DeltaManager
 import com.example.hoarder.sensors.DataCollector
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -31,7 +30,6 @@ class BackgroundService: Service(){
     private lateinit var h: Handler
     private lateinit var dataCollector: DataCollector
     private lateinit var dataUploader: DataUploader
-    private lateinit var deltaManager: DeltaManager
     private lateinit var servicePrefs: SharedPreferences
     private lateinit var appPrefs: SharedPreferences
     private lateinit var commandHandler: ServiceCommandHandler
@@ -56,7 +54,6 @@ class BackgroundService: Service(){
         appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
 
         dataUploader = DataUploader(this, h, servicePrefs)
-        deltaManager = DeltaManager(this, dataUploader)
 
         dataCollector = DataCollector(this, h) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
@@ -69,11 +66,11 @@ class BackgroundService: Service(){
         }
 
         commandHandler = ServiceCommandHandler(
-            this, serviceScope, dataCollector, dataUploader, deltaManager,
+            this, serviceScope, dataCollector, dataUploader,
             ca, ua, this::updateAppPreferences, this::broadcastStateUpdate
         )
 
-        dataCollector.setDeltaManager(deltaManager)
+        dataCollector.setDataUploader(dataUploader)
 
         registerServiceReceiver()
     }
@@ -88,8 +85,6 @@ class BackgroundService: Service(){
                 addAction("com.example.hoarder.FORCE_UPLOAD")
                 addAction("com.example.hoarder.SEND_BUFFER")
                 addAction("com.example.hoarder.GET_STATE")
-                addAction("com.example.hoarder.GET_DB_STATS")
-                addAction("com.example.hoarder.CLEANUP_OLD_RECORDS")
             })
         }
     }
@@ -152,7 +147,7 @@ class BackgroundService: Service(){
                 try {
                     delay(24 * 60 * 60 * 1000L) // 24 hours
                     withContext(Dispatchers.IO) {
-                        deltaManager.cleanupOldRecords(7)
+                        dataUploader.cleanup()
                     }
                 } catch (e: Exception) {
                     // Cleanup error, continue
@@ -201,7 +196,6 @@ class BackgroundService: Service(){
         try {
             dataCollector.cleanup()
             dataUploader.cleanup()
-            deltaManager.stop()
             serviceScope.cancel()
         } catch (e: Exception) {
             // Cleanup error

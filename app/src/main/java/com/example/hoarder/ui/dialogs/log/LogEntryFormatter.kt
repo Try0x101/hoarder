@@ -33,9 +33,26 @@ class LogEntryFormatter(private val gson: Gson) {
     private fun formatBatchRecordEntry(entry: LogEntry): FormattedLogEntry {
         return try {
             val jsonObject = gson.fromJson(entry.message, Map::class.java) as? Map<String, Any>
-            val timestamp = jsonObject?.get("ts")
+            val timestampStr: String
 
-            val timestampStr = formatSpecialTimestamp(timestamp)
+            when {
+                jsonObject?.containsKey("bts") == true -> {
+                    val bts = (jsonObject["bts"] as? Number)?.toLong()
+                    timestampStr = if (bts != null) {
+                        dateFormat.format(Date(bts * 1000))
+                    } else {
+                        "Invalid Base TS"
+                    }
+                }
+                jsonObject?.containsKey("tso") == true -> {
+                    val tso = (jsonObject["tso"] as? Number)?.toLong()
+                    timestampStr = if (tso != null) "+${tso}s" else "Invalid Offset"
+                }
+                else -> {
+                    timestampStr = "No Timestamp"
+                }
+            }
+
             val header = "[${timestampStr}] [${ByteFormatter.format(entry.sizeBytes)}]"
             val prettyJson = gson.toJson(JsonParser.parseString(entry.message))
 
@@ -60,25 +77,5 @@ class LogEntryFormatter(private val gson: Gson) {
         val timestamp = dateFormat.format(Date(entry.timestamp))
         val header = "[${timestamp}]"
         return FormattedLogEntry(header, entry.message, entry.message)
-    }
-
-    private fun formatSpecialTimestamp(timestamp: Any?): String {
-        return try {
-            val tsLong = when (timestamp) {
-                is String -> timestamp.toLongOrNull()
-                is Number -> timestamp.toLong()
-                else -> null
-            }
-
-            if (tsLong != null) {
-                val fixedEpoch = 1719705600L
-                val date = Date((tsLong + fixedEpoch) * 1000)
-                dateFormat.format(date)
-            } else {
-                "No Timestamp"
-            }
-        } catch (e: Exception) {
-            "Invalid Timestamp"
-        }
     }
 }

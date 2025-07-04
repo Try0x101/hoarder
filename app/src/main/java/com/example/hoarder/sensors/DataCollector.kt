@@ -7,7 +7,7 @@ import android.os.Handler
 import android.provider.Settings
 import com.example.hoarder.collection.source.BatteryCollector
 import com.example.hoarder.collection.source.LocationCollector
-import com.example.hoarder.data.processing.DeltaManager
+import com.example.hoarder.data.DataUploader
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import kotlinx.coroutines.*
@@ -38,7 +38,7 @@ class DataCollector(
     private var lastPrecisionUpdate = 0L
     private val PRECISION_CACHE_TTL = 10000L
 
-    private val deltaManager = AtomicReference<DeltaManager?>(null)
+    private val dataUploader = AtomicReference<DataUploader?>(null)
     private val collectionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val sensorMgr = SensorManager(ctx, h)
@@ -78,7 +78,6 @@ class DataCollector(
     fun stop() {
         ca.set(false)
         h.removeCallbacks(dr)
-        deltaManager.get()?.stop()
     }
 
     fun cleanup() {
@@ -89,9 +88,8 @@ class DataCollector(
         isInitialized.set(false)
     }
 
-    fun setDeltaManager(manager: DeltaManager) {
-        deltaManager.set(manager)
-        manager.start(deviceId)
+    fun setDataUploader(uploader: DataUploader) {
+        dataUploader.set(uploader)
     }
 
     private fun updatePrecisionCache() {
@@ -133,16 +131,9 @@ class DataCollector(
     }
 
     private fun processCollectedData(json: String) {
-        collectionScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    deltaManager.get()?.processTelemetryData(json)
-                }
-            } finally {
-                h.post {
-                    if (ca.get()) callback(json)
-                }
-            }
+        dataUploader.get()?.queueData(json)
+        h.post {
+            if (ca.get()) callback(json)
         }
     }
 
