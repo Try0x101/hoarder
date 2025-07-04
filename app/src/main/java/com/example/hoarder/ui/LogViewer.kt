@@ -14,29 +14,20 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.hoarder.R
-import com.example.hoarder.data.models.LogEntry
-import com.example.hoarder.transport.buffer.UploadLogger
+import com.example.hoarder.data.storage.db.LogEntry
 import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
 import com.example.hoarder.ui.dialogs.log.LogPaginator
 import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.utils.ToastHelper
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
-import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
 
-class LogViewer(
-    private val ctx: Context,
-    private val logRepository: LogRepository
-) {
-    private val scope = CoroutineScope(Dispatchers.Main)
+class LogViewer(private val ctx: Context, private val logRepository: LogRepository) {
     private val gson by lazy {
         GsonBuilder()
             .setPrettyPrinting()
@@ -47,6 +38,15 @@ class LogViewer(
     private val logPaginator = LogPaginator()
     private var currentLogType: String = ""
     private var noDataView: TextView? = null
+    private lateinit var activity: MainActivity
+
+    init {
+        if (ctx is MainActivity) {
+            activity = ctx
+        } else {
+            throw IllegalStateException("LogViewer must be initialized with MainActivity context")
+        }
+    }
 
     fun showLogDialog(logType: String) {
         currentLogType = logType
@@ -74,14 +74,8 @@ class LogViewer(
         }
 
         fun refreshLogs() {
-            scope.launch {
-                val rawEntries = logRepository.getLogEntries(currentLogType)
-                val displayStrings = if (currentLogType == "batch_success") {
-                    flattenBatchEntries(rawEntries)
-                } else {
-                    formatLogEntries(rawEntries)
-                }
-                logPaginator.setData(displayStrings)
+            activity.lifecycleScope.launch {
+                logPaginator.setData(logRepository.getLogEntries(currentLogType))
                 renderPage()
             }
         }
@@ -108,7 +102,7 @@ class LogViewer(
         }
 
         val title = when(logType) {
-            "batch_success" -> "Batch Log"
+            "cached" -> "Batch Upload Log"
             "success" -> "Upload Log"
             "error" -> "Error Log"
             else -> "Log"
@@ -119,37 +113,11 @@ class LogViewer(
             .show()
     }
 
-    private fun flattenBatchEntries(batchEntries: List<LogEntry>): List<String> {
-        val allIndividualRecords = mutableListOf<String>()
-        val type = object : TypeToken<List<Map<String, Any>>>() {}.type
-        batchEntries.forEach { logEntry ->
-            try {
-                val records = gson.fromJson<List<Map<String, Any>>>(logEntry.message, type)
-                records.forEach { recordMap ->
-                    allIndividualRecords.add(gson.toJson(recordMap))
-                }
-            } catch (e: Exception) { /* ignore malformed */ }
-        }
-        return allIndividualRecords
-    }
-
-    private fun formatLogEntries(entries: List<LogEntry>): List<String> {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        return entries.map { log ->
-            val timestamp = dateFormat.format(Date(log.timestamp))
-            when (log.type) {
-                UploadLogger.TYPE_SUCCESS -> "$timestamp|${log.sizeBytes}|${log.message}"
-                UploadLogger.TYPE_ERROR -> "$timestamp|${log.message}"
-                else -> ""
-            }
-        }
-    }
-
     private fun copyCurrentPage() {
         try {
             val pageEntries = logPaginator.getCurrentPageEntries()
             val allPageJson = pageEntries.joinToString(separator = ",\n\n") { entry ->
-                logEntryFormatter.formatLogEntry(currentLogType, entry).copyText
+                logEntryFormatter.formatLogEntry(entry).copyText
             }
 
             copyToClipboard("Hoarder Page Log", allPageJson)
@@ -173,7 +141,7 @@ class LogViewer(
     private fun updateNoDataView(parent: ViewGroup, show: Boolean) {
         if (noDataView == null) {
             noDataView = TextView(ctx).apply {
-                text = "No logs found for this page."
+                text = "No logs found."
                 textSize = 14f
                 setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
                 gravity = Gravity.CENTER
@@ -191,7 +159,7 @@ class LogViewer(
         copyPageButton.isEnabled = hasData
     }
 
-    private inner class LogAdapter(private var entries: List<String>) : RecyclerView.Adapter<LogAdapter.LogViewHolder>() {
+    private inner class LogAdapter(private var entries: List<LogEntry>) : RecyclerView.Adapter<LogAdapter.LogViewHolder>() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LogViewHolder {
             val container = LinearLayout(ctx).apply {
@@ -210,7 +178,7 @@ class LogViewer(
 
         override fun getItemCount(): Int = entries.size
 
-        fun updateData(newEntries: List<String>) {
+        fun updateData(newEntries: List<LogEntry>) {
             entries = newEntries
             notifyDataSetChanged()
         }
@@ -231,10 +199,10 @@ class LogViewer(
                 itemView.addView(this)
             }
 
-            fun bind(entry: String, position: Int) {
+            fun bind(entry: LogEntry, position: Int) {
                 (itemView.layoutParams as? RecyclerView.LayoutParams)?.topMargin = if (position > 0) 24 else 0
                 try {
-                    val formatted = logEntryFormatter.formatLogEntry(currentLogType, entry)
+                    val formatted = logEntryFormatter.formatLogEntry(entry)
                     header.text = formatted.header
                     content.text = formatted.content
                     itemView.setOnLongClickListener {

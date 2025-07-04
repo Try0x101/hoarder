@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { Prefs(this) }
     private val permHandler by lazy { PermHandler(this, h) }
     private val ui by lazy { UIHelper(this, prefs) }
-    private val viewModel: MainViewModel by viewModels()
+    internal val viewModel: MainViewModel by viewModels()
 
     private var lastData: String? = null
 
@@ -89,6 +89,15 @@ class MainActivity : AppCompatActivity() {
                 viewModel.uploadMessage.value,
                 it,
                 viewModel.bufferedDataSize.value ?: 0L
+            )
+        }
+        viewModel.bufferedDataSize.observe(this) {
+            ui.updateUploadUI(
+                viewModel.isUploadEnabled.value ?: false,
+                viewModel.uploadStatus.value,
+                viewModel.uploadMessage.value,
+                viewModel.totalUploadedBytes.value,
+                it
             )
         }
     }

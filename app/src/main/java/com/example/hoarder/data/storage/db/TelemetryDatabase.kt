@@ -3,39 +3,23 @@ package com.example.hoarder.data.storage.db
 import android.content.Context
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.hoarder.data.models.BufferedPayload
-import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.data.models.TelemetryRecord
 
-@Dao
-interface LogDao {
-    @Insert
-    fun insertLog(log: LogEntry)
+@Entity(tableName = "log_entries")
+data class LogEntry(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long,
+    val type: String,
+    val message: String,
+    val sizeBytes: Long
+)
 
-    @Query("SELECT * FROM log_entries WHERE type = :logType ORDER BY timestamp DESC LIMIT :limit")
-    fun getLogsByType(logType: String, limit: Int): List<LogEntry>
-
-    @Query("DELETE FROM log_entries")
-    fun clearAllLogs()
-
-    @Insert
-    fun insertBufferedPayload(payload: BufferedPayload)
-
-    @Query("SELECT * FROM buffered_payloads ORDER BY timestamp ASC")
-    fun getBufferedPayloads(): List<BufferedPayload>
-
-    @Query("DELETE FROM buffered_payloads WHERE id IN (:ids)")
-    fun deleteBufferedPayloadsByIds(ids: List<Long>)
-
-    @Query("SELECT COUNT(*) FROM buffered_payloads")
-    fun getBufferedPayloadsCount(): Long
-
-    @Query("DELETE FROM buffered_payloads")
-    fun clearAllBufferedPayloads()
-
-    @Query("DELETE FROM buffered_payloads WHERE id IN (SELECT id FROM buffered_payloads ORDER BY timestamp ASC LIMIT :count)")
-    fun deleteOldestBufferedPayloads(count: Int)
-}
+@Entity(tableName = "buffered_payloads")
+data class BufferedPayload(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long,
+    val payload: String
+)
 
 @Dao
 interface TelemetryDao {
@@ -61,9 +45,42 @@ interface TelemetryDao {
     fun getChangedRecords(since: Long): List<TelemetryRecord>
 }
 
+@Dao
+interface LogDao {
+    @Insert
+    fun insertLog(logEntry: LogEntry)
+
+    @Insert
+    fun insertPayload(payload: BufferedPayload)
+
+    @Query("SELECT * FROM buffered_payloads ORDER BY timestamp ASC")
+    fun getAllPayloads(): List<BufferedPayload>
+
+    @Query("DELETE FROM buffered_payloads WHERE id IN (:ids)")
+    fun deletePayloadsById(ids: List<Long>)
+
+    @Query("SELECT SUM(LENGTH(payload)) FROM buffered_payloads")
+    fun getBufferedPayloadsSize(): Long?
+
+    @Query("DELETE FROM buffered_payloads WHERE timestamp < :cutoffTime")
+    fun deleteOldPayloads(cutoffTime: Long)
+
+    @Query("SELECT * FROM log_entries WHERE type = :logType ORDER BY timestamp DESC LIMIT 500")
+    fun getLogsByType(logType: String): List<LogEntry>
+
+    @Query("SELECT * FROM log_entries WHERE type = 'BATCH_RECORD' ORDER BY timestamp DESC LIMIT 500")
+    fun getBatchRecords(): List<LogEntry>
+
+    @Query("DELETE FROM log_entries")
+    fun clearAllLogs()
+
+    @Query("DELETE FROM buffered_payloads")
+    fun clearBuffer()
+}
+
 @Database(
     entities = [TelemetryRecord::class, LogEntry::class, BufferedPayload::class],
-    version = 2,
+    version = 3, // <-- Change this from 2 to 3
     exportSchema = false
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -90,7 +107,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
                             db.execSQL("CREATE INDEX IF NOT EXISTS index_buffered_payloads_timestamp ON buffered_payloads(timestamp)")
                         }
                     })
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // This handles the schema change
                     .build()
                 INSTANCE = instance
                 instance

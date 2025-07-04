@@ -52,9 +52,10 @@ class BackgroundService: Service(){
     override fun onCreate(){
         super.onCreate()
         h = Handler(Looper.getMainLooper())
+        servicePrefs = getSharedPreferences("HoarderServicePrefs", MODE_PRIVATE)
         appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
 
-        dataUploader = DataUploader(this, h)
+        dataUploader = DataUploader(this, h, servicePrefs)
         deltaManager = DeltaManager(this, dataUploader)
 
         dataCollector = DataCollector(this, h) { json ->

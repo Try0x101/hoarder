@@ -3,7 +3,6 @@ package com.example.hoarder.transport.queue
 import android.os.Handler
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicBoolean
 
 class UploadScheduler(
@@ -11,16 +10,19 @@ class UploadScheduler(
     private val task: () -> Unit
 ) {
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
-    private var currentUploadTask: Future<*>? = null
     private val isActive = AtomicBoolean(false)
 
     private val runnable = object : Runnable {
         override fun run() {
-            if (isActive.get()) {
-                currentUploadTask?.cancel(false)
-                currentUploadTask = executor.submit(task)
-                if (isActive.get()) {
-                    handler.postDelayed(this, 1000L)
+            if (!isActive.get()) return
+
+            executor.submit {
+                try {
+                    task()
+                } finally {
+                    if (isActive.get()) {
+                        handler.postDelayed(this, 1000L)
+                    }
                 }
             }
         }
@@ -28,6 +30,7 @@ class UploadScheduler(
 
     fun start() {
         if (isActive.compareAndSet(false, true)) {
+            handler.removeCallbacks(runnable)
             handler.post(runnable)
         }
     }
@@ -35,12 +38,11 @@ class UploadScheduler(
     fun stop() {
         if (isActive.compareAndSet(true, false)) {
             handler.removeCallbacks(runnable)
-            currentUploadTask?.cancel(true)
         }
     }
 
     fun cleanup() {
         stop()
-        executor.shutdown()
+        executor.shutdownNow()
     }
 }

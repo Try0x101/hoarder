@@ -1,5 +1,6 @@
 package com.example.hoarder.ui.dialogs.log
 
+import com.example.hoarder.data.storage.db.LogEntry
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -14,69 +15,54 @@ data class FormattedLogEntry(
 
 class LogEntryFormatter(private val gson: Gson) {
 
-    fun formatLogEntry(logType: String, entry: String): FormattedLogEntry {
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+    fun formatLogEntry(entry: LogEntry): FormattedLogEntry {
         return try {
-            when (logType) {
-                "success" -> formatSuccessEntry(entry)
-                "error" -> formatErrorEntry(entry)
-                "batch_success" -> formatIndividualRecord(entry)
-                else -> FormattedLogEntry("", entry, entry)
+            when (entry.type) {
+                "BATCH_RECORD" -> formatBatchRecordEntry(entry)
+                "SUCCESS" -> formatSuccessEntry(entry)
+                "ERROR" -> formatErrorEntry(entry)
+                else -> FormattedLogEntry("Unknown", entry.message, entry.message)
             }
         } catch (e: Exception) {
-            FormattedLogEntry("Error", "Error processing entry: ${e.message}", entry)
+            FormattedLogEntry("Error", "Error processing entry: ${e.message}", entry.message)
         }
     }
 
-    private fun formatIndividualRecord(entry: String): FormattedLogEntry {
+    private fun formatBatchRecordEntry(entry: LogEntry): FormattedLogEntry {
         return try {
-            val entrySize = entry.toByteArray(Charsets.UTF_8).size.toLong()
-            val jsonObject = gson.fromJson(entry, Map::class.java) as? Map<String, Any>
+            val jsonObject = gson.fromJson(entry.message, Map::class.java) as? Map<String, Any>
             val timestamp = jsonObject?.get("ts")
 
-            val timestampStr = formatTimestamp(timestamp)
-            val header = "[${timestampStr}] [${ByteFormatter.format(entrySize)}]"
-            val content = gson.toJson(JsonParser.parseString(entry))
+            val timestampStr = formatSpecialTimestamp(timestamp)
+            val header = "[${timestampStr}] [${ByteFormatter.format(entry.sizeBytes)}]"
+            val prettyJson = gson.toJson(JsonParser.parseString(entry.message))
 
-            FormattedLogEntry(header, content, entry)
+            FormattedLogEntry(header, prettyJson, prettyJson)
         } catch (e: Exception) {
-            FormattedLogEntry("Error", "Error formatting record: ${e.message}", entry)
+            FormattedLogEntry("Error", "Error formatting batch record: ${e.message}", entry.message)
         }
     }
 
-    private fun formatSuccessEntry(entry: String): FormattedLogEntry {
-        return try {
-            val parts = entry.split("|", limit = 3)
-            val timestamp = parts.getOrElse(0) { "Unknown" }
-            val size = parts.getOrElse(1) { "0" }.toLongOrNull() ?: 0
-            val json = parts.getOrElse(2) { "" }
-
-            val header = "[${timestamp}] [${ByteFormatter.format(size)}]"
-            val content = try {
-                gson.toJson(JsonParser.parseString(json))
-            } catch (e: Exception) {
-                json
-            }
-
-            FormattedLogEntry(header, content, json)
+    private fun formatSuccessEntry(entry: LogEntry): FormattedLogEntry {
+        val timestamp = dateFormat.format(Date(entry.timestamp))
+        val header = "[${timestamp}] [${ByteFormatter.format(entry.sizeBytes)}]"
+        val content = try {
+            gson.toJson(JsonParser.parseString(entry.message))
         } catch (e: Exception) {
-            FormattedLogEntry("Error", "Error formatting success entry: ${e.message}", entry)
+            entry.message
         }
+        return FormattedLogEntry(header, content, entry.message)
     }
 
-    private fun formatErrorEntry(entry: String): FormattedLogEntry {
-        return try {
-            val parts = entry.split("|", limit = 2)
-            val timestamp = parts.getOrElse(0) { "Unknown" }
-            val message = parts.getOrElse(1) { entry }
-
-            val header = "[${timestamp}]"
-            FormattedLogEntry(header, message, message)
-        } catch (e: Exception) {
-            FormattedLogEntry("Error", "Error formatting error entry: ${e.message}", entry)
-        }
+    private fun formatErrorEntry(entry: LogEntry): FormattedLogEntry {
+        val timestamp = dateFormat.format(Date(entry.timestamp))
+        val header = "[${timestamp}]"
+        return FormattedLogEntry(header, entry.message, entry.message)
     }
 
-    private fun formatTimestamp(timestamp: Any?): String {
+    private fun formatSpecialTimestamp(timestamp: Any?): String {
         return try {
             val tsLong = when (timestamp) {
                 is String -> timestamp.toLongOrNull()
@@ -87,13 +73,12 @@ class LogEntryFormatter(private val gson: Gson) {
             if (tsLong != null) {
                 val fixedEpoch = 1719705600L
                 val date = Date((tsLong + fixedEpoch) * 1000)
-                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 dateFormat.format(date)
             } else {
-                "Unknown"
+                "No Timestamp"
             }
         } catch (e: Exception) {
-            "Unknown"
+            "Invalid Timestamp"
         }
     }
 }
