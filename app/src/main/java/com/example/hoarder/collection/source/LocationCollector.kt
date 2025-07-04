@@ -35,22 +35,22 @@ class LocationCollector(private val sensorMgr: SensorManager) {
                 20 -> Triple(
                     (location.latitude * 10000).roundToInt() / 10000.0,
                     (location.longitude * 10000).roundToInt() / 10000.0,
-                    Math.max(20, (location.accuracy / 20).roundToInt() * 20)
+                    (location.accuracy / 20).roundToInt() * 20
                 )
                 100 -> Triple(
                     (location.latitude * 1000).roundToInt() / 1000.0,
                     (location.longitude * 1000).roundToInt() / 1000.0,
-                    Math.max(100, (location.accuracy / 100).roundToInt() * 100)
+                    (location.accuracy / 100).roundToInt() * 100
                 )
                 1000 -> Triple(
                     (location.latitude * 100).roundToInt() / 100.0,
                     (location.longitude * 100).roundToInt() / 100.0,
-                    Math.max(1000, (location.accuracy / 1000).roundToInt() * 1000)
+                    (location.accuracy / 1000).roundToInt() * 1000
                 )
                 10000 -> Triple(
                     (location.latitude * 10).roundToInt() / 10.0,
                     (location.longitude * 10).roundToInt() / 10.0,
-                    Math.max(10000, (location.accuracy / 10000).roundToInt() * 10000)
+                    (location.accuracy / 10000).roundToInt() * 10000
                 )
                 else -> Triple(
                     (location.latitude * 1000000.0).roundToInt() / 1000000.0,

@@ -1,6 +1,6 @@
 package com.example.hoarder.ui.dialogs.log
 
-import com.example.hoarder.data.storage.db.LogEntry
+import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -53,7 +53,7 @@ class LogEntryFormatter(private val gson: Gson) {
                 }
             }
 
-            val header = "[${timestampStr}] [${ByteFormatter.format(entry.sizeBytes)}]"
+            val header = "[${timestampStr}] [${ByteFormatter.format(entry.sizeBytes ?: 0L)}]"
             val prettyJson = gson.toJson(JsonParser.parseString(entry.message))
 
             FormattedLogEntry(header, prettyJson, prettyJson)
@@ -64,7 +64,7 @@ class LogEntryFormatter(private val gson: Gson) {
 
     private fun formatSuccessEntry(entry: LogEntry): FormattedLogEntry {
         val timestamp = dateFormat.format(Date(entry.timestamp))
-        val header = "[${timestamp}] [${ByteFormatter.format(entry.sizeBytes)}]"
+        val header = "[${timestamp}] [${ByteFormatter.format(entry.sizeBytes ?: 0L)}]"
         val content = try {
             gson.toJson(JsonParser.parseString(entry.message))
         } catch (e: Exception) {

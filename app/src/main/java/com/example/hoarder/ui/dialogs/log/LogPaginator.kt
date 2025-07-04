@@ -1,6 +1,6 @@
 package com.example.hoarder.ui.dialogs.log
 
-import com.example.hoarder.data.storage.db.LogEntry
+import com.example.hoarder.data.models.LogEntry
 import kotlin.math.ceil
 
 class LogPaginator(private val recordsPerPage: Int = 20) {

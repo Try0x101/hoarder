@@ -17,6 +17,7 @@ import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.dialogs.log.LogRepository
+import com.example.hoarder.ui.dialogs.server.ServerStatsManager
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.example.hoarder.utils.ToastHelper
 import com.google.gson.Gson
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
     private val logRepository by lazy { LogRepository(a, Gson()) }
+    private val serverStatsManager by lazy { ServerStatsManager(a) }
 
     fun showServerSettingsDialog() {
         val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
@@ -34,9 +36,20 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         val editText = view.findViewById<TextView>(R.id.serverIpPortEditText)
         editText.text = p.getServerAddress()
 
-        view.findViewById<TextView>(R.id.statsLastHour).text = "N/A"
-        view.findViewById<TextView>(R.id.statsLastDay).text = "N/A"
-        view.findViewById<TextView>(R.id.statsLast7Days).text = "N/A"
+        val statsLastHour = view.findViewById<TextView>(R.id.statsLastHour)
+        val statsLastDay = view.findViewById<TextView>(R.id.statsLastDay)
+        val statsLast7Days = view.findViewById<TextView>(R.id.statsLast7Days)
+
+        statsLastHour.text = "Calculating..."
+        statsLastDay.text = "Calculating..."
+        statsLast7Days.text = "Calculating..."
+
+        a.lifecycleScope.launch {
+            val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
+            statsLastHour.text = ByteFormatter.format(lastHour)
+            statsLastDay.text = ByteFormatter.format(lastDay)
+            statsLast7Days.text = ByteFormatter.format(last7Days)
+        }
 
         val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
         val batchLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
@@ -100,6 +113,10 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                     logRepository.clearAllLogs()
                     LocalBroadcastManager.getInstance(a).sendBroadcast(Intent("com.example.hoarder.GET_STATE"))
                     ToastHelper.showToast(a, "Logs cleared", Toast.LENGTH_SHORT)
+                    val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
+                    statsLastHour.text = ByteFormatter.format(lastHour)
+                    statsLastDay.text = ByteFormatter.format(lastDay)
+                    statsLast7Days.text = ByteFormatter.format(last7Days)
                 }
             }
             LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, filter)

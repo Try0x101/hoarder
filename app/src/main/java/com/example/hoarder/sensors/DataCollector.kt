@@ -32,7 +32,6 @@ class DataCollector(
     }
 
     private val reusableDataMap = mutableMapOf<String, Any>()
-    private val reusableStringMap = mutableMapOf<String, String>()
 
     private val precisionCache = mutableMapOf<String, Int>()
     private var lastPrecisionUpdate = 0L
@@ -124,8 +123,7 @@ class DataCollector(
             networkCollector.collectWifiData(reusableDataMap)
             networkCollector.collectMobileNetworkData(reusableDataMap)
 
-            convertToStringMapOptimized(reusableDataMap, reusableStringMap)
-            val json = gson.toJson(reusableStringMap)
+            val json = gson.toJson(reusableDataMap)
             processCollectedData(json)
         } catch (e: Exception) { /* Error in data collection, skip this cycle */ }
     }
@@ -134,13 +132,6 @@ class DataCollector(
         dataUploader.get()?.queueData(json)
         h.post {
             if (ca.get()) callback(json)
-        }
-    }
-
-    private fun convertToStringMapOptimized(data: Map<String, Any>, target: MutableMap<String, String>) {
-        target.clear()
-        data.forEach { (key, value) ->
-            target[key] = value.toString()
         }
     }
 }

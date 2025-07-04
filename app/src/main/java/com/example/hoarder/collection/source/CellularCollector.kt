@@ -6,9 +6,11 @@ import android.telephony.*
 import androidx.core.content.ContextCompat
 import com.example.hoarder.common.math.RoundingUtils
 import java.util.concurrent.atomic.AtomicBoolean
+import android.telephony.SubscriptionManager
 
 class CellularCollector(private val ctx: Context) {
     private lateinit var tm: TelephonyManager
+    private lateinit var sm: SubscriptionManager
     private val isInitialized = AtomicBoolean(false)
     private val hasPermissions = AtomicBoolean(false)
 
@@ -16,6 +18,9 @@ class CellularCollector(private val ctx: Context) {
         if (isInitialized.compareAndSet(false, true)) {
             try {
                 tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                    sm = ctx.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                }
                 checkPermissions()
             } catch (e: Exception) {
                 isInitialized.set(false)
@@ -39,10 +44,21 @@ class CellularCollector(private val ctx: Context) {
         }
 
         try {
-            dm["op"] = getOperatorName()
-            dm["nt"] = getNetworkTypeName()
+            val activeTm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && ::sm.isInitialized) {
+                val subId = SubscriptionManager.getActiveDataSubscriptionId()
+                if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    tm.createForSubscriptionId(subId)
+                } else {
+                    tm
+                }
+            } else {
+                tm
+            }
 
-            if (!processCellInfo(dm, rp)) {
+            dm["op"] = getOperatorName(activeTm)
+            dm["nt"] = getNetworkTypeName(activeTm)
+
+            if (!processCellInfo(dm, rp, activeTm)) {
                 setDefaultCellValues(dm)
             }
         } catch (e: Exception) {
@@ -50,11 +66,11 @@ class CellularCollector(private val ctx: Context) {
         }
     }
 
-    private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
+    private fun getOperatorName(currentTm: TelephonyManager): String = currentTm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
 
-    private fun getNetworkTypeName(): String {
+    private fun getNetworkTypeName(currentTm: TelephonyManager): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            when (tm.dataNetworkType) {
+            when (currentTm.dataNetworkType) {
                 TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
                 TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
                 TelephonyManager.NETWORK_TYPE_UMTS -> "UMTS"
@@ -79,8 +95,8 @@ class CellularCollector(private val ctx: Context) {
         } else "Unknown"
     }
 
-    private fun processCellInfo(dm: MutableMap<String, Any>, rp: Int): Boolean {
-        val cl: List<CellInfo>? = tm.allCellInfo
+    private fun processCellInfo(dm: MutableMap<String, Any>, rp: Int, currentTm: TelephonyManager): Boolean {
+        val cl: List<CellInfo>? = try { currentTm.allCellInfo } catch (e: SecurityException) { null }
         var foundRegistered = false
         cl?.forEach { ci ->
             if (ci.isRegistered && !foundRegistered) {

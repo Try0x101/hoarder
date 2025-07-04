@@ -5,8 +5,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.hoarder.data.models.BufferedPayload
 import com.example.hoarder.data.processing.DeltaComputer
-import com.example.hoarder.data.storage.db.BufferedPayload
 import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.example.hoarder.data.uploader.NetworkUploader
 import com.example.hoarder.transport.buffer.DataBuffer

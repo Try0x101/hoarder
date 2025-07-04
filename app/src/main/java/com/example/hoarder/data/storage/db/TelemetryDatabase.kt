@@ -3,23 +3,9 @@ package com.example.hoarder.data.storage.db
 import android.content.Context
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.hoarder.data.models.BufferedPayload
+import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.data.models.TelemetryRecord
-
-@Entity(tableName = "log_entries")
-data class LogEntry(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val timestamp: Long,
-    val type: String,
-    val message: String,
-    val sizeBytes: Long
-)
-
-@Entity(tableName = "buffered_payloads")
-data class BufferedPayload(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val timestamp: Long,
-    val payload: String
-)
 
 @Dao
 interface TelemetryDao {
@@ -80,7 +66,7 @@ interface LogDao {
 
 @Database(
     entities = [TelemetryRecord::class, LogEntry::class, BufferedPayload::class],
-    version = 3, // <-- Change this from 2 to 3
+    version = 3,
     exportSchema = false
 )
 abstract class TelemetryDatabase : RoomDatabase() {
@@ -107,7 +93,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
                             db.execSQL("CREATE INDEX IF NOT EXISTS index_buffered_payloads_timestamp ON buffered_payloads(timestamp)")
                         }
                     })
-                    .fallbackToDestructiveMigration() // This handles the schema change
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

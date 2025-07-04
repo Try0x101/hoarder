@@ -1,6 +1,6 @@
 package com.example.hoarder.transport.buffer
 
-import com.example.hoarder.data.storage.db.BufferedPayload
+import com.example.hoarder.data.models.BufferedPayload
 import com.example.hoarder.data.storage.db.LogDao
 import com.google.gson.Gson
 

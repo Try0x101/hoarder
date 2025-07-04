@@ -1,7 +1,7 @@
 package com.example.hoarder.ui.dialogs.log
 
 import android.content.Context
-import com.example.hoarder.data.storage.db.LogEntry
+import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers

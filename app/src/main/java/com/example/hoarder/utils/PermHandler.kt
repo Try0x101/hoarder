@@ -64,8 +64,7 @@ class PermHandler(private val a: Activity, private val h: Handler) {
                 act?.invoke()
                 act = null
             } else {
-                ToastHelper.showToast(a, "App requires all permissions", Toast.LENGTH_LONG)
-                h.postDelayed({ requestPerms() }, 1000)
+                ToastHelper.showToast(a, "App requires all permissions to function.", Toast.LENGTH_LONG)
             }
         }
     }

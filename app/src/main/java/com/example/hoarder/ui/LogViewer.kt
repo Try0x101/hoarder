@@ -18,7 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.hoarder.R
-import com.example.hoarder.data.storage.db.LogEntry
+import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
 import com.example.hoarder.ui.dialogs.log.LogPaginator
 import com.example.hoarder.ui.dialogs.log.LogRepository

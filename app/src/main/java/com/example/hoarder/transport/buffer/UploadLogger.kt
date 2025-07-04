@@ -1,7 +1,7 @@
 package com.example.hoarder.transport.buffer
 
+import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.data.storage.db.LogDao
-import com.example.hoarder.data.storage.db.LogEntry
 
 class UploadLogger(private val logDao: LogDao) {
 
