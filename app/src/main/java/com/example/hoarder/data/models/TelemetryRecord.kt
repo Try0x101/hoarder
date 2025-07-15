@@ -33,14 +33,15 @@ data class TelemetryRecord(
 data class LogEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
-    val type: String, // "SUCCESS", "ERROR"
+    val type: String,
     val message: String,
-    val sizeBytes: Long? = null
+    val sizeBytes: Long? = null,
+    val actualNetworkBytes: Long? = null
 )
 
 @Entity(tableName = "buffered_payloads")
 data class BufferedPayload(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
-    val payload: String // The JSON string
+    val payload: String
 )

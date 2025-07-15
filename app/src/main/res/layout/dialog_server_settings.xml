@@ -33,7 +33,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Upload Statistics"
+            android:text="Upload Statistics (Payload / Network)"
             android:textColor="@color/amoled_light_gray"
             android:textSize="14sp"
             android:layout_marginBottom="8dp"/>
@@ -53,7 +53,7 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
                 android:fontFamily="monospace"
-                android:text="0 B"
+                android:text="0 B / 0 B"
                 android:textColor="@color/amoled_white"/>
         </RelativeLayout>
 
@@ -72,7 +72,7 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
                 android:fontFamily="monospace"
-                android:text="0 B"
+                android:text="0 B / 0 B"
                 android:textColor="@color/amoled_white"/>
         </RelativeLayout>
 
@@ -92,7 +92,7 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
                 android:fontFamily="monospace"
-                android:text="0 B"
+                android:text="0 B / 0 B"
                 android:textColor="@color/amoled_white"/>
         </RelativeLayout>
 

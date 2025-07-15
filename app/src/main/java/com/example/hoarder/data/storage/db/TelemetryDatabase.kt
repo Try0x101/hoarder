@@ -62,11 +62,17 @@ interface LogDao {
 
     @Query("DELETE FROM buffered_payloads")
     fun clearBuffer()
+
+    @Query("SELECT SUM(sizeBytes) FROM log_entries WHERE type = 'SUCCESS' AND timestamp >= :since")
+    fun getUploadedBytesSince(since: Long): Long?
+
+    @Query("SELECT SUM(actualNetworkBytes) FROM log_entries WHERE type = 'SUCCESS' AND timestamp >= :since")
+    fun getActualNetworkBytesSince(since: Long): Long?
 }
 
 @Database(
     entities = [TelemetryRecord::class, LogEntry::class, BufferedPayload::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class TelemetryDatabase : RoomDatabase() {

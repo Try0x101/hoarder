@@ -5,11 +5,16 @@ import com.example.hoarder.data.storage.db.TelemetryDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class UploadStats(
+    val payloadBytes: Long,
+    val actualNetworkBytes: Long
+)
+
 class ServerStatsManager(private val context: Context) {
 
     private val logDao = TelemetryDatabase.getDatabase(context).logDao()
 
-    suspend fun calculateUploadStats(): Triple<Long, Long, Long> {
+    suspend fun calculateUploadStats(): Triple<UploadStats, UploadStats, UploadStats> {
         return withContext(Dispatchers.IO) {
             val successLogs = logDao.getLogsByType("SUCCESS")
             val now = System.currentTimeMillis()
@@ -17,24 +22,37 @@ class ServerStatsManager(private val context: Context) {
             val oneDayAgo = now - 24 * 3600 * 1000L
             val sevenDaysAgo = now - 7 * 24 * 3600 * 1000L
 
-            var lastHourBytes = 0L
-            var lastDayBytes = 0L
-            var last7DaysBytes = 0L
+            var lastHourPayloadBytes = 0L
+            var lastHourNetworkBytes = 0L
+            var lastDayPayloadBytes = 0L
+            var lastDayNetworkBytes = 0L
+            var last7DaysPayloadBytes = 0L
+            var last7DaysNetworkBytes = 0L
 
             successLogs.forEach { log ->
                 val timestamp = log.timestamp
-                val bytes = log.sizeBytes ?: 0L
+                val payloadBytes = log.sizeBytes ?: 0L
+                val networkBytes = log.actualNetworkBytes ?: 0L
+
                 if (timestamp >= sevenDaysAgo) {
-                    last7DaysBytes += bytes
+                    last7DaysPayloadBytes += payloadBytes
+                    last7DaysNetworkBytes += networkBytes
                     if (timestamp >= oneDayAgo) {
-                        lastDayBytes += bytes
+                        lastDayPayloadBytes += payloadBytes
+                        lastDayNetworkBytes += networkBytes
                         if (timestamp >= oneHourAgo) {
-                            lastHourBytes += bytes
+                            lastHourPayloadBytes += payloadBytes
+                            lastHourNetworkBytes += networkBytes
                         }
                     }
                 }
             }
-            Triple(lastHourBytes, lastDayBytes, last7DaysBytes)
+
+            Triple(
+                UploadStats(lastHourPayloadBytes, lastHourNetworkBytes),
+                UploadStats(lastDayPayloadBytes, lastDayNetworkBytes),
+                UploadStats(last7DaysPayloadBytes, last7DaysNetworkBytes)
+            )
         }
     }
 }

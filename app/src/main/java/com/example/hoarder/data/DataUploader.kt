@@ -46,6 +46,7 @@ class DataUploader(
     private val g: Gson = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private val mapType = object : TypeToken<MutableMap<String, Any>>() {}.type
     private val tb = AtomicLong(sp.getLong("totalUploadedBytes", 0L))
+    private val actualNetworkBytes = AtomicLong(sp.getLong("totalActualNetworkBytes", 0L))
     private val bufferedSize = AtomicLong(0L)
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -77,7 +78,7 @@ class DataUploader(
     private fun processQueue() {
         if (!ua.get() || !hasValidServer()) {
             if (ua.get()) {
-                h.post { notifyStatus("Error", "Server IP or Port became invalid.", tb.get(), bufferedSize.get()) }
+                h.post { notifyStatus("Error", "Server IP or Port became invalid.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
                 ua.set(false)
             }
             return
@@ -106,7 +107,7 @@ class DataUploader(
         val deltaMap = DeltaComputer.calculateDelta(previousDataMap, currentDataMap)
         if (deltaMap.isEmpty()) {
             lastProcessedMap.set(currentDataMap)
-            h.post { notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), bufferedSize.get()) }
+            h.post { notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
         } else {
             val deltaJson = g.toJson(deltaMap)
             processUpload(deltaJson, dataToProcessString, true)
@@ -119,22 +120,22 @@ class DataUploader(
         if (!NetUtils.isNetworkAvailable(ctx)) {
             handleUploadFailure(uploadJson, fullJsonForBuffer, currentMapState)
             uploadLogger.addErrorLog("Internet not accessible")
-            h.post { notifyStatus("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), bufferedSize.get()) }
+            h.post { notifyStatus("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
             return
         }
 
         val result = networkUploader.uploadSingle(uploadJson, isDelta, ip, port)
 
         if (result.success) {
-            handleUploadSuccess(uploadJson, fullJsonForBuffer, currentMapState, result.uploadedBytes, isDelta)
+            handleUploadSuccess(uploadJson, fullJsonForBuffer, currentMapState, result.uploadedBytes, result.actualNetworkBytes, isDelta)
         } else {
             handleUploadFailure(uploadJson, fullJsonForBuffer, currentMapState)
             result.errorMessage?.let { uploadLogger.addErrorLog(it) }
-            h.post { notifyStatus(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), bufferedSize.get()) }
+            h.post { notifyStatus(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
         }
     }
 
-    private fun handleUploadSuccess(uploadJson: String, fullJson: String, currentMap: Map<String, Any>, uploadedBytes: Long, isDelta: Boolean) {
+    private fun handleUploadSuccess(uploadJson: String, fullJson: String, currentMap: Map<String, Any>, uploadedBytes: Long, networkBytes: Long, isDelta: Boolean) {
         lastUploadedMap.set(currentMap)
         lastProcessedMap.set(currentMap)
         sp.edit().putString("lastUploadedJson", fullJson).apply()
@@ -142,14 +143,19 @@ class DataUploader(
         offlineSessionBaseTimestamp.set(null)
 
         tb.addAndGet(uploadedBytes)
-        sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
-        uploadLogger.addSuccessLog(uploadJson, uploadedBytes)
+        actualNetworkBytes.addAndGet(networkBytes)
+        sp.edit()
+            .putLong("totalUploadedBytes", tb.get())
+            .putLong("totalActualNetworkBytes", actualNetworkBytes.get())
+            .apply()
+
+        uploadLogger.addSuccessLog(uploadJson, uploadedBytes, networkBytes)
 
         val statusText = when {
             isDelta -> "OK (Delta)"
             else -> "OK (Full)"
         }
-        h.post { notifyStatus(statusText, "Uploaded successfully.", tb.get(), bufferedSize.get(), uploadedBytes) }
+        h.post { notifyStatus(statusText, "Uploaded successfully.", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), networkBytes) }
     }
 
     private fun handleUploadFailure(uploadJson: String, fullJsonForBuffer: String, currentMap: Map<String, Any>) {
@@ -184,8 +190,13 @@ class DataUploader(
 
         if (result.success) {
             tb.addAndGet(result.uploadedBytes)
-            sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
-            uploadLogger.addBatchSuccessLog(batchJsonStrings, result.uploadedBytes)
+            actualNetworkBytes.addAndGet(result.actualNetworkBytes)
+            sp.edit()
+                .putLong("totalUploadedBytes", tb.get())
+                .putLong("totalActualNetworkBytes", actualNetworkBytes.get())
+                .apply()
+
+            uploadLogger.addBatchSuccessLog(batchJsonStrings, result.uploadedBytes, result.actualNetworkBytes)
             dataBuffer.clearBuffer(batch)
 
             scope.launch {
@@ -210,13 +221,13 @@ class DataUploader(
 
                 bufferedSize.set(dataBuffer.getBufferedDataSize())
                 h.post {
-                    notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb.get(), bufferedSize.get(), result.uploadedBytes)
+                    notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), result.actualNetworkBytes)
                 }
             }
         } else {
             result.errorMessage?.let { uploadLogger.addErrorLog(it) }
             h.post {
-                notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed", tb.get(), bufferedSize.get())
+                notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
             }
         }
     }
@@ -241,7 +252,7 @@ class DataUploader(
     fun start() {
         ua.set(true)
         h.post {
-            notifyStatus("Connecting", "Attempting to connect...", tb.get(), bufferedSize.get())
+            notifyStatus("Connecting", "Attempting to connect...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
         }
         scheduler.start()
     }
@@ -254,18 +265,24 @@ class DataUploader(
 
     fun resetCounter() {
         tb.set(0L)
+        actualNetworkBytes.set(0L)
         lastUploadedMap.set(null)
         lastProcessedMap.set(null)
         isOffline.set(false)
         offlineSessionBaseTimestamp.set(null)
         uploadQueue.clear()
-        sp.edit().putLong("totalUploadedBytes", 0L).remove("lastUploadedJson").apply()
+        sp.edit()
+            .putLong("totalUploadedBytes", 0L)
+            .putLong("totalActualNetworkBytes", 0L)
+            .remove("lastUploadedJson")
+            .apply()
         h.post {
-            notifyStatus("Paused", "Upload paused.", tb.get(), bufferedSize.get())
+            notifyStatus("Paused", "Upload paused.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
         }
     }
 
     fun getUploadedBytes(): Long = tb.get()
+    fun getActualNetworkBytes(): Long = actualNetworkBytes.get()
 
     fun forceSendBuffer() {
         if (ua.get() && hasValidServer()) {
@@ -283,11 +300,12 @@ class DataUploader(
         scope.launch { dataBuffer.cleanupOldData() }
     }
 
-    fun notifyStatus(s: String, m: String, ub: Long, bufferSize: Long, lastUploadSize: Long? = null) {
+    fun notifyStatus(s: String, m: String, ub: Long, anb: Long, bufferSize: Long, lastUploadSize: Long? = null) {
         LocalBroadcastManager.getInstance(ctx).sendBroadcast(Intent("com.example.hoarder.UPLOAD_STATUS").apply {
             putExtra("status", s)
             putExtra("message", m)
             putExtra("totalUploadedBytes", ub)
+            putExtra("totalActualNetworkBytes", anb)
             putExtra("bufferedDataSize", bufferSize)
             lastUploadSize?.let { putExtra("lastUploadSizeBytes", it) }
         })

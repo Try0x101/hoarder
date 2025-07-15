@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
                 viewModel.uploadStatus.value,
                 viewModel.uploadMessage.value,
                 viewModel.totalUploadedBytes.value,
+                viewModel.totalActualNetworkBytes.value,
                 viewModel.bufferedDataSize.value ?: 0L
             )
         }
@@ -87,6 +88,17 @@ class MainActivity : AppCompatActivity() {
                 viewModel.isUploadEnabled.value ?: false,
                 viewModel.uploadStatus.value,
                 viewModel.uploadMessage.value,
+                it,
+                viewModel.totalActualNetworkBytes.value,
+                viewModel.bufferedDataSize.value ?: 0L
+            )
+        }
+        viewModel.totalActualNetworkBytes.observe(this) {
+            ui.updateUploadUI(
+                viewModel.isUploadEnabled.value ?: false,
+                viewModel.uploadStatus.value,
+                viewModel.uploadMessage.value,
+                viewModel.totalUploadedBytes.value,
                 it,
                 viewModel.bufferedDataSize.value ?: 0L
             )
@@ -97,6 +109,7 @@ class MainActivity : AppCompatActivity() {
                 viewModel.uploadStatus.value,
                 viewModel.uploadMessage.value,
                 viewModel.totalUploadedBytes.value,
+                viewModel.totalActualNetworkBytes.value,
                 it
             )
         }
@@ -135,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs.setDataUploadEnabled(false)
-        ui.updateUploadUI(false, null, null, null, 0L)
+        ui.updateUploadUI(false, null, null, null, null, 0L)
 
         ss()
         startCollection()

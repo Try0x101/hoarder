@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets
 data class UploadResult(
     val success: Boolean,
     val uploadedBytes: Long,
+    val actualNetworkBytes: Long,
     val statusMessage: String,
     val errorMessage: String? = null,
     val compressionStats: String? = null
@@ -28,14 +29,32 @@ class NetworkUploader(private val context: Context) {
         return try {
             apiCall()
         } catch (e: ConnectException) {
-            UploadResult(false, 0L, "Network Error", "Connection refused to ${url.host}:${url.port}")
+            UploadResult(false, 0L, 0L, "Network Error", "Connection refused to ${url.host}:${url.port}")
         } catch (e: SocketTimeoutException) {
-            UploadResult(false, 0L, "Network Error", "Connection timeout to ${url.host}:${url.port}")
+            UploadResult(false, 0L, 0L, "Network Error", "Connection timeout to ${url.host}:${url.port}")
         } catch (e: IOException) {
-            UploadResult(false, 0L, "Network Error", "Network error: ${e.message}")
+            UploadResult(false, 0L, 0L, "Network Error", "Network error: ${e.message}")
         } catch (e: Exception) {
-            UploadResult(false, 0L, "Error", "Upload failed: ${e.message}")
+            UploadResult(false, 0L, 0L, "Error", "Upload failed: ${e.message}")
         }
+    }
+
+    private fun calculateHttpHeadersSize(url: URL, headers: Map<String, String>, payloadSize: Int): Long {
+        var size = 0L
+
+        size += "POST ${url.path} HTTP/1.1\r\n".toByteArray().size
+        size += "Host: ${url.host}:${url.port}\r\n".toByteArray().size
+        size += "User-Agent: Dalvik/2.1.0 (Linux; U; Android)\r\n".toByteArray().size
+        size += "Connection: keep-alive\r\n".toByteArray().size
+        size += "Content-Length: $payloadSize\r\n".toByteArray().size
+
+        headers.forEach { (key, value) ->
+            size += "$key: $value\r\n".toByteArray().size
+        }
+
+        size += "\r\n".toByteArray().size
+
+        return size
     }
 
     private fun performUpload(url: URL, payload: ByteArray, headers: Map<String, String>, timeout: Int, successStatus: String, compressionResult: CompressionResult): UploadResult {
@@ -51,12 +70,29 @@ class NetworkUploader(private val context: Context) {
 
             connection.outputStream.use { it.write(payload) }
 
+            val httpHeadersSize = calculateHttpHeadersSize(url, headers, payload.size)
+            val actualNetworkBytes = payload.size.toLong() + httpHeadersSize
+
             val responseCode = connection.responseCode
             if (responseCode == 200) {
-                UploadResult(true, payload.size.toLong(), successStatus, null, CompressionUtils.formatCompressionStats(compressionResult))
+                UploadResult(
+                    success = true,
+                    uploadedBytes = payload.size.toLong(),
+                    actualNetworkBytes = actualNetworkBytes,
+                    statusMessage = successStatus,
+                    null,
+                    CompressionUtils.formatCompressionStats(compressionResult)
+                )
             } else {
                 val errorResponse = connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.readText() ?: connection.responseMessage
-                UploadResult(false, 0L, "HTTP Error", "HTTP $responseCode: $errorResponse", CompressionUtils.formatCompressionStats(compressionResult))
+                UploadResult(
+                    success = false,
+                    uploadedBytes = 0L,
+                    actualNetworkBytes = actualNetworkBytes,
+                    statusMessage = "HTTP Error",
+                    "HTTP $responseCode: $errorResponse",
+                    CompressionUtils.formatCompressionStats(compressionResult)
+                )
             }
         }
     }
@@ -100,11 +136,13 @@ class NetworkUploader(private val context: Context) {
                 readTimeout = 2000
             }
 
+            val httpHeadersSize = calculateHttpHeadersSize(url, emptyMap(), 0)
+
             val responseCode = connection.responseCode
             if (responseCode in 200..299 || responseCode == 404 || responseCode == 405) {
-                UploadResult(true, 0L, "Connected")
+                UploadResult(true, 0L, httpHeadersSize, "Connected")
             } else {
-                UploadResult(false, 0L, "HTTP Error", "Server responded with HTTP $responseCode")
+                UploadResult(false, 0L, httpHeadersSize, "HTTP Error", "Server responded with HTTP $responseCode")
             }
         }
     }

@@ -25,6 +25,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _totalUploadedBytes = MutableLiveData(0L)
     val totalUploadedBytes: LiveData<Long> = _totalUploadedBytes
 
+    private val _totalActualNetworkBytes = MutableLiveData(0L)
+    val totalActualNetworkBytes: LiveData<Long> = _totalActualNetworkBytes
+
     private val _bufferedDataSize = MutableLiveData(0L)
     val bufferedDataSize: LiveData<Long> = _bufferedDataSize
 
@@ -46,6 +49,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uploadStatus.value = intent?.getStringExtra("status")
             _uploadMessage.value = intent?.getStringExtra("message")
             _totalUploadedBytes.value = intent?.getLongExtra("totalUploadedBytes", 0L)
+            _totalActualNetworkBytes.value = intent?.getLongExtra("totalActualNetworkBytes", 0L)
             _bufferedDataSize.value = intent?.getLongExtra("bufferedDataSize", 0L)
         }
     }

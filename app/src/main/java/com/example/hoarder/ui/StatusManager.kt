@@ -20,7 +20,7 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         subtitle.text = if (isActive) "Active" else "Inactive"
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, bufferedSize: Long) {
+    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, actualBytes: Long?, bufferedSize: Long) {
         val statusView = a.findViewById<TextView>(R.id.serverUploadStatus)
         val bytesView = a.findViewById<TextView>(R.id.serverUploadBytes)
 
@@ -40,7 +40,12 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         }
 
         statusView.text = StatusFormatter.formatStatusText(status, message, lastBufferSize)
-        bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)}"
+
+        if (actualBytes != null && actualBytes > 0) {
+            bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)} / ${ByteFormatter.format(actualBytes)}"
+        } else {
+            bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)}"
+        }
         bytesView.visibility = View.VISIBLE
     }
 

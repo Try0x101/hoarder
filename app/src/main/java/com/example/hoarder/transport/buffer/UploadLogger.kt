@@ -11,30 +11,33 @@ class UploadLogger(private val logDao: LogDao) {
                 timestamp = System.currentTimeMillis(),
                 type = "ERROR",
                 message = errorMessage,
-                sizeBytes = 0
+                sizeBytes = 0,
+                actualNetworkBytes = 0
             )
         )
     }
 
-    fun addSuccessLog(jsonData: String, uploadedBytes: Long) {
+    fun addSuccessLog(jsonData: String, uploadedBytes: Long, actualNetworkBytes: Long) {
         logDao.insertLog(
             LogEntry(
                 timestamp = System.currentTimeMillis(),
                 type = "SUCCESS",
                 message = jsonData,
-                sizeBytes = uploadedBytes
+                sizeBytes = uploadedBytes,
+                actualNetworkBytes = actualNetworkBytes
             )
         )
     }
 
-    fun addBatchSuccessLog(batchData: List<String>, uploadedBytes: Long) {
+    fun addBatchSuccessLog(batchData: List<String>, uploadedBytes: Long, actualNetworkBytes: Long) {
         val summaryMessage = "Batch upload of ${batchData.size} records"
         logDao.insertLog(
             LogEntry(
                 timestamp = System.currentTimeMillis(),
                 type = "SUCCESS",
                 message = summaryMessage,
-                sizeBytes = uploadedBytes
+                sizeBytes = uploadedBytes,
+                actualNetworkBytes = actualNetworkBytes
             )
         )
 
@@ -44,7 +47,8 @@ class UploadLogger(private val logDao: LogDao) {
                     timestamp = System.currentTimeMillis(),
                     type = "BATCH_RECORD",
                     message = recordJson,
-                    sizeBytes = recordJson.toByteArray().size.toLong()
+                    sizeBytes = recordJson.toByteArray().size.toLong(),
+                    actualNetworkBytes = 0
                 )
             )
         }

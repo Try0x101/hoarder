@@ -17,7 +17,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     fun setupUI() {
         layoutManager.setupUI()
         statusManager.updateDataCollectionUI(p.isDataCollectionEnabled())
-        statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, 0L)
+        statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
         statusManager.updateAllPrecisionLabels()
         setupJsonCopyListener()
         setupServerRowListener()
@@ -45,8 +45,8 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         statusManager.updateDataCollectionUI(isActive)
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, bufferedSize: Long) {
-        statusManager.updateUploadUI(isActive, status, message, totalBytes, bufferedSize)
+    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, actualBytes: Long?, bufferedSize: Long) {
+        statusManager.updateUploadUI(isActive, status, message, totalBytes, actualBytes, bufferedSize)
     }
 
     fun updateRawJson(json: String?) {

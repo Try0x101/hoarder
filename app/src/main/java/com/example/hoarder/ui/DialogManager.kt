@@ -46,9 +46,9 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         a.lifecycleScope.launch {
             val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
-            statsLastHour.text = ByteFormatter.format(lastHour)
-            statsLastDay.text = ByteFormatter.format(lastDay)
-            statsLast7Days.text = ByteFormatter.format(last7Days)
+            statsLastHour.text = formatStats(lastHour)
+            statsLastDay.text = formatStats(lastDay)
+            statsLast7Days.text = formatStats(last7Days)
         }
 
         val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
@@ -114,9 +114,9 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                     LocalBroadcastManager.getInstance(a).sendBroadcast(Intent("com.example.hoarder.GET_STATE"))
                     ToastHelper.showToast(a, "Logs cleared", Toast.LENGTH_SHORT)
                     val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
-                    statsLastHour.text = ByteFormatter.format(lastHour)
-                    statsLastDay.text = ByteFormatter.format(lastDay)
-                    statsLast7Days.text = ByteFormatter.format(last7Days)
+                    statsLastHour.text = formatStats(lastHour)
+                    statsLastDay.text = formatStats(lastDay)
+                    statsLast7Days.text = formatStats(last7Days)
                 }
             }
             LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, filter)
@@ -136,6 +136,14 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         }
 
         dialog.show()
+    }
+
+    private fun formatStats(stats: com.example.hoarder.ui.dialogs.server.UploadStats): String {
+        return if (stats.actualNetworkBytes > 0) {
+            "${ByteFormatter.format(stats.payloadBytes)} / ${ByteFormatter.format(stats.actualNetworkBytes)}"
+        } else {
+            ByteFormatter.format(stats.payloadBytes)
+        }
     }
 
     private fun saveServerAddress(addr: String, dialog: AlertDialog) {
