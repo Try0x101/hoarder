@@ -26,8 +26,6 @@ import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
 import com.example.hoarder.ui.MainActivity
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BackgroundService: Service(){
@@ -39,7 +37,6 @@ class BackgroundService: Service(){
     private lateinit var commandHandler: ServiceCommandHandler
     private lateinit var powerManager: PowerManager
 
-    private var collectionJob: Job? = null
     private val ca = AtomicBoolean(false)
     private val ua = AtomicBoolean(false)
     private val isInitialized = AtomicBoolean(false)
@@ -81,27 +78,6 @@ class BackgroundService: Service(){
         dataCollector.setDataUploader(dataUploader)
 
         registerServiceReceiver()
-        observePowerState()
-    }
-
-    private fun observePowerState() {
-        powerManager.powerState
-            .onEach { state ->
-                collectionJob?.cancel()
-                if (ca.get()) {
-                    val interval = when (state.mode) {
-                        Prefs.POWER_MODE_OPTIMIZED -> if (state.isMoving) 5000L else 60000L
-                        else -> 1000L // Continuous
-                    }
-                    collectionJob = serviceScope.launch {
-                        while (true) {
-                            dataCollector.collectDataOnce()
-                            delay(interval)
-                        }
-                    }
-                }
-            }
-            .launchIn(serviceScope)
     }
 
     private fun registerServiceReceiver() {
@@ -161,7 +137,6 @@ class BackgroundService: Service(){
             commandHandler.handle(Intent("com.example.hoarder.START_COLLECTION"))
         }
 
-
         if (shouldUpload && dataUploader.hasValidServer() && ua.compareAndSet(false, true)) {
             dataUploader.resetCounter()
             dataUploader.start()
@@ -177,13 +152,11 @@ class BackgroundService: Service(){
         serviceScope.launch {
             while (isInitialized.get()) {
                 try {
-                    delay(24 * 60 * 60 * 1000L) // 24 hours
+                    delay(24 * 60 * 60 * 1000L)
                     withContext(Dispatchers.IO) {
                         dataUploader.cleanup()
                     }
-                } catch (e: Exception) {
-                    // Cleanup error, continue
-                }
+                } catch (e: Exception) { }
             }
         }
     }
@@ -222,7 +195,6 @@ class BackgroundService: Service(){
     }
 
     private fun cleanup() {
-        collectionJob?.cancel()
         ca.set(false)
         ua.set(false)
 
@@ -231,16 +203,12 @@ class BackgroundService: Service(){
             dataUploader.cleanup()
             powerManager.stop()
             serviceScope.cancel()
-        } catch (e: Exception) {
-            // Cleanup error
-        }
+        } catch (e: Exception) { }
 
         if (receiverRegistered.compareAndSet(true, false)) {
             try {
                 LocalBroadcastManager.getInstance(this).unregisterReceiver(cr)
-            } catch (e: Exception) {
-                // Receiver already unregistered
-            }
+            } catch (e: Exception) { }
         }
 
         isInitialized.set(false)

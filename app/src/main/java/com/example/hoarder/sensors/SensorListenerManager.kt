@@ -18,6 +18,7 @@ class SensorListenerManager(
     private var requestDistance: Float
 ) {
     private val listenersRegistered = AtomicBoolean(false)
+    private val gpsRegistered = AtomicBoolean(false)
 
     fun registerListeners() {
         if (listenersRegistered.compareAndSet(false, true)) {
@@ -30,11 +31,26 @@ class SensorListenerManager(
         if (listenersRegistered.compareAndSet(true, false)) {
             try {
                 locationManager.removeUpdates(locationListener)
-            } catch (e: Exception) { /* Ignored */ }
+                gpsRegistered.set(false)
+            } catch (e: Exception) { }
 
             try {
                 sensorManager.unregisterListener(sensorEventListener)
-            } catch (e: Exception) { /* Ignored */ }
+            } catch (e: Exception) { }
+        }
+    }
+
+    fun pauseGps() {
+        if (gpsRegistered.compareAndSet(true, false)) {
+            try {
+                locationManager.removeUpdates(locationListener)
+            } catch (e: Exception) { }
+        }
+    }
+
+    fun resumeGps() {
+        if (!gpsRegistered.get() && listenersRegistered.get()) {
+            registerLocationListeners()
         }
     }
 
@@ -47,14 +63,15 @@ class SensorListenerManager(
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, requestInterval, requestDistance, locationListener)
+                gpsRegistered.set(true)
             }
-        } catch (e: SecurityException) { /* Ignored */ }
+        } catch (e: SecurityException) { }
 
         try {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, requestInterval, requestDistance, locationListener)
             }
-        } catch (e: SecurityException) { /* Ignored */ }
+        } catch (e: SecurityException) { }
     }
 
     private fun registerPressureSensor() {

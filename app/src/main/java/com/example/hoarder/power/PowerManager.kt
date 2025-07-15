@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.update
 
 data class PowerState(
     val mode: Int = Prefs.POWER_MODE_CONTINUOUS,
-    val isMoving: Boolean = true
+    val isMoving: Boolean = true,
+    val stationaryDuration: Long = 0L,
+    val movementMomentum: Int = 0
 )
 
 class PowerManager(
@@ -17,6 +19,8 @@ class PowerManager(
     private val prefs: Prefs
 ) {
     private val motionDetector = MotionDetector(context, ::onMotionStateChanged)
+    private var lastMotionChangeTime = System.currentTimeMillis()
+    private var movementHistory = mutableListOf<Boolean>()
 
     private val _powerState = MutableStateFlow(PowerState(mode = prefs.getPowerMode()))
     val powerState: StateFlow<PowerState> = _powerState.asStateFlow()
@@ -41,7 +45,58 @@ class PowerManager(
         }
     }
 
+    fun getCollectionInterval(): Long {
+        val state = powerState.value
+        return when (state.mode) {
+            Prefs.POWER_MODE_OPTIMIZED -> {
+                if (state.isMoving) {
+                    when (state.movementMomentum) {
+                        in 0..2 -> 5000L
+                        in 3..5 -> 10000L
+                        else -> 30000L
+                    }
+                } else {
+                    when (state.stationaryDuration) {
+                        in 0..120000L -> 60000L
+                        in 120001..600000L -> 120000L
+                        else -> 300000L
+                    }
+                }
+            }
+            else -> 1000L
+        }
+    }
+
     private fun onMotionStateChanged(isNowMoving: Boolean) {
-        _powerState.update { it.copy(isMoving = isNowMoving) }
+        val currentTime = System.currentTimeMillis()
+        val timeSinceLastChange = currentTime - lastMotionChangeTime
+
+        updateMovementHistory(isNowMoving)
+
+        val stationaryDuration = if (!isNowMoving) timeSinceLastChange else 0L
+        val momentum = calculateMovementMomentum()
+
+        _powerState.update {
+            it.copy(
+                isMoving = isNowMoving,
+                stationaryDuration = stationaryDuration,
+                movementMomentum = momentum
+            )
+        }
+
+        lastMotionChangeTime = currentTime
+    }
+
+    private fun updateMovementHistory(isMoving: Boolean) {
+        movementHistory.add(isMoving)
+        if (movementHistory.size > 10) {
+            movementHistory.removeAt(0)
+        }
+    }
+
+    private fun calculateMovementMomentum(): Int {
+        if (movementHistory.size < 3) return 0
+        val recentMovement = movementHistory.takeLast(5)
+        return recentMovement.count { it }
     }
 }

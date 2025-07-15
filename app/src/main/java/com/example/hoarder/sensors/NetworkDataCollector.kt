@@ -18,14 +18,24 @@ class NetworkDataCollector(private val ctx: Context) {
     private val isInitialized = AtomicBoolean(false)
     private val networkCapabilitiesCache = AtomicReference<NetworkCapabilities?>()
 
+    private val cellularDataCache = AtomicReference<Map<String, Any>?>(null)
+    private val wifiDataCache = AtomicReference<Map<String, Any>?>(null)
+    private val networkSpeedCache = AtomicReference<Pair<Any, Any>?>(null)
+
+    private var lastCellularUpdate = 0L
+    private var lastWifiUpdate = 0L
+    private var lastNetworkSpeedUpdate = 0L
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             super.onCapabilitiesChanged(network, networkCapabilities)
             networkCapabilitiesCache.set(networkCapabilities)
+            invalidateNetworkCache()
         }
         override fun onLost(network: Network) {
             super.onLost(network)
             networkCapabilitiesCache.set(null)
+            invalidateNetworkCache()
         }
     }
 
@@ -48,52 +58,90 @@ class NetworkDataCollector(private val ctx: Context) {
             try {
                 cm.unregisterNetworkCallback(networkCallback)
                 cellularCollector.cleanup()
-            } catch (e: Exception) {
-                // Ignore cleanup errors
-            }
+            } catch (e: Exception) { }
         }
     }
 
-    fun collectWifiData(dm: MutableMap<String, Any>) {
-        wifiCollector.collect(dm)
+    fun collectWifiData(dm: MutableMap<String, Any>, isMoving: Boolean = true) {
+        val currentTime = System.currentTimeMillis()
+        val shouldUpdate = isMoving || (currentTime - lastWifiUpdate) > 60000L
+
+        if (shouldUpdate) {
+            val tempMap = mutableMapOf<String, Any>()
+            wifiCollector.collect(tempMap)
+            wifiDataCache.set(tempMap)
+            lastWifiUpdate = currentTime
+        }
+
+        wifiDataCache.get()?.let { cachedData ->
+            dm.putAll(cachedData)
+        }
     }
 
-    fun collectMobileNetworkData(dm: MutableMap<String, Any>) {
-        val sp = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
-        val rp = sp.getInt("rssiPrecision", -1)
-        cellularCollector.collect(dm, rp)
+    fun collectMobileNetworkData(dm: MutableMap<String, Any>, isMoving: Boolean = true) {
+        val currentTime = System.currentTimeMillis()
+        val shouldUpdate = isMoving || (currentTime - lastCellularUpdate) > 30000L
+
+        if (shouldUpdate) {
+            val sp = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+            val rp = sp.getInt("rssiPrecision", -1)
+            val tempMap = mutableMapOf<String, Any>()
+            cellularCollector.collect(tempMap, rp)
+            cellularDataCache.set(tempMap)
+            lastCellularUpdate = currentTime
+        }
+
+        cellularDataCache.get()?.let { cachedData ->
+            dm.putAll(cachedData)
+        }
     }
 
-    fun collectNetworkData(dm: MutableMap<String, Any>, sp: SharedPreferences) {
+    fun collectNetworkData(dm: MutableMap<String, Any>, sp: SharedPreferences, isMoving: Boolean = true) {
         if (!isInitialized.get()) {
             setDefaultNetworkValues(dm)
             return
         }
 
-        try {
-            var nc = networkCapabilitiesCache.get()
-            if (nc == null) {
-                nc = cm.getNetworkCapabilities(cm.activeNetwork)
-                networkCapabilitiesCache.set(nc)
-            }
+        val currentTime = System.currentTimeMillis()
+        val shouldUpdate = isMoving || (currentTime - lastNetworkSpeedUpdate) > 45000L
 
-            if (nc != null) {
-                val np = sp.getInt("networkPrecision", 0)
-                val downstreamKbps = nc.linkDownstreamBandwidthKbps
-                val upstreamKbps = nc.linkUpstreamBandwidthKbps
-
-                if (downstreamKbps > 0 && upstreamKbps > 0) {
-                    dm["dn"] = RoundingUtils.rn(downstreamKbps, np)
-                    dm["up"] = RoundingUtils.rn(upstreamKbps, np)
-                } else {
-                    setDefaultNetworkValues(dm)
+        if (shouldUpdate) {
+            try {
+                var nc = networkCapabilitiesCache.get()
+                if (nc == null) {
+                    nc = cm.getNetworkCapabilities(cm.activeNetwork)
+                    networkCapabilitiesCache.set(nc)
                 }
-            } else {
+
+                if (nc != null) {
+                    val np = sp.getInt("networkPrecision", 0)
+                    val downstreamKbps = nc.linkDownstreamBandwidthKbps
+                    val upstreamKbps = nc.linkUpstreamBandwidthKbps
+
+                    if (downstreamKbps > 0 && upstreamKbps > 0) {
+                        val speeds = Pair(
+                            RoundingUtils.rn(downstreamKbps, np),
+                            RoundingUtils.rn(upstreamKbps, np)
+                        )
+                        networkSpeedCache.set(speeds)
+                        lastNetworkSpeedUpdate = currentTime
+                    }
+                }
+            } catch (e: Exception) {
                 setDefaultNetworkValues(dm)
+                return
             }
-        } catch (e: Exception) {
-            setDefaultNetworkValues(dm)
         }
+
+        networkSpeedCache.get()?.let { (dn, up) ->
+            dm["dn"] = dn
+            dm["up"] = up
+        } ?: setDefaultNetworkValues(dm)
+    }
+
+    private fun invalidateNetworkCache() {
+        networkSpeedCache.set(null)
+        lastNetworkSpeedUpdate = 0L
     }
 
     private fun setDefaultNetworkValues(dm: MutableMap<String, Any>) {

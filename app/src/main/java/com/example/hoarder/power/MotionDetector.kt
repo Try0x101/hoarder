@@ -19,13 +19,20 @@ class MotionDetector(
     private var lastY: Float = 0f
     private var lastZ: Float = 0f
     private var isMoving = false
+    private var motionConfidence = 0
+    private var stationaryStartTime: Long = 0
+    private var motionDetectionActive = true
 
     companion object {
         private const val SHAKE_THRESHOLD = 800
+        private const val MOTION_CONFIDENCE_THRESHOLD = 3
+        private const val STATIONARY_DISABLE_DELAY = 300000L
     }
 
     fun start() {
-        sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        if (motionDetectionActive) {
+            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
+        }
     }
 
     fun stop() {
@@ -33,9 +40,9 @@ class MotionDetector(
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER && motionDetectionActive) {
             val curTime = System.currentTimeMillis()
-            if ((curTime - lastUpdate) > 100) {
+            if ((curTime - lastUpdate) > 200) {
                 val diffTime = (curTime - lastUpdate)
                 lastUpdate = curTime
 
@@ -46,14 +53,25 @@ class MotionDetector(
                 val speed = Math.abs(x + y + z - lastX - lastY - lastZ) / diffTime * 10000
 
                 if (speed > SHAKE_THRESHOLD) {
-                    if (!isMoving) {
+                    motionConfidence++
+                    if (motionConfidence >= MOTION_CONFIDENCE_THRESHOLD && !isMoving) {
                         isMoving = true
+                        motionDetectionActive = true
                         onMotionStateChanged(true)
                     }
                 } else {
-                    if (isMoving) {
+                    if (motionConfidence > 0) motionConfidence--
+
+                    if (isMoving && motionConfidence == 0) {
                         isMoving = false
+                        stationaryStartTime = curTime
                         onMotionStateChanged(false)
+                    }
+
+                    if (!isMoving && (curTime - stationaryStartTime) > STATIONARY_DISABLE_DELAY) {
+                        motionDetectionActive = false
+                        stop()
+                        scheduleReactivation()
                     }
                 }
                 lastX = x
@@ -63,7 +81,12 @@ class MotionDetector(
         }
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not needed
+    private fun scheduleReactivation() {
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            motionDetectionActive = true
+            start()
+        }, 60000L)
     }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 }

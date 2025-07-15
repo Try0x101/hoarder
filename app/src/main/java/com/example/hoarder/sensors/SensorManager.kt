@@ -34,6 +34,9 @@ class SensorManager(
     private val barometricValue = AtomicReference<Float?>(null)
     private val lastLocation = AtomicReference<Location?>(null)
     private val isInitialized = AtomicBoolean(false)
+    private val gpsActive = AtomicBoolean(true)
+    private val lastStationaryTime = AtomicReference<Long>(0L)
+    private val locationHistory = mutableListOf<Location>()
 
     private val altitudeFilter = AltitudeKalmanFilter()
     private val lastGpsAltitude = AtomicReference<Double>(Double.NaN)
@@ -51,9 +54,12 @@ class SensorManager(
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            lastLocation.set(location)
-            lastGpsAltitude.set(location.altitude)
-            lastGpsAccuracy.set(location.accuracy)
+            if (shouldAcceptLocation(location)) {
+                lastLocation.set(location)
+                lastGpsAltitude.set(location.altitude)
+                lastGpsAccuracy.set(location.accuracy)
+                updateLocationHistory(location)
+            }
         }
         override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
         override fun onProviderEnabled(p: String) {}
@@ -78,6 +84,7 @@ class SensorManager(
                 if (isInitialized.get()) {
                     listenerManager.unregisterListeners()
                     configureListeners(state.mode, state.isMoving)
+                    manageGpsState(state.isMoving)
                     listenerManager.registerListeners()
                 }
             }
@@ -96,9 +103,48 @@ class SensorManager(
     private fun configureListeners(mode: Int, isMoving: Boolean) {
         val (interval, distance) = when (mode) {
             Prefs.POWER_MODE_OPTIMIZED -> if (isMoving) Pair(5000L, 5f) else Pair(60000L, 100f)
-            else -> Pair(1000L, 0f) // Continuous
+            else -> Pair(1000L, 0f)
         }
         listenerManager.updateRequestParams(interval, distance)
+    }
+
+    private fun manageGpsState(isMoving: Boolean) {
+        val currentTime = System.currentTimeMillis()
+
+        if (!isMoving) {
+            if (lastStationaryTime.get() == 0L) {
+                lastStationaryTime.set(currentTime)
+            } else if ((currentTime - lastStationaryTime.get()) > 600000L && gpsActive.get()) {
+                gpsActive.set(false)
+                listenerManager.pauseGps()
+            }
+        } else {
+            lastStationaryTime.set(0L)
+            if (!gpsActive.get()) {
+                gpsActive.set(true)
+                listenerManager.resumeGps()
+            }
+        }
+    }
+
+    private fun shouldAcceptLocation(location: Location): Boolean {
+        if (locationHistory.size >= 3) {
+            val recent = locationHistory.takeLast(3)
+            if (recent.all {
+                    location.distanceTo(it) < 10f &&
+                            Math.abs(location.altitude - it.altitude) < 5.0
+                }) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun updateLocationHistory(location: Location) {
+        locationHistory.add(location)
+        if (locationHistory.size > 5) {
+            locationHistory.removeAt(0)
+        }
     }
 
     fun cleanup() {
@@ -119,6 +165,9 @@ class SensorManager(
         lastReportedAltitude.set(Double.NaN)
         lastAltitudeUpdateTime = 0L
         lastEmittedAltitude = 0
+        locationHistory.clear()
+        gpsActive.set(true)
+        lastStationaryTime.set(0L)
     }
 
     fun getLocation(): Location? = lastLocation.get()

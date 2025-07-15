@@ -58,7 +58,7 @@ class DataUploader(
     private val scheduler = UploadScheduler(h, ::processQueue)
 
     private val batchQueue = mutableListOf<String>()
-    private val BATCH_THRESHOLD = 3
+    private var lastBatchTime = System.currentTimeMillis()
 
     init {
         scope.launch {
@@ -173,6 +173,54 @@ class DataUploader(
         lastProcessedMap.set(currentMap)
     }
 
+    private fun getAdaptiveBatchThreshold(): Int {
+        val state = powerManager.powerState.value
+        return when {
+            state.mode == Prefs.POWER_MODE_CONTINUOUS -> 1
+            state.isMoving -> 2
+            else -> 5
+        }
+    }
+
+    private fun getAdaptiveBatchTimeout(): Long {
+        val state = powerManager.powerState.value
+        return when {
+            state.mode == Prefs.POWER_MODE_CONTINUOUS -> 1000L
+            state.isMoving -> 120000L
+            else -> 300000L
+        }
+    }
+
+    fun queueData(data: String) {
+        val threshold = getAdaptiveBatchThreshold()
+        val timeout = getAdaptiveBatchTimeout()
+        val currentTime = System.currentTimeMillis()
+
+        if (powerManager.powerState.value.mode == Prefs.POWER_MODE_CONTINUOUS) {
+            uploadQueue.queueRegular(data)
+        } else {
+            synchronized(batchQueue) {
+                batchQueue.add(data)
+                val timeoutReached = (currentTime - lastBatchTime) > timeout
+
+                if (batchQueue.size >= threshold || timeoutReached) {
+                    flushBatchQueue()
+                    lastBatchTime = currentTime
+                }
+            }
+        }
+    }
+
+    fun flushBatchQueue() {
+        val batchToSend: List<String>
+        synchronized(batchQueue) {
+            if (batchQueue.isEmpty()) return
+            batchToSend = batchQueue.toList()
+            batchQueue.clear()
+        }
+        scheduler.submitOneTimeTask { processBatch(batchToSend) }
+    }
+
     private fun processBatch(batch: List<String>) {
         if (batch.isEmpty() || !NetUtils.isNetworkAvailable(ctx)) return
         val result = networkUploader.uploadBatch(batch, ip, port)
@@ -216,7 +264,7 @@ class DataUploader(
                             mutableBase.putAll(map)
                             mutableBase
                         } ?: map
-                    } catch (e: Exception) { /* Skip malformed record */ }
+                    } catch (e: Exception) { }
                 }
 
                 replayedState?.let { finalState ->
@@ -250,30 +298,6 @@ class DataUploader(
         synchronized(this) {
             return ip.isNotBlank() && port > 0
         }
-    }
-
-    fun queueData(data: String) {
-        if (powerManager.powerState.value.mode == Prefs.POWER_MODE_CONTINUOUS) {
-            flushBatchQueue()
-            uploadQueue.queueRegular(data)
-        } else {
-            synchronized(batchQueue) {
-                batchQueue.add(data)
-                if (batchQueue.size >= BATCH_THRESHOLD) {
-                    flushBatchQueue()
-                }
-            }
-        }
-    }
-
-    fun flushBatchQueue() {
-        val batchToSend: List<String>
-        synchronized(batchQueue) {
-            if (batchQueue.isEmpty()) return
-            batchToSend = batchQueue.toList()
-            batchQueue.clear()
-        }
-        scheduler.submitOneTimeTask { processBatch(batchToSend) }
     }
 
     fun queueForcedData(data: String) {
