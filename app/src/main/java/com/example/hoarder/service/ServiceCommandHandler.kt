@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.data.DataUploader
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
 import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.atomic.AtomicBoolean
@@ -13,6 +15,7 @@ class ServiceCommandHandler(
     private val serviceScope: CoroutineScope,
     private val dataCollector: DataCollector,
     private val dataUploader: DataUploader,
+    private val powerManager: PowerManager,
     private val collectionActive: AtomicBoolean,
     private val uploadActive: AtomicBoolean,
     private val updateAppPreferences: (String, Any) -> Unit,
@@ -27,6 +30,7 @@ class ServiceCommandHandler(
             "com.example.hoarder.FORCE_UPLOAD" -> handleForceUpload(intent)
             "com.example.hoarder.SEND_BUFFER" -> handleSendBuffer()
             "com.example.hoarder.GET_STATE" -> broadcastStateUpdate()
+            "com.example.hoarder.POWER_MODE_CHANGED" -> handlePowerModeChange(intent)
         }
     }
 
@@ -91,5 +95,11 @@ class ServiceCommandHandler(
         if (uploadActive.get()) {
             dataUploader.forceSendBuffer()
         }
+    }
+
+    private fun handlePowerModeChange(intent: Intent) {
+        val newMode = intent.getIntExtra("newMode", Prefs.POWER_MODE_CONTINUOUS)
+        dataUploader.flushBatchQueue()
+        powerManager.updateMode(newMode)
     }
 }

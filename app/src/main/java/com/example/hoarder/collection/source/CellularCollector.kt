@@ -1,29 +1,63 @@
 package com.example.hoarder.collection.source
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.*
 import androidx.core.content.ContextCompat
 import com.example.hoarder.common.math.RoundingUtils
 import java.util.concurrent.atomic.AtomicBoolean
-import android.telephony.SubscriptionManager
+import java.util.concurrent.atomic.AtomicReference
 
 class CellularCollector(private val ctx: Context) {
     private lateinit var tm: TelephonyManager
-    private lateinit var sm: SubscriptionManager
     private val isInitialized = AtomicBoolean(false)
     private val hasPermissions = AtomicBoolean(false)
+    private val cellInfoCache = AtomicReference<List<CellInfo>?>(null)
+
+    @Suppress("DEPRECATION")
+    private val phoneStateListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
+            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
+                cellInfoCache.set(cellInfo)
+            }
+        }
+    } else {
+        object : PhoneStateListener() {
+            override fun onCellInfoChanged(cellInfo: List<CellInfo>?) {
+                cellInfo?.let { cellInfoCache.set(it) }
+            }
+        }
+    }
 
     fun init() {
         if (isInitialized.compareAndSet(false, true)) {
             try {
                 tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                    sm = ctx.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-                }
                 checkPermissions()
+                if (hasPermissions.get()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        tm.registerTelephonyCallback(ctx.mainExecutor, phoneStateListener as TelephonyCallback)
+                    } else {
+                        tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_CELL_INFO)
+                    }
+                }
             } catch (e: Exception) {
                 isInitialized.set(false)
+            }
+        }
+    }
+
+    fun cleanup() {
+        if (isInitialized.get() && hasPermissions.get()) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    tm.unregisterTelephonyCallback(phoneStateListener as TelephonyCallback)
+                } else {
+                    tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_NONE)
+                }
+            } catch (e: Exception) {
+                // Ignore cleanup errors
             }
         }
     }
@@ -33,7 +67,7 @@ class CellularCollector(private val ctx: Context) {
             ContextCompat.checkSelfPermission(
                 ctx,
                 android.Manifest.permission.READ_PHONE_STATE
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) == PackageManager.PERMISSION_GRANTED
         )
     }
 
@@ -44,21 +78,16 @@ class CellularCollector(private val ctx: Context) {
         }
 
         try {
-            val activeTm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && ::sm.isInitialized) {
-                val subId = SubscriptionManager.getActiveDataSubscriptionId()
-                if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                    tm.createForSubscriptionId(subId)
-                } else {
-                    tm
-                }
-            } else {
-                tm
+            dm["op"] = getOperatorName()
+            dm["nt"] = getNetworkTypeName()
+
+            var currentCellInfo = cellInfoCache.get()
+            if (currentCellInfo == null) {
+                currentCellInfo = tm.allCellInfo
+                cellInfoCache.set(currentCellInfo)
             }
 
-            dm["op"] = getOperatorName(activeTm)
-            dm["nt"] = getNetworkTypeName(activeTm)
-
-            if (!processCellInfo(dm, rp, activeTm)) {
+            if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
                 setDefaultCellValues(dm)
             }
         } catch (e: Exception) {
@@ -66,11 +95,11 @@ class CellularCollector(private val ctx: Context) {
         }
     }
 
-    private fun getOperatorName(currentTm: TelephonyManager): String = currentTm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
+    private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
 
-    private fun getNetworkTypeName(currentTm: TelephonyManager): String {
+    private fun getNetworkTypeName(): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            when (currentTm.dataNetworkType) {
+            when (tm.dataNetworkType) {
                 TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
                 TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
                 TelephonyManager.NETWORK_TYPE_UMTS -> "UMTS"
@@ -95,10 +124,9 @@ class CellularCollector(private val ctx: Context) {
         } else "Unknown"
     }
 
-    private fun processCellInfo(dm: MutableMap<String, Any>, rp: Int, currentTm: TelephonyManager): Boolean {
-        val cl: List<CellInfo>? = try { currentTm.allCellInfo } catch (e: SecurityException) { null }
+    private fun processCellInfo(cl: List<CellInfo>, dm: MutableMap<String, Any>, rp: Int): Boolean {
         var foundRegistered = false
-        cl?.forEach { ci ->
+        cl.forEach { ci ->
             if (ci.isRegistered && !foundRegistered) {
                 foundRegistered = true
                 when (ci) {

@@ -7,8 +7,10 @@ import android.os.Handler
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.data.models.BufferedPayload
 import com.example.hoarder.data.processing.DeltaComputer
+import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.example.hoarder.data.uploader.NetworkUploader
+import com.example.hoarder.power.PowerManager
 import com.example.hoarder.transport.buffer.DataBuffer
 import com.example.hoarder.transport.buffer.UploadLogger
 import com.example.hoarder.transport.network.NetUtils
@@ -29,7 +31,8 @@ import java.util.concurrent.atomic.AtomicReference
 class DataUploader(
     private val ctx: Context,
     private val h: Handler,
-    private val sp: SharedPreferences
+    private val sp: SharedPreferences,
+    private val powerManager: PowerManager
 ) {
     private val ua = AtomicBoolean(false)
     private var ip = ""
@@ -53,6 +56,9 @@ class DataUploader(
     private val uploadLogger = UploadLogger(logDao)
     private val networkUploader = NetworkUploader(ctx)
     private val scheduler = UploadScheduler(h, ::processQueue)
+
+    private val batchQueue = mutableListOf<String>()
+    private val BATCH_THRESHOLD = 3
 
     init {
         scope.launch {
@@ -167,6 +173,29 @@ class DataUploader(
         lastProcessedMap.set(currentMap)
     }
 
+    private fun processBatch(batch: List<String>) {
+        if (batch.isEmpty() || !NetUtils.isNetworkAvailable(ctx)) return
+        val result = networkUploader.uploadBatch(batch, ip, port)
+
+        if (result.success) {
+            tb.addAndGet(result.uploadedBytes)
+            sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
+            uploadLogger.addBatchSuccessLog(batch, result.uploadedBytes)
+            h.post {
+                notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb.get(), bufferedSize.get(), result.uploadedBytes)
+            }
+        } else {
+            result.errorMessage?.let { uploadLogger.addErrorLog(it) }
+            batch.forEach { jsonRecord ->
+                val mapState: Map<String, Any> = g.fromJson(jsonRecord, mapType)
+                handleUploadFailure(jsonRecord, jsonRecord, mapState)
+            }
+            h.post {
+                notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed, buffering records.", tb.get(), bufferedSize.get())
+            }
+        }
+    }
+
     private fun processBatchUpload(batch: List<BufferedPayload>) {
         val batchJsonStrings = batch.map { it.payload }
         val result = networkUploader.uploadBatch(batchJsonStrings, ip, port)
@@ -224,7 +253,27 @@ class DataUploader(
     }
 
     fun queueData(data: String) {
-        uploadQueue.queueRegular(data)
+        if (powerManager.powerState.value.mode == Prefs.POWER_MODE_CONTINUOUS) {
+            flushBatchQueue()
+            uploadQueue.queueRegular(data)
+        } else {
+            synchronized(batchQueue) {
+                batchQueue.add(data)
+                if (batchQueue.size >= BATCH_THRESHOLD) {
+                    flushBatchQueue()
+                }
+            }
+        }
+    }
+
+    fun flushBatchQueue() {
+        val batchToSend: List<String>
+        synchronized(batchQueue) {
+            if (batchQueue.isEmpty()) return
+            batchToSend = batchQueue.toList()
+            batchQueue.clear()
+        }
+        scheduler.submitOneTimeTask { processBatch(batchToSend) }
     }
 
     fun queueForcedData(data: String) {
@@ -241,6 +290,7 @@ class DataUploader(
 
     fun stop() {
         ua.set(false)
+        flushBatchQueue()
         uploadQueue.clear()
         scheduler.stop()
     }
@@ -252,6 +302,7 @@ class DataUploader(
         isOffline.set(false)
         offlineSessionBaseTimestamp.set(null)
         uploadQueue.clear()
+        synchronized(batchQueue) { batchQueue.clear() }
         sp.edit().putLong("totalUploadedBytes", 0L).remove("lastUploadedJson").apply()
         h.post {
             notifyStatus("Paused", "Upload paused.", tb.get(), bufferedSize.get())
@@ -272,6 +323,7 @@ class DataUploader(
     }
 
     fun cleanup() {
+        flushBatchQueue()
         scheduler.cleanup()
         scope.launch { dataBuffer.cleanupOldData() }
     }

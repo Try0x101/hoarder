@@ -6,6 +6,11 @@ import android.content.SharedPreferences
 class Prefs(ctx: Context) {
     private val p: SharedPreferences = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
 
+    companion object {
+        const val POWER_MODE_CONTINUOUS = 0
+        const val POWER_MODE_OPTIMIZED = 1
+    }
+
     fun isFirstRun() = p.getBoolean("isFirstRun", true)
     fun markFirstRunComplete() = p.edit().putBoolean("isFirstRun", false).apply()
 
@@ -35,4 +40,7 @@ class Prefs(ctx: Context) {
 
     fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
+
+    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_CONTINUOUS)
+    fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()
 }

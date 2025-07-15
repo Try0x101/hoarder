@@ -8,6 +8,7 @@ import android.provider.Settings
 import com.example.hoarder.collection.source.BatteryCollector
 import com.example.hoarder.collection.source.LocationCollector
 import com.example.hoarder.data.DataUploader
+import com.example.hoarder.power.PowerManager
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import kotlinx.coroutines.*
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference
 class DataCollector(
     private val ctx: Context,
     private val h: Handler,
+    private val powerManager: PowerManager,
     private val callback: (String) -> Unit
 ) {
     private val ca = AtomicBoolean(false)
@@ -32,6 +34,7 @@ class DataCollector(
     }
 
     private val reusableDataMap = mutableMapOf<String, Any>()
+    private val reusableStringMap = mutableMapOf<String, String>()
 
     private val precisionCache = mutableMapOf<String, Int>()
     private var lastPrecisionUpdate = 0L
@@ -40,23 +43,10 @@ class DataCollector(
     private val dataUploader = AtomicReference<DataUploader?>(null)
     private val collectionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private val sensorMgr = SensorManager(ctx, h)
+    private val sensorMgr = SensorManager(ctx, h, powerManager)
     private val networkCollector = NetworkDataCollector(ctx)
     private val batteryCollector = BatteryCollector(ctx)
     private val locationCollector = LocationCollector(sensorMgr)
-
-    private val dr = object : Runnable {
-        override fun run() {
-            if (ca.get()) {
-                try {
-                    collectData()
-                } catch (e: Exception) { /* Continue collection */ }
-                if (ca.get()) {
-                    h.postDelayed(this, 1000L)
-                }
-            }
-        }
-    }
 
     fun init() {
         if (isInitialized.compareAndSet(false, true)) {
@@ -69,20 +59,18 @@ class DataCollector(
 
     fun start() {
         if (!isInitialized.get()) init()
-        h.removeCallbacks(dr)
         ca.set(true)
-        h.post(dr)
     }
 
     fun stop() {
         ca.set(false)
-        h.removeCallbacks(dr)
     }
 
     fun cleanup() {
         stop()
         sensorMgr.cleanup()
         batteryCollector.cleanup()
+        networkCollector.cleanup()
         collectionScope.cancel()
         isInitialized.set(false)
     }
@@ -103,7 +91,7 @@ class DataCollector(
         }
     }
 
-    private fun collectData() {
+    fun collectDataOnce() {
         if (!ca.get() || !isInitialized.get()) return
         reusableDataMap.clear()
 
@@ -123,7 +111,8 @@ class DataCollector(
             networkCollector.collectWifiData(reusableDataMap)
             networkCollector.collectMobileNetworkData(reusableDataMap)
 
-            val json = gson.toJson(reusableDataMap)
+            convertToStringMapOptimized(reusableDataMap, reusableStringMap)
+            val json = gson.toJson(reusableStringMap)
             processCollectedData(json)
         } catch (e: Exception) { /* Error in data collection, skip this cycle */ }
     }
@@ -132,6 +121,13 @@ class DataCollector(
         dataUploader.get()?.queueData(json)
         h.post {
             if (ca.get()) callback(json)
+        }
+    }
+
+    private fun convertToStringMapOptimized(data: Map<String, Any>, target: MutableMap<String, String>) {
+        target.clear()
+        data.forEach { (key, value) ->
+            target[key] = value.toString()
         }
     }
 }

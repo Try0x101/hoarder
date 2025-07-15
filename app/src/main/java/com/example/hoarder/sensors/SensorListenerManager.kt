@@ -13,7 +13,9 @@ class SensorListenerManager(
     private val locationManager: LocationManager,
     private val sensorManager: SensorManager,
     private val locationListener: LocationListener,
-    private val sensorEventListener: SensorEventListener
+    private val sensorEventListener: SensorEventListener,
+    private var requestInterval: Long,
+    private var requestDistance: Float
 ) {
     private val listenersRegistered = AtomicBoolean(false)
 
@@ -36,16 +38,21 @@ class SensorListenerManager(
         }
     }
 
+    fun updateRequestParams(interval: Long, distance: Float) {
+        this.requestInterval = interval
+        this.requestDistance = distance
+    }
+
     private fun registerLocationListeners() {
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0f, locationListener)
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, requestInterval, requestDistance, locationListener)
             }
         } catch (e: SecurityException) { /* Ignored */ }
 
         try {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000, 0f, locationListener)
+                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, requestInterval, requestDistance, locationListener)
             }
         } catch (e: SecurityException) { /* Ignored */ }
     }

@@ -10,11 +10,23 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.power.PowerManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
-class SensorManager(private val ctx: Context, private val handler: Handler) {
+class SensorManager(
+    private val ctx: Context,
+    private val handler: Handler,
+    powerManager: PowerManager
+) {
     private lateinit var locationManager: LocationManager
     private lateinit var androidSensorManager: AndroidSensorManager
     private lateinit var listenerManager: SensorListenerManager
@@ -34,6 +46,8 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
     private var lastAltitudeUpdateTime: Long = 0L
     private var lastEmittedAltitude: Int = 0
     private val ALTITUDE_UPDATE_INTERVAL_MS = 10000L
+
+    private val sensorScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -58,19 +72,40 @@ class SensorManager(private val ctx: Context, private val handler: Handler) {
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
 
+    init {
+        powerManager.powerState
+            .onEach { state ->
+                if (isInitialized.get()) {
+                    listenerManager.unregisterListeners()
+                    configureListeners(state.mode, state.isMoving)
+                    listenerManager.registerListeners()
+                }
+            }
+            .launchIn(sensorScope)
+    }
+
     fun init() {
         if (isInitialized.compareAndSet(false, true)) {
             locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             androidSensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as AndroidSensorManager
-            listenerManager = SensorListenerManager(ctx, locationManager, androidSensorManager, locationListener, sensorEventListener)
+            listenerManager = SensorListenerManager(ctx, locationManager, androidSensorManager, locationListener, sensorEventListener, 1000, 0f)
             listenerManager.registerListeners()
         }
+    }
+
+    private fun configureListeners(mode: Int, isMoving: Boolean) {
+        val (interval, distance) = when (mode) {
+            Prefs.POWER_MODE_OPTIMIZED -> if (isMoving) Pair(5000L, 5f) else Pair(60000L, 100f)
+            else -> Pair(1000L, 0f) // Continuous
+        }
+        listenerManager.updateRequestParams(interval, distance)
     }
 
     fun cleanup() {
         if (isInitialized.compareAndSet(true, false)) {
             listenerManager.unregisterListeners()
             resetState()
+            sensorScope.cancel()
         }
     }
 

@@ -149,7 +149,7 @@
                         android:id="@+id/timestampInfoText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="• Real-time data is not timestamped by the client.\n• Offline data uses an efficient batching system:\n  - 'bts' (Base Timestamp): A full Unix timestamp on the first record of an offline session.\n  - 'tso' (Timestamp Offset): Seconds since 'bts' for all subsequent records in the session.\n• This system makes offline batches self-contained and compact."
+                        android:text="• Fixed epoch system: seconds since June 30, 2025 00:00:00 UTC\n• Storage benefits: 1-8 bytes vs standard 10-byte Unix timestamps\n• Server reconstruction: add fixed epoch (1719705600) to ts value\n• IMPORTANT: Both app and server must use SAME epoch reference"
                         android:textColor="@color/amoled_light_gray"
                         android:textSize="12sp"
                         android:lineSpacingExtra="4dp"
@@ -168,7 +168,7 @@
                         android:id="@+id/precisionInfoText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="• GPS: Variable precision based on speed. Higher speed results in lower location precision.\n• Altitude: Kalman filtered GPS+barometer with rate limiting to prevent sudden jumps. Smart rounding applied.\n• RSSI: Signal-based precision. Weaker signals are rounded more aggressively.\n• Battery: Level-based precision. Lower battery levels are reported more precisely.\n• Network: Speed-based precision. Slower speeds reported with decimal precision, faster speeds are rounded.\n• Speed: Variable precision with stationary detection (reports 0). Slower speeds are rounded less than faster speeds."
+                        android:text="• GPS: Variable precision based on speed (4 tiers)\n• Altitude: Kalman filtered GPS+barometer with rate limiting\n• RSSI: Signal-based precision (3 tiers)\n• Battery: Level-based precision (3 tiers)\n• Network: Speed-based precision with decimal/integer modes\n• Speed: Variable precision with stationary detection"
                         android:textColor="@color/amoled_light_gray"
                         android:textSize="12sp"
                         android:lineSpacingExtra="4dp"
@@ -187,7 +187,7 @@
                         android:id="@+id/fieldsInfoText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="• 'id', 'n': Device ID and model\n• 'perc', 'cap': Battery percentage and capacity\n• 'lat', 'lon', 'alt', 'acc', 'spd': GPS data\n• 'op', 'nt', 'ci', 'tac', 'mcc', 'mnc', 'rssi': Cellular data\n• 'bssid': WiFi BSSID (compact format)\n• 'dn', 'up': Network download/upload speed\n• 'bts', 'tso': Timestamps for offline data only\n\nOPTIMIZATIONS: Native JSON numbers for efficiency, compact BSSID format, and a 'bts'/'tso' timestamp system for offline data."
+                        android:text="• 'id': Device identifier, 'n': Device model, 'perc'/'cap': Battery data\n• 'lat'/'lon'/'alt'/'acc'/'spd': GPS location and movement data\n• 'op'/'nt'/'ci'/'tac'/'mcc'/'mnc'/'rssi': Cellular network data\n• 'bssid': WiFi connection (compact format), 'dn'/'up': Network speeds\n• 'ts': Timestamp (buffered data only)\n\nOPTIMIZATIONS: String values, compact BSSID, fixed epoch timestamps\nSaves ~7-14 bytes per record vs standard formats"
                         android:textColor="@color/amoled_light_gray"
                         android:textSize="12sp"
                         android:lineSpacingExtra="4dp"
@@ -336,6 +336,101 @@
                     android:thumbTint="@color/amoled_white"
                     android:track="@drawable/switch_track_selector" />
             </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RelativeLayout
+                    android:id="@+id/powerSavingHeader"
+                    style="@style/SettingsRow">
+
+                    <ImageView
+                        android:id="@+id/powerSavingIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@android:drawable/ic_lock_power_off"
+                        app:tint="@color/amoled_light_gray" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/powerSavingArrow"
+                        android:layout_toEndOf="@id/powerSavingIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Power Saving" />
+
+                        <TextView
+                            android:id="@+id/powerSavingSubtitle"
+                            style="@style/SettingsSubtitle"
+                            android:text="Continuous" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/powerSavingArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@android:drawable/arrow_down_float" />
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:id="@+id/powerSavingContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="20dp"
+                    android:paddingBottom="16dp"
+                    android:visibility="gone">
+
+                    <RadioGroup
+                        android:id="@+id/powerModeRadioGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="8dp">
+
+                        <RadioButton
+                            android:id="@+id/radioContinuous"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Continuous"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="16dp"
+                            android:text="Highest data frequency. Collects and uploads data every second with maximum GPS accuracy. Recommended for testing or when device is charging." />
+
+                        <RadioButton
+                            android:id="@+id/radioOptimized"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Optimized"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:text="Significantly reduces battery usage. Collection slows to 1/min when stationary and 1/5s when moving. Uploads are batched to reduce network power drain. Ideal for all-day use." />
+                    </RadioGroup>
+
+                </LinearLayout>
+            </LinearLayout>
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

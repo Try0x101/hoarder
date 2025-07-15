@@ -22,6 +22,11 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var precisionSettingsHeader: RelativeLayout
     private lateinit var precisionSettingsArrow: ImageView
     private lateinit var precisionSettingsContent: LinearLayout
+    private lateinit var powerSavingHeader: RelativeLayout
+    private lateinit var powerSavingArrow: ImageView
+    private lateinit var powerSavingContent: LinearLayout
+    private lateinit var powerSavingSubtitle: TextView
+    private lateinit var powerModeRadioGroup: RadioGroup
 
     private val precisionChooser by lazy { PrecisionChooserDialog(a, p, onPrecisionChanged) }
 
@@ -48,11 +53,17 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         precisionSettingsHeader = a.findViewById(R.id.precisionSettingsHeader)
         precisionSettingsArrow = a.findViewById(R.id.precisionSettingsArrow)
         precisionSettingsContent = a.findViewById(R.id.precisionSettingsContent)
+        powerSavingHeader = a.findViewById(R.id.powerSavingHeader)
+        powerSavingArrow = a.findViewById(R.id.powerSavingArrow)
+        powerSavingContent = a.findViewById(R.id.powerSavingContent)
+        powerSavingSubtitle = a.findViewById(R.id.powerSavingSubtitle)
+        powerModeRadioGroup = a.findViewById(R.id.powerModeRadioGroup)
     }
 
     private fun setupState() {
         dataCollectionSwitch.isChecked = p.isDataCollectionEnabled()
         serverUploadSwitch.isChecked = p.isDataUploadEnabled()
+        updatePowerSavingUI()
     }
 
     private fun setupListeners() {
@@ -88,8 +99,28 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
             toggleVisibility(precisionSettingsContent, precisionSettingsArrow)
         }
 
+        powerSavingHeader.setOnClickListener {
+            toggleVisibility(powerSavingContent, powerSavingArrow)
+        }
+
+        powerModeRadioGroup.setOnCheckedChangeListener { _, checkedId ->
+            val newMode = if (checkedId == R.id.radioOptimized) Prefs.POWER_MODE_OPTIMIZED else Prefs.POWER_MODE_CONTINUOUS
+            p.setPowerMode(newMode)
+            updatePowerSavingUI()
+            a.onPowerModeChanged()
+        }
+
         setupPrecisionListeners()
         setupTextCopyListeners()
+    }
+
+    private fun updatePowerSavingUI() {
+        val currentMode = p.getPowerMode()
+        powerSavingSubtitle.text = if (currentMode == Prefs.POWER_MODE_OPTIMIZED) "Optimized" else "Continuous"
+        val checkedRadioId = if (currentMode == Prefs.POWER_MODE_OPTIMIZED) R.id.radioOptimized else R.id.radioContinuous
+        if (powerModeRadioGroup.checkedRadioButtonId != checkedRadioId) {
+            powerModeRadioGroup.check(checkedRadioId)
+        }
     }
 
     private fun setupPrecisionListeners() {

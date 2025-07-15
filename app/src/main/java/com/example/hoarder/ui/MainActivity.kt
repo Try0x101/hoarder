@@ -157,6 +157,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun onPowerModeChanged() {
+        val intent = Intent("com.example.hoarder.POWER_MODE_CHANGED").apply {
+            putExtra("newMode", prefs.getPowerMode())
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     fun startCollection() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
     }

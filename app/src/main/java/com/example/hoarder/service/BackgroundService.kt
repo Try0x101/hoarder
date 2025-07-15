@@ -19,11 +19,15 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.DataUploader
+import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
+import com.example.hoarder.ui.MainActivity
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BackgroundService: Service(){
@@ -33,7 +37,9 @@ class BackgroundService: Service(){
     private lateinit var servicePrefs: SharedPreferences
     private lateinit var appPrefs: SharedPreferences
     private lateinit var commandHandler: ServiceCommandHandler
+    private lateinit var powerManager: PowerManager
 
+    private var collectionJob: Job? = null
     private val ca = AtomicBoolean(false)
     private val ua = AtomicBoolean(false)
     private val isInitialized = AtomicBoolean(false)
@@ -53,9 +59,11 @@ class BackgroundService: Service(){
         servicePrefs = getSharedPreferences("HoarderServicePrefs", MODE_PRIVATE)
         appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
 
-        dataUploader = DataUploader(this, h, servicePrefs)
+        val mainPrefs = Prefs(this)
+        powerManager = PowerManager(this, mainPrefs)
+        dataUploader = DataUploader(this, h, servicePrefs, powerManager)
 
-        dataCollector = DataCollector(this, h) { json ->
+        dataCollector = DataCollector(this, h, powerManager) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
                 .sendBroadcast(
                     Intent("com.example.hoarder.DATA_UPDATE").putExtra(
@@ -66,13 +74,34 @@ class BackgroundService: Service(){
         }
 
         commandHandler = ServiceCommandHandler(
-            this, serviceScope, dataCollector, dataUploader,
+            this, serviceScope, dataCollector, dataUploader, powerManager,
             ca, ua, this::updateAppPreferences, this::broadcastStateUpdate
         )
 
         dataCollector.setDataUploader(dataUploader)
 
         registerServiceReceiver()
+        observePowerState()
+    }
+
+    private fun observePowerState() {
+        powerManager.powerState
+            .onEach { state ->
+                collectionJob?.cancel()
+                if (ca.get()) {
+                    val interval = when (state.mode) {
+                        Prefs.POWER_MODE_OPTIMIZED -> if (state.isMoving) 5000L else 60000L
+                        else -> 1000L // Continuous
+                    }
+                    collectionJob = serviceScope.launch {
+                        while (true) {
+                            dataCollector.collectDataOnce()
+                            delay(interval)
+                        }
+                    }
+                }
+            }
+            .launchIn(serviceScope)
     }
 
     private fun registerServiceReceiver() {
@@ -85,6 +114,7 @@ class BackgroundService: Service(){
                 addAction("com.example.hoarder.FORCE_UPLOAD")
                 addAction("com.example.hoarder.SEND_BUFFER")
                 addAction("com.example.hoarder.GET_STATE")
+                addAction("com.example.hoarder.POWER_MODE_CHANGED")
             })
         }
     }
@@ -108,6 +138,7 @@ class BackgroundService: Service(){
         try{
             startForeground(1, createNotification())
             dataCollector.init()
+            powerManager.start()
         } catch(e:SecurityException){
             lbm.sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
             stopSelf()
@@ -126,9 +157,10 @@ class BackgroundService: Service(){
             dataUploader.setServer(server[0], server[1].toInt())
         }
 
-        if (shouldCollect && ca.compareAndSet(false, true)) {
-            dataCollector.start()
+        if (shouldCollect) {
+            commandHandler.handle(Intent("com.example.hoarder.START_COLLECTION"))
         }
+
 
         if (shouldUpload && dataUploader.hasValidServer() && ua.compareAndSet(false, true)) {
             dataUploader.resetCounter()
@@ -190,12 +222,14 @@ class BackgroundService: Service(){
     }
 
     private fun cleanup() {
+        collectionJob?.cancel()
         ca.set(false)
         ua.set(false)
 
         try {
             dataCollector.cleanup()
             dataUploader.cleanup()
+            powerManager.stop()
             serviceScope.cancel()
         } catch (e: Exception) {
             // Cleanup error
