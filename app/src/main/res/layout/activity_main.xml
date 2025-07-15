@@ -428,9 +428,8 @@
                             android:paddingEnd="8dp"
                             android:layout_marginBottom="8dp"
                             android:lineSpacingExtra="4dp"
-                            android:text="All-Day Tracking / Low Power.\n• Motion Detection: Uses ultra-low power hardware sensors to detect when you start/stop moving.\n• Adaptive Intervals: Collection slows down when stationary (1-5 mins) and adapts to speed when moving (5-30 secs).\n• Smart GPS: Automatically disabled after 10 mins of being stationary to save power.\n• Use Case: Recommended for normal all-day use with minimal battery drain." />
+                            android:text="All-Day Tracking / Low Power.\n• Motion Detection: Uses Google Activity Recognition API for accurate movement detection.\n• Adaptive Intervals: Collection slows down when stationary (1-5 mins) and adapts to speed when moving (5-30 secs).\n• Smart GPS: Automatically disabled after 10 mins of being stationary to save power.\n• Use Case: Recommended for normal all-day use with minimal battery drain." />
                     </RadioGroup>
-
                 </LinearLayout>
             </LinearLayout>
 

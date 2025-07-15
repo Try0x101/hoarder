@@ -20,6 +20,10 @@ class SensorListenerManager(
     private val listenersRegistered = AtomicBoolean(false)
     private val gpsRegistered = AtomicBoolean(false)
 
+    companion object {
+        private const val PRESSURE_BATCH_LATENCY_US = 1_000_000L
+    }
+
     fun registerListeners() {
         if (listenersRegistered.compareAndSet(false, true)) {
             registerLocationListeners()
@@ -77,7 +81,12 @@ class SensorListenerManager(
     private fun registerPressureSensor() {
         val pressureSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
         pressureSensor?.let {
-            sensorManager.registerListener(sensorEventListener, it, SensorManager.SENSOR_DELAY_NORMAL)
+            sensorManager.registerListener(
+                sensorEventListener,
+                it,
+                SensorManager.SENSOR_DELAY_NORMAL,
+                PRESSURE_BATCH_LATENCY_US.toInt()
+            )
         }
     }
 }

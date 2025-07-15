@@ -16,8 +16,9 @@ data class CompressionResult(
 
 object CompressionUtils {
 
-    private const val NO_COMPRESSION_THRESHOLD = 25
+    private const val NO_COMPRESSION_THRESHOLD = 50
     private const val COMPRESSION_LEVEL = Deflater.BEST_COMPRESSION
+    private const val MIN_COMPRESSION_BENEFIT = 0.85f
 
     fun compressData(jsonData: String): CompressionResult {
         val originalBytes = jsonData.toByteArray(StandardCharsets.UTF_8)
@@ -30,7 +31,7 @@ object CompressionUtils {
                     originalSize = originalSize,
                     compressedSize = originalSize,
                     compressionRatio = 1.0f,
-                    method = "none",
+                    method = "none-too-small",
                     wasCompressed = false
                 )
             }
@@ -49,13 +50,13 @@ object CompressionUtils {
             val compressedSize = compressedBytes.size
             val compressionRatio = compressedSize.toFloat() / originalSize.toFloat()
 
-            if (compressedSize >= originalSize) {
+            if (compressedSize >= originalSize || compressionRatio > MIN_COMPRESSION_BENEFIT) {
                 CompressionResult(
                     compressed = originalBytes,
                     originalSize = originalSize,
                     compressedSize = originalSize,
                     compressionRatio = 1.0f,
-                    method = "none-fallback",
+                    method = "none-insufficient-benefit",
                     wasCompressed = false
                 )
             } else {

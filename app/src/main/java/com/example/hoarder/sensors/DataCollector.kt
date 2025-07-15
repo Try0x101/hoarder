@@ -39,7 +39,15 @@ class DataCollector(
 
     private val precisionCache = mutableMapOf<String, Int>()
     private var lastPrecisionUpdate = 0L
-    private val PRECISION_CACHE_TTL = 10000L
+    private var dataChangeCount = 0
+    private var lastDataChangeTime = 0L
+
+    companion object {
+        private const val BASE_PRECISION_CACHE_TTL = 10000L
+        private const val MIN_PRECISION_CACHE_TTL = 5000L
+        private const val MAX_PRECISION_CACHE_TTL = 60000L
+        private const val DATA_CHANGE_WINDOW_MS = 30000L
+    }
 
     private val dataUploader = AtomicReference<DataUploader?>(null)
     private val collectionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -130,13 +138,43 @@ class DataCollector(
 
     private fun updatePrecisionCache() {
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastPrecisionUpdate > PRECISION_CACHE_TTL) {
+        val adaptiveTTL = calculateAdaptiveCacheTTL()
+
+        if (currentTime - lastPrecisionUpdate > adaptiveTTL) {
             precisionCache.clear()
             precisionCache["battery"] = sharedPrefs.getInt("batteryPrecision", -1)
             precisionCache["gps"] = sharedPrefs.getInt("gpsPrecision", -1)
             precisionCache["speed"] = sharedPrefs.getInt("speedPrecision", -1)
             precisionCache["altitude"] = sharedPrefs.getInt("gpsAltitudePrecision", -1)
             lastPrecisionUpdate = currentTime
+        }
+    }
+
+    private fun calculateAdaptiveCacheTTL(): Long {
+        val currentTime = System.currentTimeMillis()
+
+        val recentChanges = if (currentTime - lastDataChangeTime < DATA_CHANGE_WINDOW_MS) {
+            dataChangeCount
+        } else {
+            0
+        }
+
+        return when {
+            recentChanges >= 10 -> MIN_PRECISION_CACHE_TTL
+            recentChanges >= 5 -> BASE_PRECISION_CACHE_TTL
+            recentChanges >= 2 -> BASE_PRECISION_CACHE_TTL * 2
+            else -> MAX_PRECISION_CACHE_TTL
+        }.coerceIn(MIN_PRECISION_CACHE_TTL, MAX_PRECISION_CACHE_TTL)
+    }
+
+    private fun trackDataChange() {
+        val currentTime = System.currentTimeMillis()
+
+        if (currentTime - lastDataChangeTime > DATA_CHANGE_WINDOW_MS) {
+            dataChangeCount = 1
+            lastDataChangeTime = currentTime
+        } else {
+            dataChangeCount++
         }
     }
 
@@ -157,6 +195,7 @@ class DataCollector(
             collectNetworkDataIntelligent(isMoving)
 
             if (hasDataChanged()) {
+                trackDataChange()
                 convertToStringMapOptimized(reusableDataMap, reusableStringMap)
                 val json = gson.toJson(reusableStringMap)
                 processCollectedData(json)

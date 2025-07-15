@@ -56,7 +56,7 @@ class DataUploader(
     private val dataBuffer = DataBuffer(logDao, g)
     private val uploadLogger = UploadLogger(logDao)
     private val networkUploader = NetworkUploader(ctx)
-    private val scheduler = UploadScheduler(h, ::processQueue)
+    private val scheduler = UploadScheduler(ctx, h, ::processQueue)
 
     init {
         scope.launch {

@@ -14,18 +14,52 @@ class CellularCollector(private val ctx: Context) {
     private val isInitialized = AtomicBoolean(false)
     private val hasPermissions = AtomicBoolean(false)
     private val cellInfoCache = AtomicReference<List<CellInfo>?>(null)
+    private val lastCellularData = AtomicReference<Map<String, Any>?>(null)
+    private val lastProcessedCellId = AtomicReference<String?>(null)
+    private var lastCellInfoUpdate = 0L
+
+    companion object {
+        private const val CELL_INFO_CACHE_TTL = 5000L
+    }
 
     @Suppress("DEPRECATION")
     private val phoneStateListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
             override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                cellInfoCache.set(cellInfo)
+                processCellInfoUpdate(cellInfo)
             }
         }
     } else {
         object : PhoneStateListener() {
             override fun onCellInfoChanged(cellInfo: List<CellInfo>?) {
-                cellInfo?.let { cellInfoCache.set(it) }
+                cellInfo?.let { processCellInfoUpdate(it) }
+            }
+        }
+    }
+
+    private fun processCellInfoUpdate(cellInfo: List<CellInfo>) {
+        val primaryCellId = extractPrimaryCellId(cellInfo)
+        val lastCellId = lastProcessedCellId.get()
+
+        if (primaryCellId != lastCellId) {
+            cellInfoCache.set(cellInfo)
+            lastCellInfoUpdate = System.currentTimeMillis()
+            lastProcessedCellId.set(primaryCellId)
+            lastCellularData.set(null)
+        }
+    }
+
+    private fun extractPrimaryCellId(cellInfoList: List<CellInfo>): String? {
+        return cellInfoList.firstOrNull { it.isRegistered }?.let { cellInfo ->
+            when (cellInfo) {
+                is CellInfoLte -> cellInfo.cellIdentity.ci.takeIf { it != Int.MAX_VALUE }?.toString()
+                is CellInfoWcdma -> cellInfo.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.toString()
+                is CellInfoGsm -> cellInfo.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.toString()
+                is CellInfoNr -> {
+                    val cin = cellInfo.cellIdentity as? CellIdentityNr
+                    cin?.nci?.toString()
+                }
+                else -> null
             }
         }
     }
@@ -57,7 +91,6 @@ class CellularCollector(private val ctx: Context) {
                     tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_NONE)
                 }
             } catch (e: Exception) {
-                // Ignore cleanup errors
             }
         }
     }
@@ -78,21 +111,40 @@ class CellularCollector(private val ctx: Context) {
         }
 
         try {
+            val cachedData = lastCellularData.get()
+            if (cachedData != null && !shouldRefreshCellData()) {
+                dm.putAll(cachedData)
+                return
+            }
+
             dm["op"] = getOperatorName()
             dm["nt"] = getNetworkTypeName()
 
             var currentCellInfo = cellInfoCache.get()
-            if (currentCellInfo == null) {
+            if (currentCellInfo == null || shouldRefreshFromTelephony()) {
                 currentCellInfo = tm.allCellInfo
-                cellInfoCache.set(currentCellInfo)
+                if (currentCellInfo != null) {
+                    processCellInfoUpdate(currentCellInfo)
+                }
             }
 
             if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
                 setDefaultCellValues(dm)
+            } else {
+                val collectedData = dm.filterKeys { it in setOf("op", "nt", "ci", "tac", "mcc", "mnc", "rssi") }
+                lastCellularData.set(collectedData)
             }
         } catch (e: Exception) {
             setDefaultCellValues(dm)
         }
+    }
+
+    private fun shouldRefreshCellData(): Boolean {
+        return System.currentTimeMillis() - lastCellInfoUpdate > CELL_INFO_CACHE_TTL
+    }
+
+    private fun shouldRefreshFromTelephony(): Boolean {
+        return cellInfoCache.get() == null || shouldRefreshCellData()
     }
 
     private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
