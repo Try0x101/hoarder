@@ -31,6 +31,7 @@ class ServiceCommandHandler(
             "com.example.hoarder.SEND_BUFFER" -> handleSendBuffer()
             "com.example.hoarder.GET_STATE" -> broadcastStateUpdate()
             "com.example.hoarder.POWER_MODE_CHANGED" -> handlePowerModeChange(intent)
+            "com.example.hoarder.MOTION_STATE_CHANGED" -> handleMotionStateChange(intent)
         }
     }
 
@@ -99,7 +100,11 @@ class ServiceCommandHandler(
 
     private fun handlePowerModeChange(intent: Intent) {
         val newMode = intent.getIntExtra("newMode", Prefs.POWER_MODE_CONTINUOUS)
-        dataUploader.flushBatchQueue()
         powerManager.updateMode(newMode)
+    }
+
+    private fun handleMotionStateChange(intent: Intent) {
+        val isMoving = intent.getBooleanExtra("isMoving", true)
+        powerManager.onMotionStateChanged(isMoving)
     }
 }

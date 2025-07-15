@@ -96,6 +96,14 @@ class BackgroundService: Service(){
     }
 
     override fun onStartCommand(i: Intent?, f:Int, s:Int):Int{
+        if (i?.action == "com.example.hoarder.MOTION_STATE_CHANGED") {
+            if (!isInitialized.get()) {
+                initService()
+            }
+            commandHandler.handle(i)
+            return START_STICKY
+        }
+
         if (isInitialized.compareAndSet(false, true)) {
             createNotificationChannel()
             initService()

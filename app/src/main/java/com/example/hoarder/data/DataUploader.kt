@@ -57,9 +57,6 @@ class DataUploader(
     private val networkUploader = NetworkUploader(ctx)
     private val scheduler = UploadScheduler(h, ::processQueue)
 
-    private val batchQueue = mutableListOf<String>()
-    private var lastBatchTime = System.currentTimeMillis()
-
     init {
         scope.launch {
             bufferedSize.set(dataBuffer.getBufferedDataSize())
@@ -108,6 +105,7 @@ class DataUploader(
 
         val deltaMap = DeltaComputer.calculateDelta(previousDataMap, currentDataMap)
         if (deltaMap.isEmpty()) {
+            lastProcessedMap.set(currentDataMap)
             h.post { notifyStatus("No Change", "Data unchanged, skipping upload.", tb.get(), bufferedSize.get()) }
         } else {
             val deltaJson = g.toJson(deltaMap)
@@ -154,94 +152,30 @@ class DataUploader(
         h.post { notifyStatus(statusText, "Uploaded successfully.", tb.get(), bufferedSize.get(), uploadedBytes) }
     }
 
-    private fun handleUploadFailure(uploadJson: String, fullJson: String, currentMap: Map<String, Any>) {
-        val payloadToBuffer = if (!isOffline.getAndSet(true)) {
+    private fun handleUploadFailure(uploadJson: String, fullJsonForBuffer: String, currentMap: Map<String, Any>) {
+        val payloadToBuffer: String
+
+        if (!isOffline.getAndSet(true)) {
             val baseTimestamp = System.currentTimeMillis() / 1000
             offlineSessionBaseTimestamp.set(baseTimestamp)
-            val map: MutableMap<String, Any> = g.fromJson(fullJson, mapType)
+            val map: MutableMap<String, Any> = g.fromJson(fullJsonForBuffer, mapType)
             map["bts"] = baseTimestamp
-            g.toJson(map)
+            payloadToBuffer = g.toJson(map)
         } else {
             val baseTs = offlineSessionBaseTimestamp.get() ?: (System.currentTimeMillis() / 1000).also { offlineSessionBaseTimestamp.set(it) }
             val offset = (System.currentTimeMillis() / 1000) - baseTs
             val map: MutableMap<String, Any> = g.fromJson(uploadJson, mapType)
             map["tso"] = offset
-            g.toJson(map)
+            payloadToBuffer = g.toJson(map)
         }
+
         dataBuffer.saveToBuffer(payloadToBuffer)
         bufferedSize.addAndGet(payloadToBuffer.toByteArray().size.toLong())
         lastProcessedMap.set(currentMap)
     }
 
-    private fun getAdaptiveBatchThreshold(): Int {
-        val state = powerManager.powerState.value
-        return when {
-            state.mode == Prefs.POWER_MODE_CONTINUOUS -> 1
-            state.isMoving -> 2
-            else -> 5
-        }
-    }
-
-    private fun getAdaptiveBatchTimeout(): Long {
-        val state = powerManager.powerState.value
-        return when {
-            state.mode == Prefs.POWER_MODE_CONTINUOUS -> 1000L
-            state.isMoving -> 120000L
-            else -> 300000L
-        }
-    }
-
     fun queueData(data: String) {
-        val threshold = getAdaptiveBatchThreshold()
-        val timeout = getAdaptiveBatchTimeout()
-        val currentTime = System.currentTimeMillis()
-
-        if (powerManager.powerState.value.mode == Prefs.POWER_MODE_CONTINUOUS) {
-            uploadQueue.queueRegular(data)
-        } else {
-            synchronized(batchQueue) {
-                batchQueue.add(data)
-                val timeoutReached = (currentTime - lastBatchTime) > timeout
-
-                if (batchQueue.size >= threshold || timeoutReached) {
-                    flushBatchQueue()
-                    lastBatchTime = currentTime
-                }
-            }
-        }
-    }
-
-    fun flushBatchQueue() {
-        val batchToSend: List<String>
-        synchronized(batchQueue) {
-            if (batchQueue.isEmpty()) return
-            batchToSend = batchQueue.toList()
-            batchQueue.clear()
-        }
-        scheduler.submitOneTimeTask { processBatch(batchToSend) }
-    }
-
-    private fun processBatch(batch: List<String>) {
-        if (batch.isEmpty() || !NetUtils.isNetworkAvailable(ctx)) return
-        val result = networkUploader.uploadBatch(batch, ip, port)
-
-        if (result.success) {
-            tb.addAndGet(result.uploadedBytes)
-            sp.edit().putLong("totalUploadedBytes", tb.get()).apply()
-            uploadLogger.addBatchSuccessLog(batch, result.uploadedBytes)
-            h.post {
-                notifyStatus("OK (Batch)", "Buffered data uploaded successfully.", tb.get(), bufferedSize.get(), result.uploadedBytes)
-            }
-        } else {
-            result.errorMessage?.let { uploadLogger.addErrorLog(it) }
-            batch.forEach { jsonRecord ->
-                val mapState: Map<String, Any> = g.fromJson(jsonRecord, mapType)
-                handleUploadFailure(jsonRecord, jsonRecord, mapState)
-            }
-            h.post {
-                notifyStatus(result.statusMessage, result.errorMessage ?: "Batch upload failed, buffering records.", tb.get(), bufferedSize.get())
-            }
-        }
+        uploadQueue.queueRegular(data)
     }
 
     private fun processBatchUpload(batch: List<BufferedPayload>) {
@@ -314,7 +248,6 @@ class DataUploader(
 
     fun stop() {
         ua.set(false)
-        flushBatchQueue()
         uploadQueue.clear()
         scheduler.stop()
     }
@@ -326,7 +259,6 @@ class DataUploader(
         isOffline.set(false)
         offlineSessionBaseTimestamp.set(null)
         uploadQueue.clear()
-        synchronized(batchQueue) { batchQueue.clear() }
         sp.edit().putLong("totalUploadedBytes", 0L).remove("lastUploadedJson").apply()
         h.post {
             notifyStatus("Paused", "Upload paused.", tb.get(), bufferedSize.get())
@@ -347,7 +279,6 @@ class DataUploader(
     }
 
     fun cleanup() {
-        flushBatchQueue()
         scheduler.cleanup()
         scope.launch { dataBuffer.cleanupOldData() }
     }
