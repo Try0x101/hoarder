@@ -1,6 +1,11 @@
 package com.example.hoarder.ui
 
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.*
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.ui.dialogs.PrecisionChooserDialog
@@ -10,8 +15,7 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var dataCollectionSwitch: Switch
     private lateinit var dataCollectionSubtitle: TextView
     private lateinit var dataCollectionArrow: ImageView
-    private lateinit var dataCollectionContent: HorizontalScrollView
-    private lateinit var rawJsonTextView: TextView
+    private lateinit var dataCollectionContent: ViewPager2
     private lateinit var dataDescriptionHeader: RelativeLayout
     private lateinit var dataDescriptionArrow: ImageView
     private lateinit var dataDescriptionContent: LinearLayout
@@ -29,9 +33,11 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var powerModeRadioGroup: RadioGroup
 
     private val precisionChooser by lazy { PrecisionChooserDialog(a, p, onPrecisionChanged) }
+    private lateinit var jsonPagerAdapter: JsonPagerAdapter
 
     fun setupUI() {
         findViews()
+        setupPager()
         setupState()
         setupListeners()
     }
@@ -42,7 +48,6 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         dataCollectionSubtitle = a.findViewById(R.id.dataCollectionSubtitle)
         dataCollectionArrow = a.findViewById(R.id.dataCollectionArrow)
         dataCollectionContent = a.findViewById(R.id.dataCollectionContent)
-        rawJsonTextView = a.findViewById(R.id.rawJsonTextView)
         dataDescriptionHeader = a.findViewById(R.id.dataDescriptionHeader)
         dataDescriptionArrow = a.findViewById(R.id.dataDescriptionArrow)
         dataDescriptionContent = a.findViewById(R.id.dataDescriptionContent)
@@ -58,6 +63,11 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         powerSavingContent = a.findViewById(R.id.powerSavingContent)
         powerSavingSubtitle = a.findViewById(R.id.powerSavingSubtitle)
         powerModeRadioGroup = a.findViewById(R.id.powerModeRadioGroup)
+    }
+
+    private fun setupPager() {
+        jsonPagerAdapter = JsonPagerAdapter()
+        dataCollectionContent.adapter = jsonPagerAdapter
     }
 
     private fun setupState() {
@@ -147,12 +157,12 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         }
     }
 
-    fun toggleVisibility(content: android.view.View, arrow: ImageView) {
-        val isVisible = content.visibility == android.view.View.VISIBLE
-        content.visibility = if (isVisible) android.view.View.GONE else android.view.View.VISIBLE
+    fun toggleVisibility(content: View, arrow: ImageView) {
+        val isVisible = content.visibility == View.VISIBLE
+        content.visibility = if (isVisible) View.GONE else View.VISIBLE
         arrow.animate().rotation(if (isVisible) 0f else 180f).setDuration(300).start()
         if (content.id == R.id.dataCollectionContent && !isVisible) {
-            rawJsonTextView.text = a.getLastData()
+            jsonPagerAdapter.updateJson(a.getLastData())
         }
     }
 
@@ -160,5 +170,95 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         val clipboard = a.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
         val clip = android.content.ClipData.newPlainText(label, textView.text)
         clipboard.setPrimaryClip(clip)
+    }
+
+    fun updateJson(json: String?) {
+        jsonPagerAdapter.updateJson(json)
+    }
+
+    inner class JsonPagerAdapter : RecyclerView.Adapter<JsonPagerAdapter.JsonViewHolder>() {
+        private var optimizedJson = ""
+        private var readableJson = ""
+
+        fun updateJson(json: String?) {
+            if (json.isNullOrEmpty()) {
+                optimizedJson = "Collection is inactive or waiting for data..."
+                readableJson = "Collection is inactive or waiting for data..."
+            } else {
+                optimizedJson = json
+                readableJson = convertToReadableJson(json)
+            }
+            notifyDataSetChanged()
+        }
+
+        private fun convertToReadableJson(optimizedJson: String): String {
+            return try {
+                val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
+                val jsonObject = com.google.gson.JsonParser.parseString(optimizedJson).asJsonObject
+                val readableMap = mutableMapOf<String, Any>()
+
+                jsonObject.entrySet().forEach { (key, value) ->
+                    val readableKey = when (key) {
+                        "i" -> "id"
+                        "n" -> "name"
+                        "p" -> "battery_percent"
+                        "c" -> "battery_capacity"
+                        "a" -> "altitude"
+                        "s" -> "speed"
+                        "y" -> "latitude"
+                        "x" -> "longitude"
+                        "ac" -> "accuracy"
+                        "d" -> "download_speed"
+                        "u" -> "upload_speed"
+                        "b" -> "wifi_bssid"
+                        "o" -> "operator"
+                        "t" -> "network_type"
+                        "ci" -> "cell_id"
+                        "tc" -> "tracking_area"
+                        "mc" -> "country_code"
+                        "mn" -> "network_code"
+                        "r" -> "signal_strength"
+                        else -> key
+                    }
+
+                    val readableValue = when {
+                        value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString
+                        value.isJsonPrimitive && value.asJsonPrimitive.isNumber -> value.asNumber
+                        value.isJsonPrimitive && value.asJsonPrimitive.isBoolean -> value.asBoolean
+                        else -> value.toString()
+                    }
+
+                    readableMap[readableKey] = readableValue
+                }
+
+                gson.toJson(readableMap)
+            } catch (e: Exception) {
+                "Error converting to readable format: ${e.message}"
+            }
+        }
+
+        override fun getItemCount(): Int = 2
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): JsonViewHolder {
+            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_json_page, parent, false)
+            return JsonViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: JsonViewHolder, position: Int) {
+            when (position) {
+                0 -> holder.bind("Optimized Data (swipe →)", optimizedJson)
+                1 -> holder.bind("Readable Format (swipe ←)", readableJson)
+            }
+        }
+
+        inner class JsonViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+            private val titleView: TextView = itemView.findViewById(R.id.jsonTitle)
+            private val contentView: TextView = itemView.findViewById(R.id.jsonContent)
+
+            fun bind(title: String, content: String) {
+                titleView.text = title
+                contentView.text = content
+            }
+        }
     }
 }

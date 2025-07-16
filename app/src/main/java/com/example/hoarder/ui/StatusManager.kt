@@ -8,11 +8,8 @@ import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.example.hoarder.ui.formatters.PrecisionFormatter
 import com.example.hoarder.ui.formatters.StatusFormatter
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonParser
 
 class StatusManager(private val a: MainActivity, private val p: Prefs) {
-    private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
 
     fun updateDataCollectionUI(isActive: Boolean) {
         val subtitle = a.findViewById<TextView>(R.id.dataCollectionSubtitle)
@@ -47,16 +44,6 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
     }
 
     fun updateRawJson(json: String?) {
-        val jsonTextView = a.findViewById<TextView>(R.id.rawJsonTextView)
-        if (json.isNullOrEmpty()) {
-            jsonTextView.text = "Collection is inactive or waiting for data..."
-            return
-        }
-        try {
-            jsonTextView.text = g.toJson(JsonParser.parseString(json))
-        } catch (e: Exception) {
-            jsonTextView.text = "Error parsing JSON: ${e.message}"
-        }
     }
 
     fun updateAllPrecisionLabels() {

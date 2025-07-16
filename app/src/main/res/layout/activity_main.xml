@@ -69,22 +69,12 @@
                         android:track="@drawable/switch_track_selector" />
                 </RelativeLayout>
 
-                <HorizontalScrollView
+                <androidx.viewpager2.widget.ViewPager2
                     android:id="@+id/dataCollectionContent"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="16dp"
-                    android:visibility="gone">
-                    <TextView
-                        android:id="@+id/rawJsonTextView"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Collecting data..."
-                        android:textColor="@color/amoled_light_gray"
-                        android:textSize="12sp"
-                        android:fontFamily="monospace"
-                        android:typeface="monospace"/>
-                </HorizontalScrollView>
+                    android:visibility="gone"
+                    android:orientation="horizontal" />
             </LinearLayout>
 
             <LinearLayout
@@ -187,7 +177,7 @@
                         android:id="@+id/fieldsInfoText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="• 'id', 'n', 'perc', 'cap': Device and battery data\n• 'lat', 'lon', 'alt', 'acc', 'spd': GPS and movement data\n• 'op', 'nt', 'ci', 'tac', 'mcc', 'mnc', 'rssi': Cellular data\n• 'bssid', 'dn', 'up': WiFi and network speed data\n\nOFFLINE-ONLY FIELDS:\n• 'bts': Base Timestamp (Unix Epoch) on first offline record.\n• 'tso': Timestamp Offset (seconds from 'bts') on subsequent records."
+                        android:text="• 'i', 'n', 'p', 'c': Device ID, name, battery level, capacity\n• 'y', 'x', 'a', 'ac', 's': Latitude, longitude, altitude, accuracy, speed\n• 'o', 't', 'ci', 'tc', 'mc', 'mn', 'r': Operator, network type, cell ID, tracking area, country code, network code, signal strength\n• 'b', 'd', 'u': WiFi BSSID, download speed, upload speed\n\nOFFLINE-ONLY FIELDS:\n• 'bts': Base Timestamp (Unix Epoch) on first offline record.\n• 'tso': Timestamp Offset (seconds from 'bts') on subsequent records.\n\nOPTIMIZATIONS:\n• Field names shortened to 1-2 characters (~30% size reduction)\n• Numbers stored as JSON numbers, not strings\n• Zero/missing values omitted when safe\n• WiFi 'b':'0' indicates disconnected state"
                         android:textColor="@color/amoled_light_gray"
                         android:textSize="12sp"
                         android:lineSpacingExtra="4dp"

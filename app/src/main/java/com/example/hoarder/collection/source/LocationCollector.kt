@@ -10,18 +10,27 @@ class LocationCollector(private val sensorMgr: SensorManager) {
     fun collect(dm: MutableMap<String, Any>, gpsPrecision: Int, speedPrecision: Int, altPrecision: Int) {
         try {
             sensorMgr.getLocation()?.let { location ->
-                dm["alt"] = sensorMgr.getFilteredAltitude(altPrecision)
+                val altitude = sensorMgr.getFilteredAltitude(altPrecision)
+                if (altitude > 0) {
+                    dm["a"] = altitude
+                }
 
-                val sk = (location.speed * 3.6).roundToInt()
-                dm["spd"] = RoundingUtils.rsp(sk, speedPrecision)
+                val speedKmh = (location.speed * 3.6).roundToInt()
+                val processedSpeed = RoundingUtils.rsp(speedKmh, speedPrecision)
+                if (processedSpeed > 0) {
+                    dm["s"] = processedSpeed
+                }
 
                 val (prec, _) = if (gpsPrecision == -1) RoundingUtils.smartGPSPrecision(location.speed) else Pair(gpsPrecision, gpsPrecision)
                 val (rl, rlo, ac) = calculateLocationPrecision(location, prec)
-                dm["lat"] = rl
-                dm["lon"] = rlo
-                dm["acc"] = ac
+
+                dm["y"] = rl
+                dm["x"] = rlo
+                if (ac > 0) {
+                    dm["ac"] = ac
+                }
             }
-        } catch (e: Exception) { /* Location data not available */ }
+        } catch (e: Exception) { }
     }
 
     private fun calculateLocationPrecision(location: Location, prec: Int): Triple<Double, Double, Int> {

@@ -34,9 +34,16 @@ class BatteryCollector(private val ctx: Context) {
                             c2 = (cc / 1000 * 100) / cp
                             c2 = (c2 / 100) * 100
                         }
-                    } catch (e: Exception) { /* Battery properties not available */ }
+                    } catch (e: Exception) { }
                 }
-                batteryData.set(if (c2 != null) mapOf("perc" to p.toInt(), "cap" to c2) else mapOf("perc" to p.toInt()))
+
+                val resultMap = mutableMapOf<String, Any>()
+                val percentage = if (precision == -1) RoundingUtils.smartBattery(p.toInt()) else RoundingUtils.rb(p.toInt(), precision)
+                resultMap["p"] = percentage
+
+                c2?.let { resultMap["c"] = it }
+
+                batteryData.set(resultMap)
             }
         }
     }
@@ -54,19 +61,17 @@ class BatteryCollector(private val ctx: Context) {
         if (receiverRegistered.compareAndSet(true, false)) {
             try {
                 ctx.unregisterReceiver(br)
-            } catch (e: Exception) { /* Already unregistered */ }
+            } catch (e: Exception) { }
         }
         isInitialized.set(false)
     }
 
+    private var precision = -1
+
     fun collect(dm: MutableMap<String, Any>, precision: Int) {
+        this.precision = precision
         batteryData.get()?.let { data ->
-            data["perc"]?.let { v ->
-                if (v is Int) {
-                    dm["perc"] = if (precision == -1) RoundingUtils.smartBattery(v) else RoundingUtils.rb(v, precision)
-                }
-            }
-            data["cap"]?.let { v -> dm["cap"] = v }
+            dm.putAll(data)
         }
     }
 }

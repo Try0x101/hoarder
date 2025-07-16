@@ -20,7 +20,7 @@ class WifiCollector(private val ctx: Context) {
 
     fun collect(dm: MutableMap<String, Any>) {
         if (!isInitialized.get()) {
-            dm["bssid"] = "0"
+            dm["b"] = "0"
             return
         }
 
@@ -33,9 +33,9 @@ class WifiCollector(private val ctx: Context) {
             } else {
                 "0"
             }
-            dm["bssid"] = bssidValue
+            dm["b"] = bssidValue
         } catch (e: Exception) {
-            dm["bssid"] = "0"
+            dm["b"] = "0"
         }
     }
 }

@@ -24,14 +24,6 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun setupJsonCopyListener() {
-        val rawJsonTextView = a.findViewById<TextView>(R.id.rawJsonTextView)
-        rawJsonTextView.setOnLongClickListener {
-            val clipboard = a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Hoarder JSON", rawJsonTextView.text)
-            clipboard.setPrimaryClip(clip)
-            ToastHelper.showToast(a, "JSON data copied to clipboard", Toast.LENGTH_SHORT)
-            true
-        }
     }
 
     private fun setupServerRowListener() {
@@ -50,7 +42,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     }
 
     fun updateRawJson(json: String?) {
-        statusManager.updateRawJson(json)
+        layoutManager.updateJson(json)
     }
 
     fun updateAllPrecisionLabels() {

@@ -98,7 +98,6 @@ class NetworkDataCollector(private val ctx: Context) {
 
     fun collectNetworkData(dm: MutableMap<String, Any>, sp: SharedPreferences, isMoving: Boolean = true) {
         if (!isInitialized.get()) {
-            setDefaultNetworkValues(dm)
             return
         }
 
@@ -119,34 +118,34 @@ class NetworkDataCollector(private val ctx: Context) {
                     val upstreamKbps = nc.linkUpstreamBandwidthKbps
 
                     if (downstreamKbps > 0 && upstreamKbps > 0) {
-                        val speeds = Pair(
-                            RoundingUtils.rn(downstreamKbps, np),
-                            RoundingUtils.rn(upstreamKbps, np)
-                        )
+                        val downSpeed = RoundingUtils.rn(downstreamKbps, np)
+                        val upSpeed = RoundingUtils.rn(upstreamKbps, np)
+
+                        val speeds = if (downSpeed is Number && upSpeed is Number &&
+                            downSpeed.toDouble() > 0 && upSpeed.toDouble() > 0) {
+                            Pair(downSpeed, upSpeed)
+                        } else {
+                            null
+                        }
+
                         networkSpeedCache.set(speeds)
                         lastNetworkSpeedUpdate = currentTime
                     }
                 }
             } catch (e: Exception) {
-                setDefaultNetworkValues(dm)
                 return
             }
         }
 
         networkSpeedCache.get()?.let { (dn, up) ->
-            dm["dn"] = dn
-            dm["up"] = up
-        } ?: setDefaultNetworkValues(dm)
+            dm["d"] = dn
+            dm["u"] = up
+        }
     }
 
     private fun invalidateNetworkCache() {
         networkSpeedCache.set(null)
         lastNetworkSpeedUpdate = 0L
-    }
-
-    private fun setDefaultNetworkValues(dm: MutableMap<String, Any>) {
-        dm["dn"] = 0
-        dm["up"] = 0
     }
 
     fun isNetworkDataAvailable(): Boolean {

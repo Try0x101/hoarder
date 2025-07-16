@@ -34,7 +34,6 @@ class DataCollector(
     }
 
     private val reusableDataMap = mutableMapOf<String, Any>()
-    private val reusableStringMap = mutableMapOf<String, String>()
     private val lastDataSnapshot = mutableMapOf<String, Any>()
 
     private val precisionCache = mutableMapOf<String, Int>()
@@ -185,7 +184,7 @@ class DataCollector(
         reusableDataMap.clear()
 
         try {
-            reusableDataMap["id"] = deviceId
+            reusableDataMap["i"] = deviceId
             reusableDataMap["n"] = deviceModel
 
             updatePrecisionCache()
@@ -196,8 +195,7 @@ class DataCollector(
 
             if (hasDataChanged()) {
                 trackDataChange()
-                convertToStringMapOptimized(reusableDataMap, reusableStringMap)
-                val json = gson.toJson(reusableStringMap)
+                val json = gson.toJson(reusableDataMap)
                 processCollectedData(json)
                 updateLastDataSnapshot()
                 identicalReadingsCount = 0
@@ -213,13 +211,13 @@ class DataCollector(
         val tempMap = mutableMapOf<String, Any>()
         batteryCollector.collect(tempMap, precisionCache["battery"] ?: -1)
 
-        val currentBatteryLevel = tempMap["perc"] as? Int ?: -1
+        val currentBatteryLevel = tempMap["p"] as? Int ?: -1
         if (currentBatteryLevel != lastBatteryLevel || lastBatteryLevel == -1) {
             reusableDataMap.putAll(tempMap)
             lastBatteryLevel = currentBatteryLevel
-        } else if (lastDataSnapshot.containsKey("perc")) {
-            reusableDataMap["perc"] = lastDataSnapshot["perc"]!!
-            tempMap["cap"]?.let { reusableDataMap["cap"] = it }
+        } else if (lastDataSnapshot.containsKey("p")) {
+            reusableDataMap["p"] = lastDataSnapshot["p"]!!
+            tempMap["c"]?.let { reusableDataMap["c"] = it }
         }
     }
 
@@ -233,8 +231,8 @@ class DataCollector(
                 precisionCache["speed"] ?: -1,
                 precisionCache["altitude"] ?: -1
             )
-        } else if (lastDataSnapshot.containsKey("lat")) {
-            listOf("lat", "lon", "alt", "acc", "spd").forEach { key ->
+        } else if (lastDataSnapshot.containsKey("y")) {
+            listOf("y", "x", "a", "ac", "s").forEach { key ->
                 lastDataSnapshot[key]?.let { reusableDataMap[key] = it }
             }
         }
@@ -242,8 +240,8 @@ class DataCollector(
 
     private fun shouldUpdateLocation(): Boolean {
         val location = sensorMgr.getLocation() ?: return false
-        val lastLat = lastDataSnapshot["lat"] as? Double ?: return true
-        val lastLon = lastDataSnapshot["lon"] as? Double ?: return true
+        val lastLat = lastDataSnapshot["y"] as? Double ?: return true
+        val lastLon = lastDataSnapshot["x"] as? Double ?: return true
 
         val distance = FloatArray(1)
         android.location.Location.distanceBetween(
@@ -265,12 +263,12 @@ class DataCollector(
         val tempMap = mutableMapOf<String, Any>()
         networkCollector.collectWifiData(tempMap, isMoving)
 
-        val currentBssid = tempMap["bssid"] as? String ?: "0"
-        if (currentBssid != lastBssid || lastBssid.isEmpty()) {
-            reusableDataMap["bssid"] = currentBssid
+        val currentBssid = tempMap["b"] as? String ?: "0"
+        if (currentBssid != lastBssid) {
+            reusableDataMap["b"] = currentBssid
             lastBssid = currentBssid
-        } else if (lastDataSnapshot.containsKey("bssid")) {
-            reusableDataMap["bssid"] = lastDataSnapshot["bssid"]!!
+        } else if (lastDataSnapshot.containsKey("b")) {
+            reusableDataMap["b"] = lastDataSnapshot["b"]!!
         }
     }
 
@@ -278,12 +276,12 @@ class DataCollector(
         val tempMap = mutableMapOf<String, Any>()
         networkCollector.collectMobileNetworkData(tempMap, isMoving)
 
-        val currentCellId = tempMap["ci"] as? String ?: "N/A"
-        if (currentCellId != lastCellId || lastCellId.isEmpty()) {
+        val currentCellId = tempMap["ci"]?.toString() ?: ""
+        if (currentCellId != lastCellId) {
             reusableDataMap.putAll(tempMap)
             lastCellId = currentCellId
         } else if (lastDataSnapshot.containsKey("ci")) {
-            listOf("op", "nt", "ci", "tac", "mcc", "mnc", "rssi").forEach { key ->
+            listOf("o", "t", "ci", "tc", "mc", "mn", "r").forEach { key ->
                 lastDataSnapshot[key]?.let { reusableDataMap[key] = it }
             }
         }
@@ -292,7 +290,7 @@ class DataCollector(
     private fun hasDataChanged(): Boolean {
         if (lastDataSnapshot.isEmpty()) return true
 
-        val significantKeys = listOf("perc", "lat", "lon", "ci", "bssid", "spd")
+        val significantKeys = listOf("p", "y", "x", "ci", "b", "s")
         return significantKeys.any { key ->
             reusableDataMap[key] != lastDataSnapshot[key]
         }
@@ -307,13 +305,6 @@ class DataCollector(
         dataUploader.get()?.queueData(json)
         h.post {
             if (ca.get()) callback(json)
-        }
-    }
-
-    private fun convertToStringMapOptimized(data: Map<String, Any>, target: MutableMap<String, String>) {
-        target.clear()
-        data.forEach { (key, value) ->
-            target[key] = value.toString()
         }
     }
 }
