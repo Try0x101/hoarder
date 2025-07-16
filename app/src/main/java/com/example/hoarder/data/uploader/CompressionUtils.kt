@@ -17,12 +17,22 @@ data class CompressionResult(
 object CompressionUtils {
 
     private const val NO_COMPRESSION_THRESHOLD = 50
-    private const val COMPRESSION_LEVEL = Deflater.BEST_COMPRESSION
     private const val MIN_COMPRESSION_BENEFIT = 0.85f
 
-    fun compressData(jsonData: String): CompressionResult {
+    fun compressData(jsonData: String, compressionLevel: Int): CompressionResult {
         val originalBytes = jsonData.toByteArray(StandardCharsets.UTF_8)
         val originalSize = originalBytes.size
+
+        if (compressionLevel == 0) {
+            return CompressionResult(
+                compressed = originalBytes,
+                originalSize = originalSize,
+                compressedSize = originalSize,
+                compressionRatio = 1.0f,
+                method = "none-disabled",
+                wasCompressed = false
+            )
+        }
 
         return when {
             originalSize < NO_COMPRESSION_THRESHOLD -> {
@@ -36,17 +46,18 @@ object CompressionUtils {
                 )
             }
             else -> {
-                compressWithBestLevel(originalBytes, originalSize)
+                compressWithDeflate(originalBytes, originalSize, compressionLevel)
             }
         }
     }
 
-    private fun compressWithBestLevel(
+    private fun compressWithDeflate(
         originalBytes: ByteArray,
-        originalSize: Int
+        originalSize: Int,
+        compressionLevel: Int
     ): CompressionResult {
         return try {
-            val compressedBytes = compressWithZlib(originalBytes, COMPRESSION_LEVEL)
+            val compressedBytes = compressWithZlib(originalBytes, compressionLevel)
             val compressedSize = compressedBytes.size
             val compressionRatio = compressedSize.toFloat() / originalSize.toFloat()
 
@@ -65,7 +76,7 @@ object CompressionUtils {
                     originalSize = originalSize,
                     compressedSize = compressedSize,
                     compressionRatio = compressionRatio,
-                    method = "deflate-best",
+                    method = "deflate-level-$compressionLevel",
                     wasCompressed = true
                 )
             }

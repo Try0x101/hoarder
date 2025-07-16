@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+            <TextView
+                style="@style/SettingsTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toStartOf="@+id/masterBatchingSwitch"
+                android:text="Enable Live Batching"/>
+            <Switch
+                android:id="@+id/masterBatchingSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:thumbTint="@color/amoled_white"
+                android:track="@drawable/switch_track_selector"/>
+        </RelativeLayout>
+
+        <LinearLayout
+            android:id="@+id/advancedBatchingOptionsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/amoled_medium_gray"
+                android:layout_marginVertical="8dp"/>
+
+            <TextView style="@style/SettingsSubtitle" android:text="TRIGGERS" android:layout_marginBottom="4dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="By Record Count"
+                    android:textColor="@color/amoled_white"/>
+                <Switch
+                    android:id="@+id/triggerByCountSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector"/>
+            </RelativeLayout>
+            <EditText
+                android:id="@+id/batchRecordCountEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:hint="Number of records"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:layout_marginBottom="8dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="By Timeout (seconds)"
+                    android:textColor="@color/amoled_white"/>
+                <Switch
+                    android:id="@+id/triggerByTimeoutSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector"/>
+            </RelativeLayout>
+            <EditText
+                android:id="@+id/batchTimeoutEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:hint="Time in seconds"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:layout_marginBottom="8dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="By Max Size (KB)"
+                    android:textColor="@color/amoled_white"/>
+                <Switch
+                    android:id="@+id/triggerByMaxSizeSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector"/>
+            </RelativeLayout>
+            <EditText
+                android:id="@+id/batchMaxSizeEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:hint="Size in Kilobytes"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView style="@style/SettingsSubtitle" android:text="COMPRESSION" android:layout_marginBottom="4dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:text="Level (0=None, 9=Max)"
+                    android:textColor="@color/amoled_white"/>
+                <EditText
+                    android:id="@+id/compressionLevelEditText"
+                    android:layout_width="80dp"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:inputType="number"
+                    android:gravity="end"
+                    android:hint="6"
+                    android:textColor="@color/amoled_white"
+                    android:textColorHint="@color/amoled_light_gray"
+                    android:backgroundTint="@color/amoled_true_blue"/>
+            </RelativeLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

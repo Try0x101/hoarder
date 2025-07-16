@@ -21,7 +21,7 @@ class NetworkUploader(private val context: Context) {
 
     companion object {
         private const val SINGLE_TIMEOUT_MS = 5000
-        private const val BATCH_TIMEOUT_MS = 10000
+        private const val BATCH_TIMEOUT_MS = 15000
         private const val CONNECT_TIMEOUT_MS = 3000
     }
 
@@ -97,8 +97,8 @@ class NetworkUploader(private val context: Context) {
         }
     }
 
-    fun uploadSingle(jsonData: String, isDelta: Boolean, serverIp: String, serverPort: Int): UploadResult {
-        val compressionResult = CompressionUtils.compressData(jsonData)
+    fun uploadSingle(jsonData: String, isDelta: Boolean, serverIp: String, serverPort: Int, compressionLevel: Int): UploadResult {
+        val compressionResult = CompressionUtils.compressData(jsonData, compressionLevel)
         val url = URL("http://$serverIp:$serverPort/api/telemetry")
         val headers = mapOf(
             "Content-Type" to "application/json",
@@ -111,9 +111,9 @@ class NetworkUploader(private val context: Context) {
         return performUpload(url, compressionResult.compressed, headers, SINGLE_TIMEOUT_MS, statusMessage, compressionResult)
     }
 
-    fun uploadBatch(batchData: List<String>, serverIp: String, serverPort: Int): UploadResult {
+    fun uploadBatch(batchData: List<String>, serverIp: String, serverPort: Int, compressionLevel: Int): UploadResult {
         val batchJson = batchData.joinToString(separator = ",", prefix = "[", postfix = "]")
-        val compressionResult = CompressionUtils.compressData(batchJson)
+        val compressionResult = CompressionUtils.compressData(batchJson, compressionLevel)
         val url = URL("http://$serverIp:$serverPort/api/batch")
         val headers = mapOf(
             "Content-Type" to "application/json",

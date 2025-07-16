@@ -32,7 +32,8 @@ class DataUploader(
     private val ctx: Context,
     private val h: Handler,
     private val sp: SharedPreferences,
-    private val powerManager: PowerManager
+    private val powerManager: PowerManager,
+    private val appPrefs: Prefs
 ) {
     private val ua = AtomicBoolean(false)
     private var ip = ""
@@ -58,6 +59,21 @@ class DataUploader(
     private val networkUploader = NetworkUploader(ctx)
     private val scheduler = UploadScheduler(ctx, h, ::processQueue)
 
+    private val isBatchingEnabled = AtomicBoolean(false)
+    private var batchRecordCountThreshold = 20
+    private var isTriggerByCountEnabled = true
+    private var batchTimeoutMillis = 60000L
+    private var isTriggerByTimeoutEnabled = true
+    private var batchMaxSizeKiloBytes = 100
+    private var isTriggerByMaxSizeEnabled = true
+    private var compressionLevel = 6
+
+    private val batchTimeoutRunnable = Runnable {
+        if (isTriggerByTimeoutEnabled && dataBuffer.getBufferedPayloadsCount() > 0) {
+            forceSendBuffer()
+        }
+    }
+
     init {
         scope.launch {
             bufferedSize.set(dataBuffer.getBufferedDataSize())
@@ -73,9 +89,34 @@ class DataUploader(
                 }
             }
         }
+        updateBatchingConfiguration()
+    }
+
+    private fun updateBatchingConfiguration() {
+        isBatchingEnabled.set(appPrefs.isBatchUploadEnabled())
+        batchRecordCountThreshold = appPrefs.getBatchRecordCount()
+        isTriggerByCountEnabled = appPrefs.isBatchTriggerByCountEnabled()
+        batchTimeoutMillis = appPrefs.getBatchTimeout() * 1000L
+        isTriggerByTimeoutEnabled = appPrefs.isBatchTriggerByTimeoutEnabled()
+        batchMaxSizeKiloBytes = appPrefs.getBatchMaxSizeKb()
+        isTriggerByMaxSizeEnabled = appPrefs.isBatchTriggerByMaxSizeEnabled()
+        compressionLevel = appPrefs.getCompressionLevel()
+    }
+
+    private fun scheduleBatchTimeout() {
+        cancelBatchTimeout()
+        if(isTriggerByTimeoutEnabled) {
+            h.postDelayed(batchTimeoutRunnable, batchTimeoutMillis)
+        }
+    }
+
+    private fun cancelBatchTimeout() {
+        h.removeCallbacks(batchTimeoutRunnable)
     }
 
     private fun processQueue() {
+        if (isBatchingEnabled.get()) return
+
         if (!ua.get() || !hasValidServer()) {
             if (ua.get()) {
                 h.post { notifyStatus("Error", "Server IP or Port became invalid.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
@@ -124,7 +165,7 @@ class DataUploader(
             return
         }
 
-        val result = networkUploader.uploadSingle(uploadJson, isDelta, ip, port)
+        val result = networkUploader.uploadSingle(uploadJson, isDelta, ip, port, compressionLevel)
 
         if (result.success) {
             handleUploadSuccess(uploadJson, fullJsonForBuffer, currentMapState, result.uploadedBytes, result.actualNetworkBytes, isDelta)
@@ -176,19 +217,58 @@ class DataUploader(
         }
 
         dataBuffer.saveToBuffer(payloadToBuffer)
-        bufferedSize.addAndGet(payloadToBuffer.toByteArray().size.toLong())
+        scope.launch {
+            bufferedSize.set(dataBuffer.getBufferedDataSize())
+            h.post {
+                notifyStatus("Batching", "Data added to batch.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
+            }
+        }
         lastProcessedMap.set(currentMap)
     }
 
     fun queueData(data: String) {
-        uploadQueue.queueRegular(data)
+        if (isBatchingEnabled.get()) {
+            handleBatchingQueue(data)
+        } else {
+            uploadQueue.queueRegular(data)
+        }
     }
+
+    private fun handleBatchingQueue(data: String) {
+        scope.launch {
+            val currentMap: Map<String, Any> = g.fromJson(data, mapType)
+            val previousMap = lastProcessedMap.get()
+            val deltaMap = if (previousMap != null) DeltaComputer.calculateDelta(previousMap, currentMap) else currentMap
+
+            if (deltaMap.isNotEmpty()) {
+                val deltaJson = g.toJson(deltaMap)
+                handleUploadFailure(deltaJson, data, currentMap)
+            } else {
+                lastProcessedMap.set(currentMap)
+            }
+
+            val bufferedCount = dataBuffer.getBufferedPayloadsCount()
+            val currentBufferedSizeKb = dataBuffer.getBufferedDataSize() / 1024
+
+            val countTriggerMet = isTriggerByCountEnabled && bufferedCount >= batchRecordCountThreshold
+            val sizeTriggerMet = isTriggerByMaxSizeEnabled && currentBufferedSizeKb >= batchMaxSizeKiloBytes
+
+            if (countTriggerMet || sizeTriggerMet) {
+                h.post { forceSendBuffer() }
+            } else if (bufferedCount == 1) {
+                h.post { scheduleBatchTimeout() }
+            }
+        }
+    }
+
 
     private fun processBatchUpload(batch: List<BufferedPayload>) {
         val batchJsonStrings = batch.map { it.payload }
-        val result = networkUploader.uploadBatch(batchJsonStrings, ip, port)
+        val result = networkUploader.uploadBatch(batchJsonStrings, ip, port, compressionLevel)
 
         if (result.success) {
+            isOffline.set(false)
+            offlineSessionBaseTimestamp.set(null)
             tb.addAndGet(result.uploadedBytes)
             actualNetworkBytes.addAndGet(result.actualNetworkBytes)
             sp.edit()
@@ -251,6 +331,7 @@ class DataUploader(
 
     fun start() {
         ua.set(true)
+        updateBatchingConfiguration()
         h.post {
             notifyStatus("Connecting", "Attempting to connect...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
         }
@@ -261,6 +342,7 @@ class DataUploader(
         ua.set(false)
         uploadQueue.clear()
         scheduler.stop()
+        cancelBatchTimeout()
     }
 
     fun resetCounter() {
@@ -285,6 +367,7 @@ class DataUploader(
     fun getActualNetworkBytes(): Long = actualNetworkBytes.get()
 
     fun forceSendBuffer() {
+        cancelBatchTimeout()
         if (ua.get() && hasValidServer()) {
             scheduler.submitOneTimeTask {
                 val bufferedData = dataBuffer.getBufferedData()
@@ -312,4 +395,15 @@ class DataUploader(
     }
 
     fun getBufferedDataSize(): Long = bufferedSize.get()
+
+    fun updateBatchSettings(enabled: Boolean, recordCount: Int, byCount: Boolean, timeoutSec: Int, byTimeout: Boolean, maxSizeKb: Int, byMaxSize: Boolean, compLevel: Int) {
+        isBatchingEnabled.set(enabled)
+        batchRecordCountThreshold = recordCount
+        isTriggerByCountEnabled = byCount
+        batchTimeoutMillis = timeoutSec * 1000L
+        isTriggerByTimeoutEnabled = byTimeout
+        batchMaxSizeKiloBytes = maxSizeKb
+        isTriggerByMaxSizeEnabled = byMaxSize
+        compressionLevel = compLevel
+    }
 }

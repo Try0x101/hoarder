@@ -9,8 +9,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
@@ -34,15 +38,22 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         builder.setView(view)
 
         val editText = view.findViewById<TextView>(R.id.serverIpPortEditText)
-        editText.text = p.getServerAddress()
-
         val statsLastHour = view.findViewById<TextView>(R.id.statsLastHour)
         val statsLastDay = view.findViewById<TextView>(R.id.statsLastDay)
         val statsLast7Days = view.findViewById<TextView>(R.id.statsLast7Days)
+        val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
+        val batchLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
+        val successLogButton = view.findViewById<Button>(R.id.viewSuccessLogButton)
+        val errorLogButton = view.findViewById<Button>(R.id.viewErrorLogButton)
+        val clearLogsButton = view.findViewById<Button>(R.id.clearLogsButton)
+        val batchingSettingsButton = view.findViewById<Button>(R.id.batchingSettingsButton)
 
+        editText.text = p.getServerAddress()
         statsLastHour.text = "Calculating..."
         statsLastDay.text = "Calculating..."
         statsLast7Days.text = "Calculating..."
+
+        batchingSettingsButton.setOnClickListener { showBatchSettingsDialog() }
 
         a.lifecycleScope.launch {
             val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
@@ -50,12 +61,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
             statsLastDay.text = formatStats(lastDay)
             statsLast7Days.text = formatStats(last7Days)
         }
-
-        val sendBufferButton = view.findViewById<Button>(R.id.sendBufferedDataButton)
-        val batchLogButton = view.findViewById<Button>(R.id.viewCachedUploadLogButton)
-        val successLogButton = view.findViewById<Button>(R.id.viewSuccessLogButton)
-        val errorLogButton = view.findViewById<Button>(R.id.viewErrorLogButton)
-        val clearLogsButton = view.findViewById<Button>(R.id.clearLogsButton)
 
         batchLogButton.text = "View Batch Upload Log"
 
@@ -83,8 +88,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         errorLogButton.setOnClickListener { showDetailedLogDialog("error") }
 
         val dialog = builder.setTitle("Server Settings")
-            .setPositiveButton("Save", null)
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Close", null)
             .create()
 
         val uploadStatusReceiver = object : BroadcastReceiver() {
@@ -105,9 +109,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         val filter = IntentFilter("com.example.hoarder.UPLOAD_STATUS")
 
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                saveServerAddress(editText.text.toString(), dialog)
-            }
             clearLogsButton.setOnClickListener {
                 a.lifecycleScope.launch {
                     logRepository.clearAllLogs()
@@ -128,7 +129,16 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         editText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                saveServerAddress(editText.text.toString(), dialog)
+                if (NetUtils.isValidIpPort(editText.text.toString())) {
+                    p.setServerAddress(editText.text.toString())
+                    ToastHelper.showToast(a, "Server address saved", Toast.LENGTH_SHORT)
+                    if (p.isDataUploadEnabled()) {
+                        a.stopUpload()
+                        a.startUpload(p.getServerAddress())
+                    }
+                } else {
+                    ToastHelper.showToast(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT)
+                }
                 true
             } else {
                 false
@@ -136,6 +146,73 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         }
 
         dialog.show()
+    }
+
+    private fun showBatchSettingsDialog() {
+        val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
+        val view = LayoutInflater.from(a).inflate(R.layout.dialog_batch_settings, null)
+
+        val masterSwitch = view.findViewById<Switch>(R.id.masterBatchingSwitch)
+        val optionsContainer = view.findViewById<LinearLayout>(R.id.advancedBatchingOptionsContainer)
+        val triggerByCountSwitch = view.findViewById<Switch>(R.id.triggerByCountSwitch)
+        val recordCountEditText = view.findViewById<EditText>(R.id.batchRecordCountEditText)
+        val triggerByTimeoutSwitch = view.findViewById<Switch>(R.id.triggerByTimeoutSwitch)
+        val timeoutEditText = view.findViewById<EditText>(R.id.batchTimeoutEditText)
+        val triggerByMaxSizeSwitch = view.findViewById<Switch>(R.id.triggerByMaxSizeSwitch)
+        val maxSizeEditText = view.findViewById<EditText>(R.id.batchMaxSizeEditText)
+        val compressionLevelEditText = view.findViewById<EditText>(R.id.compressionLevelEditText)
+
+        masterSwitch.isChecked = p.isBatchUploadEnabled()
+        optionsContainer.visibility = if(masterSwitch.isChecked) View.VISIBLE else View.GONE
+
+        triggerByCountSwitch.isChecked = p.isBatchTriggerByCountEnabled()
+        recordCountEditText.setText(p.getBatchRecordCount().toString())
+        recordCountEditText.isEnabled = triggerByCountSwitch.isChecked
+
+        triggerByTimeoutSwitch.isChecked = p.isBatchTriggerByTimeoutEnabled()
+        timeoutEditText.setText(p.getBatchTimeout().toString())
+        timeoutEditText.isEnabled = triggerByTimeoutSwitch.isChecked
+
+        triggerByMaxSizeSwitch.isChecked = p.isBatchTriggerByMaxSizeEnabled()
+        maxSizeEditText.setText(p.getBatchMaxSizeKb().toString())
+        maxSizeEditText.isEnabled = triggerByMaxSizeSwitch.isChecked
+
+        compressionLevelEditText.setText(p.getCompressionLevel().toString())
+
+        masterSwitch.setOnCheckedChangeListener { _, isChecked ->
+            optionsContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+        triggerByCountSwitch.setOnCheckedChangeListener { _, isChecked -> recordCountEditText.isEnabled = isChecked }
+        triggerByTimeoutSwitch.setOnCheckedChangeListener { _, isChecked -> timeoutEditText.isEnabled = isChecked }
+        triggerByMaxSizeSwitch.setOnCheckedChangeListener { _, isChecked -> maxSizeEditText.isEnabled = isChecked }
+
+        builder.setView(view)
+            .setTitle("Live Batching and Compression")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { dialog, _ ->
+                p.setBatchUploadEnabled(masterSwitch.isChecked)
+                p.setBatchTriggerByCountEnabled(triggerByCountSwitch.isChecked)
+                p.setBatchRecordCount(recordCountEditText.text.toString().toIntOrNull() ?: p.getBatchRecordCount())
+
+                p.setBatchTriggerByTimeoutEnabled(triggerByTimeoutSwitch.isChecked)
+                p.setBatchTimeout(timeoutEditText.text.toString().toIntOrNull() ?: p.getBatchTimeout())
+
+                p.setBatchTriggerByMaxSizeEnabled(triggerByMaxSizeSwitch.isChecked)
+                p.setBatchMaxSizeKb(maxSizeEditText.text.toString().toIntOrNull() ?: p.getBatchMaxSizeKb())
+
+                p.setCompressionLevel(compressionLevelEditText.text.toString().toIntOrNull()?.coerceIn(0, 9) ?: p.getCompressionLevel())
+
+                a.onBatchingSettingsChanged(
+                    p.isBatchUploadEnabled(),
+                    p.getBatchRecordCount(), p.isBatchTriggerByCountEnabled(),
+                    p.getBatchTimeout(), p.isBatchTriggerByTimeoutEnabled(),
+                    p.getBatchMaxSizeKb(), p.isBatchTriggerByMaxSizeEnabled(),
+                    p.getCompressionLevel()
+                )
+                ToastHelper.showToast(a, "Batching settings saved", Toast.LENGTH_SHORT)
+                dialog.dismiss()
+            }
+            .show()
     }
 
     private fun formatStats(stats: com.example.hoarder.ui.dialogs.server.UploadStats): String {

@@ -32,6 +32,7 @@ class ServiceCommandHandler(
             "com.example.hoarder.GET_STATE" -> broadcastStateUpdate()
             "com.example.hoarder.POWER_MODE_CHANGED" -> handlePowerModeChange(intent)
             "com.example.hoarder.MOTION_STATE_CHANGED" -> handleMotionStateChange(intent)
+            "com.example.hoarder.BATCHING_SETTINGS_CHANGED" -> handleBatchingSettingsChange(intent)
         }
     }
 
@@ -106,5 +107,27 @@ class ServiceCommandHandler(
     private fun handleMotionStateChange(intent: Intent) {
         val isMoving = intent.getBooleanExtra("isMoving", true)
         powerManager.onMotionStateChanged(isMoving)
+    }
+
+    private fun handleBatchingSettingsChange(intent: Intent) {
+        val enabled = intent.getBooleanExtra("enabled", false)
+        val recordCount = intent.getIntExtra("recordCount", 20)
+        val byCount = intent.getBooleanExtra("byCount", true)
+        val timeout = intent.getIntExtra("timeout", 60)
+        val byTimeout = intent.getBooleanExtra("byTimeout", true)
+        val maxSize = intent.getIntExtra("maxSize", 100)
+        val byMaxSize = intent.getBooleanExtra("byMaxSize", true)
+        val compLevel = intent.getIntExtra("compLevel", 6)
+
+        dataUploader.updateBatchSettings(enabled, recordCount, byCount, timeout, byTimeout, maxSize, byMaxSize, compLevel)
+
+        updateAppPreferences("batchUploadEnabled", enabled)
+        updateAppPreferences("batchRecordCount", recordCount)
+        updateAppPreferences("batchTriggerByCountEnabled", byCount)
+        updateAppPreferences("batchTimeoutSec", timeout)
+        updateAppPreferences("batchTriggerByTimeoutEnabled", byTimeout)
+        updateAppPreferences("batchMaxSizeKb", maxSize)
+        updateAppPreferences("batchTriggerByMaxSizeEnabled", byMaxSize)
+        updateAppPreferences("compressionLevel", compLevel)
     }
 }

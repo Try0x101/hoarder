@@ -96,6 +96,16 @@
                 android:textColor="@color/amoled_white"/>
         </RelativeLayout>
 
+        <Button
+            android:id="@+id/batchingSettingsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Live Batching and Compression..."
+            android:backgroundTint="@color/amoled_medium_gray"
+            android:textColor="@color/amoled_white"
+            app:cornerRadius="16dp"
+            android:layout_marginBottom="16dp"/>
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

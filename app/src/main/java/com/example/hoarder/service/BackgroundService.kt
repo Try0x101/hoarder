@@ -33,7 +33,7 @@ class BackgroundService: Service(){
     private lateinit var dataCollector: DataCollector
     private lateinit var dataUploader: DataUploader
     private lateinit var servicePrefs: SharedPreferences
-    private lateinit var appPrefs: SharedPreferences
+    private lateinit var appPrefs: Prefs
     private lateinit var commandHandler: ServiceCommandHandler
     private lateinit var powerManager: PowerManager
 
@@ -54,11 +54,10 @@ class BackgroundService: Service(){
         super.onCreate()
         h = Handler(Looper.getMainLooper())
         servicePrefs = getSharedPreferences("HoarderServicePrefs", MODE_PRIVATE)
-        appPrefs = getSharedPreferences("HoarderPrefs", MODE_PRIVATE)
+        appPrefs = Prefs(this)
 
-        val mainPrefs = Prefs(this)
-        powerManager = PowerManager(this, mainPrefs)
-        dataUploader = DataUploader(this, h, servicePrefs, powerManager)
+        powerManager = PowerManager(this, appPrefs)
+        dataUploader = DataUploader(this, h, servicePrefs, powerManager, appPrefs)
 
         dataCollector = DataCollector(this, h, powerManager) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
@@ -91,6 +90,7 @@ class BackgroundService: Service(){
                 addAction("com.example.hoarder.SEND_BUFFER")
                 addAction("com.example.hoarder.GET_STATE")
                 addAction("com.example.hoarder.POWER_MODE_CHANGED")
+                addAction("com.example.hoarder.BATCHING_SETTINGS_CHANGED")
             })
         }
     }
@@ -133,11 +133,11 @@ class BackgroundService: Service(){
     }
 
     private fun restoreServiceState() {
-        val shouldCollect = appPrefs.getBoolean("dataCollectionToggleState", true)
-        val shouldUpload = appPrefs.getBoolean("dataUploadToggleState", false)
-        val server = appPrefs.getString("serverIpPortAddress", "")?.split(":")
+        val shouldCollect = appPrefs.isDataCollectionEnabled()
+        val shouldUpload = appPrefs.isDataUploadEnabled()
+        val server = appPrefs.getServerAddress().split(":")
 
-        if (server != null && server.size == 2 && server[0].isNotBlank() && server[1].toIntOrNull() != null) {
+        if (server.size == 2 && server[0].isNotBlank() && server[1].toIntOrNull() != null) {
             dataUploader.setServer(server[0], server[1].toInt())
         }
 
@@ -170,7 +170,7 @@ class BackgroundService: Service(){
     }
 
     private fun updateAppPreferences(key: String, value: Any) {
-        val editor = appPrefs.edit()
+        val editor = getSharedPreferences("HoarderPrefs", MODE_PRIVATE).edit()
         when (value) {
             is Boolean -> editor.putBoolean(key, value)
             is String -> editor.putString(key, value)

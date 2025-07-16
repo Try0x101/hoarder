@@ -177,6 +177,20 @@ class MainActivity : AppCompatActivity() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
+    fun onBatchingSettingsChanged(enabled: Boolean, recordCount: Int, byCount: Boolean, timeout: Int, byTimeout: Boolean, maxSize: Int, byMaxSize: Boolean, compLevel: Int) {
+        val intent = Intent("com.example.hoarder.BATCHING_SETTINGS_CHANGED").apply {
+            putExtra("enabled", enabled)
+            putExtra("recordCount", recordCount)
+            putExtra("byCount", byCount)
+            putExtra("timeout", timeout)
+            putExtra("byTimeout", byTimeout)
+            putExtra("maxSize", maxSize)
+            putExtra("byMaxSize", byMaxSize)
+            putExtra("compLevel", compLevel)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     fun startCollection() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
     }

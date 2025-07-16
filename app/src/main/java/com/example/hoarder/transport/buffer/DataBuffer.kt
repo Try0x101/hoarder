@@ -22,6 +22,10 @@ class DataBuffer(private val logDao: LogDao, private val gson: Gson) {
         return logDao.getBufferedPayloadsSize() ?: 0L
     }
 
+    fun getBufferedPayloadsCount(): Int {
+        return logDao.getBufferedPayloadsCount()
+    }
+
     fun clearBuffer(processedPayloads: List<BufferedPayload>) {
         val ids = processedPayloads.map { it.id }
         if (ids.isNotEmpty()) {

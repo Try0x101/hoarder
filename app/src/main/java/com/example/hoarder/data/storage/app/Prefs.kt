@@ -20,6 +20,9 @@ class Prefs(ctx: Context) {
     fun isDataUploadEnabled() = p.getBoolean("dataUploadToggleState", false)
     fun setDataUploadEnabled(e: Boolean) = p.edit().putBoolean("dataUploadToggleState", e).apply()
 
+    fun isBatchUploadEnabled() = p.getBoolean("batchUploadEnabled", false)
+    fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean("batchUploadEnabled", e).apply()
+
     fun getServerAddress() = p.getString("serverIpPortAddress", "") ?: ""
     fun setServerAddress(a: String) = p.edit().putString("serverIpPortAddress", a).apply()
 
@@ -40,6 +43,29 @@ class Prefs(ctx: Context) {
 
     fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
+
+    fun getBatchRecordCount() = p.getInt("batchRecordCount", 20)
+    fun setBatchRecordCount(s: Int) = p.edit().putInt("batchRecordCount", s).apply()
+
+    fun isBatchTriggerByCountEnabled() = p.getBoolean("batchTriggerByCountEnabled", true)
+    fun setBatchTriggerByCountEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByCountEnabled", e).apply()
+
+    fun getBatchTimeout() = p.getInt("batchTimeoutSec", 60)
+    fun setBatchTimeout(t: Int) = p.edit().putInt("batchTimeoutSec", t).apply()
+
+    fun isBatchTriggerByTimeoutEnabled() = p.getBoolean("batchTriggerByTimeoutEnabled", true)
+    fun setBatchTriggerByTimeoutEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByTimeoutEnabled", e).apply()
+
+    fun getBatchMaxSizeKb() = p.getInt("batchMaxSizeKb", 100)
+    fun setBatchMaxSizeKb(s: Int) = p.edit().putInt("batchMaxSizeKb", s).apply()
+
+    fun isBatchTriggerByMaxSizeEnabled() = p.getBoolean("batchTriggerByMaxSizeEnabled", true)
+    fun setBatchTriggerByMaxSizeEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByMaxSizeEnabled", e).apply()
+
+
+
+    fun getCompressionLevel() = p.getInt("compressionLevel", 6)
+    fun setCompressionLevel(l: Int) = p.edit().putInt("compressionLevel", l).apply()
 
     fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_CONTINUOUS)
     fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()

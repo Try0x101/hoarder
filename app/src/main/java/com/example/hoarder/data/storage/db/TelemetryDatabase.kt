@@ -48,6 +48,9 @@ interface LogDao {
     @Query("SELECT SUM(LENGTH(payload)) FROM buffered_payloads")
     fun getBufferedPayloadsSize(): Long?
 
+    @Query("SELECT COUNT(*) FROM buffered_payloads")
+    fun getBufferedPayloadsCount(): Int
+
     @Query("DELETE FROM buffered_payloads WHERE timestamp < :cutoffTime")
     fun deleteOldPayloads(cutoffTime: Long)
 
