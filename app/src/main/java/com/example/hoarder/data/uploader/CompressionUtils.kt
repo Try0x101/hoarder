@@ -20,10 +20,11 @@ object CompressionUtils {
     private const val MIN_COMPRESSION_BENEFIT = 0.85f
 
     fun compressData(jsonData: String, compressionLevel: Int): CompressionResult {
+        val safeCompressionLevel = compressionLevel.coerceIn(0, 9)
         val originalBytes = jsonData.toByteArray(StandardCharsets.UTF_8)
         val originalSize = originalBytes.size
 
-        if (compressionLevel == 0) {
+        if (safeCompressionLevel == 0) {
             return CompressionResult(
                 compressed = originalBytes,
                 originalSize = originalSize,
@@ -46,7 +47,7 @@ object CompressionUtils {
                 )
             }
             else -> {
-                compressWithDeflate(originalBytes, originalSize, compressionLevel)
+                compressWithDeflate(originalBytes, originalSize, safeCompressionLevel)
             }
         }
     }

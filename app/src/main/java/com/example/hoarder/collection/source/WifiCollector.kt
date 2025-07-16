@@ -2,6 +2,7 @@ package com.example.hoarder.collection.source
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class WifiCollector(private val ctx: Context) {
@@ -29,7 +30,7 @@ class WifiCollector(private val ctx: Context) {
             val bssidValue = if (wi?.bssid != null &&
                 wi.bssid != "02:00:00:00:00:00" &&
                 wi.bssid != "00:00:00:00:00:00") {
-                wi.bssid.replace(":", "")
+                wi.bssid.replace(":", "").lowercase(Locale.ROOT)
             } else {
                 "0"
             }

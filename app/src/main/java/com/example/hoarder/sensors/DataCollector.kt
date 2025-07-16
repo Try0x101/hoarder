@@ -290,10 +290,20 @@ class DataCollector(
     private fun hasDataChanged(): Boolean {
         if (lastDataSnapshot.isEmpty()) return true
 
-        val significantKeys = listOf("p", "y", "x", "ci", "b", "s")
-        return significantKeys.any { key ->
-            reusableDataMap[key] != lastDataSnapshot[key]
+        val currentKeys = reusableDataMap.keys
+        val lastKeys = lastDataSnapshot.keys
+
+        if (currentKeys.size != lastKeys.size || (currentKeys - lastKeys).any { it !in listOf("i", "n") }) {
+            return true
         }
+
+        for (key in currentKeys) {
+            if (key == "i" || key == "n") continue
+            if (reusableDataMap[key] != lastDataSnapshot[key]) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun updateLastDataSnapshot() {

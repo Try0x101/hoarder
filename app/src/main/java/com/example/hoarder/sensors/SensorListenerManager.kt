@@ -26,17 +26,20 @@ class SensorListenerManager(
 
     fun registerListeners() {
         if (listenersRegistered.compareAndSet(false, true)) {
-            registerLocationListeners()
             registerPressureSensor()
+            if (!gpsRegistered.getAndSet(true)) {
+                registerLocationListenersInternal()
+            }
         }
     }
 
     fun unregisterListeners() {
         if (listenersRegistered.compareAndSet(true, false)) {
-            try {
-                locationManager.removeUpdates(locationListener)
-                gpsRegistered.set(false)
-            } catch (e: Exception) { }
+            if (gpsRegistered.getAndSet(false)) {
+                try {
+                    locationManager.removeUpdates(locationListener)
+                } catch (e: Exception) { }
+            }
 
             try {
                 sensorManager.unregisterListener(sensorEventListener)
@@ -45,7 +48,7 @@ class SensorListenerManager(
     }
 
     fun pauseGps() {
-        if (gpsRegistered.compareAndSet(true, false)) {
+        if (gpsRegistered.getAndSet(false)) {
             try {
                 locationManager.removeUpdates(locationListener)
             } catch (e: Exception) { }
@@ -53,8 +56,8 @@ class SensorListenerManager(
     }
 
     fun resumeGps() {
-        if (!gpsRegistered.get() && listenersRegistered.get()) {
-            registerLocationListeners()
+        if (listenersRegistered.get() && !gpsRegistered.getAndSet(true)) {
+            registerLocationListenersInternal()
         }
     }
 
@@ -63,11 +66,10 @@ class SensorListenerManager(
         this.requestDistance = distance
     }
 
-    private fun registerLocationListeners() {
+    private fun registerLocationListenersInternal() {
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, requestInterval, requestDistance, locationListener)
-                gpsRegistered.set(true)
             }
         } catch (e: SecurityException) { }
 

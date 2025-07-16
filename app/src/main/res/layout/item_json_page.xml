@@ -21,6 +21,20 @@
         android:textColor="@color/amoled_light_gray"
         android:textSize="12sp"
         android:fontFamily="monospace"
-        android:typeface="monospace"/>
+        android:typeface="monospace"
+        android:visibility="gone"/>
+
+    <ScrollView
+        android:id="@+id/readableScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/readableDataContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
 
 </LinearLayout>

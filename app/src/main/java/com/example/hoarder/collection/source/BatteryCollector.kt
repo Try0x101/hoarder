@@ -24,15 +24,13 @@ class BatteryCollector(private val ctx: Context) {
                 if (l < 0 || s <= 0) return
 
                 val p = l * 100 / s.toFloat()
-                var c2: Int? = null
+                var capacityMah: Int? = null
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     try {
-                        val cc = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                        val cp = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                        if (cc > 0 && cp > 0) {
-                            c2 = (cc / 1000 * 100) / cp
-                            c2 = (c2 / 100) * 100
+                        val chargeCounter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+                        if (chargeCounter != Int.MIN_VALUE) {
+                            capacityMah = chargeCounter / 1000
                         }
                     } catch (e: Exception) { }
                 }
@@ -41,7 +39,16 @@ class BatteryCollector(private val ctx: Context) {
                 val percentage = if (precision == -1) RoundingUtils.smartBattery(p.toInt()) else RoundingUtils.rb(p.toInt(), precision)
                 resultMap["p"] = percentage
 
-                c2?.let { resultMap["c"] = it }
+                capacityMah?.let {
+                    val finalCapacity = if (precision == -1) {
+                        RoundingUtils.smartCapacity(it)
+                    } else {
+                        it
+                    }
+                    if (finalCapacity > 0) {
+                        resultMap["c"] = finalCapacity
+                    }
+                }
 
                 batteryData.set(resultMap)
             }

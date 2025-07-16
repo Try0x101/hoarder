@@ -73,7 +73,9 @@ object RoundingUtils {
                 else -> ((s + 9) / 10) * 10
             }
         }
+
         if (pr <= 0) return s
+
         return (s / pr) * pr
     }
 
@@ -107,5 +109,10 @@ object RoundingUtils {
             v < 0 && precision > 10 -> v
             else -> (floor(v / precision.toDouble()) * precision).toInt()
         }
+    }
+
+    fun smartCapacity(c: Int): Int {
+        if (c <= 0) return 0
+        return (c / 100) * 100
     }
 }

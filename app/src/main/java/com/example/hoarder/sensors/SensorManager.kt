@@ -46,10 +46,6 @@ class SensorManager(
     private val lastReportedAltitude = AtomicReference<Double>(Double.NaN)
     private val MAX_ALTITUDE_CHANGE_PER_TICK = 15.0
 
-    private var lastAltitudeUpdateTime: Long = 0L
-    private var lastEmittedAltitude: Int = 0
-    private val ALTITUDE_UPDATE_INTERVAL_MS = 10000L
-
     private val sensorScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val locationListener = object : LocationListener {
@@ -163,8 +159,6 @@ class SensorManager(
         lastBarometerAltitude.set(Double.NaN)
         lastGpsAccuracy.set(10f)
         lastReportedAltitude.set(Double.NaN)
-        lastAltitudeUpdateTime = 0L
-        lastEmittedAltitude = 0
         locationHistory.clear()
         gpsActive.set(true)
         lastStationaryTime.set(0L)
@@ -174,11 +168,6 @@ class SensorManager(
 
     fun getFilteredAltitude(altitudePrecision: Int): Int {
         if (!isInitialized.get()) return 0
-
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastAltitudeUpdateTime < ALTITUDE_UPDATE_INTERVAL_MS && lastAltitudeUpdateTime != 0L) {
-            return lastEmittedAltitude
-        }
 
         val gpsAlt = lastGpsAltitude.get()
         val baroAlt = lastBarometerAltitude.get()
@@ -206,9 +195,6 @@ class SensorManager(
             else -> (Math.floor(newReportedAlt / altitudePrecision) * altitudePrecision).toInt()
         }
 
-        lastEmittedAltitude = max(0, processedAltitude)
-        lastAltitudeUpdateTime = currentTime
-
-        return lastEmittedAltitude
+        return max(0, processedAltitude)
     }
 }

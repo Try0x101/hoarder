@@ -82,6 +82,10 @@ class DataUploader(
     private var lastStatusMessage = ""
     private val STATUS_UPDATE_DEBOUNCE_MS = 2000L
 
+    companion object {
+        private const val KEY_LIVE_BATCH_TIMESTAMP = "liveBatchBaseTimestamp"
+    }
+
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
@@ -100,7 +104,6 @@ class DataUploader(
 
     private val batchTimeoutRunnable = Runnable {
         if (isTriggerByTimeoutEnabled && dataBuffer.getBufferedPayloadsCount() > 0) {
-            liveBatchBaseTimestamp.set(null)
             forceSendBuffer()
         }
     }
@@ -119,6 +122,7 @@ class DataUploader(
                     lastProcessedMap.set(null)
                 }
             }
+            liveBatchBaseTimestamp.set(sp.getLong(KEY_LIVE_BATCH_TIMESTAMP, 0L).takeIf { it != 0L })
         }
         updateBatchingConfiguration()
     }
@@ -316,9 +320,15 @@ class DataUploader(
                 if (currentBatchCount == 0) {
                     val baseTimestamp = System.currentTimeMillis() / 1000
                     liveBatchBaseTimestamp.set(baseTimestamp)
+                    sp.edit().putLong(KEY_LIVE_BATCH_TIMESTAMP, baseTimestamp).apply()
                     deltaMapWithTimestamp["bts"] = baseTimestamp
                 } else {
-                    val baseTs = liveBatchBaseTimestamp.get() ?: (System.currentTimeMillis() / 1000).also { liveBatchBaseTimestamp.set(it) }
+                    val baseTs = liveBatchBaseTimestamp.get()
+                        ?: sp.getLong(KEY_LIVE_BATCH_TIMESTAMP, 0L).takeIf { it != 0L }
+                        ?: (System.currentTimeMillis() / 1000).also {
+                            liveBatchBaseTimestamp.set(it)
+                            sp.edit().putLong(KEY_LIVE_BATCH_TIMESTAMP, it).apply()
+                        }
                     val offset = (System.currentTimeMillis() / 1000) - baseTs
                     deltaMapWithTimestamp["tso"] = offset
                 }
@@ -344,7 +354,6 @@ class DataUploader(
             val sizeTriggerMet = isTriggerByMaxSizeEnabled && currentBufferedSizeKb >= batchMaxSizeKiloBytes
 
             if (countTriggerMet || sizeTriggerMet) {
-                liveBatchBaseTimestamp.set(null)
                 h.post { forceSendBuffer() }
             } else if (bufferedCount == 1) {
                 h.post { scheduleBatchTimeout() }
@@ -358,6 +367,9 @@ class DataUploader(
 
         if (result.success) {
             dataBuffer.clearBuffer(batch)
+            liveBatchBaseTimestamp.set(null)
+            sp.edit().remove(KEY_LIVE_BATCH_TIMESTAMP).apply()
+
             bufferedSize.set(0L)
 
             tb.addAndGet(result.uploadedBytes)
