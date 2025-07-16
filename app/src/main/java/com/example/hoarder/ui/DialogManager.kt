@@ -38,6 +38,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         builder.setView(view)
 
         val editText = view.findViewById<TextView>(R.id.serverIpPortEditText)
+        val bufferThresholdEditText = view.findViewById<EditText>(R.id.bufferWarningThresholdEditText)
         val statsLastHour = view.findViewById<TextView>(R.id.statsLastHour)
         val statsLastDay = view.findViewById<TextView>(R.id.statsLastDay)
         val statsLast7Days = view.findViewById<TextView>(R.id.statsLast7Days)
@@ -49,6 +50,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         val batchingSettingsButton = view.findViewById<Button>(R.id.batchingSettingsButton)
 
         editText.text = p.getServerAddress()
+        bufferThresholdEditText.setText(p.getBufferWarningThresholdKb().toString())
         statsLastHour.text = "Calculating..."
         statsLastDay.text = "Calculating..."
         statsLast7Days.text = "Calculating..."
@@ -88,7 +90,13 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
         errorLogButton.setOnClickListener { showDetailedLogDialog("error") }
 
         val dialog = builder.setTitle("Server Settings")
-            .setPositiveButton("Close", null)
+            .setPositiveButton("Save") { _, _ ->
+                val thresholdText = bufferThresholdEditText.text.toString()
+                val threshold = thresholdText.toIntOrNull() ?: 5
+                p.setBufferWarningThresholdKb(threshold)
+                ToastHelper.showToast(a, "Buffer warning threshold saved", Toast.LENGTH_SHORT)
+            }
+            .setNegativeButton("Close", null)
             .create()
 
         val uploadStatusReceiver = object : BroadcastReceiver() {

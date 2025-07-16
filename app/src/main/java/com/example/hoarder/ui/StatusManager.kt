@@ -13,7 +13,6 @@ import com.google.gson.JsonParser
 
 class StatusManager(private val a: MainActivity, private val p: Prefs) {
     private val g by lazy { GsonBuilder().setPrettyPrinting().create() }
-    private var lastBufferSize = 0L
 
     fun updateDataCollectionUI(isActive: Boolean) {
         val subtitle = a.findViewById<TextView>(R.id.dataCollectionSubtitle)
@@ -24,22 +23,20 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         val statusView = a.findViewById<TextView>(R.id.serverUploadStatus)
         val bytesView = a.findViewById<TextView>(R.id.serverUploadBytes)
 
-        if (bufferedSize > 0) lastBufferSize = bufferedSize
         if (!isActive) {
             statusView.text = "Inactive"
             bytesView.visibility = View.GONE
-            lastBufferSize = 0L
             return
         }
 
         if (!NetUtils.isValidIpPort(p.getServerAddress())) {
             statusView.text = "Invalid Address"
             bytesView.visibility = View.GONE
-            lastBufferSize = 0L
             return
         }
 
-        statusView.text = StatusFormatter.formatStatusText(status, message, lastBufferSize)
+        val bufferWarningThreshold = p.getBufferWarningThresholdKb()
+        statusView.text = StatusFormatter.formatStatusText(status, message, bufferedSize, bufferWarningThreshold)
 
         if (actualBytes != null && actualBytes > 0) {
             bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)} / ${ByteFormatter.format(actualBytes)}"

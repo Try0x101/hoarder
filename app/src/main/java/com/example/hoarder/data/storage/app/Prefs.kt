@@ -69,4 +69,7 @@ class Prefs(ctx: Context) {
 
     fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_CONTINUOUS)
     fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()
+
+    fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 5)
+    fun setBufferWarningThresholdKb(kb: Int) = p.edit().putInt("bufferWarningThresholdKb", kb).apply()
 }

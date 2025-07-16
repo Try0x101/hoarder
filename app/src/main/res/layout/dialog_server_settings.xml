@@ -33,6 +33,25 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="Buffer Warning Threshold (KB)"
+            android:textColor="@color/amoled_light_gray"
+            android:textSize="14sp"/>
+
+        <EditText
+            android:id="@+id/bufferWarningThresholdEditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Warning threshold in KB (default: 5)"
+            android:textColor="@color/amoled_white"
+            android:textColorHint="@color/amoled_light_gray"
+            android:backgroundTint="@color/amoled_true_blue"
+            android:inputType="number"
+            android:maxLines="1"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="Upload Statistics (Payload / Network)"
             android:textColor="@color/amoled_light_gray"
             android:textSize="14sp"
