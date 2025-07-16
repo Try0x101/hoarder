@@ -19,11 +19,11 @@ object DeltaComputer {
             }
         }
 
-        if (current.containsKey("id")) {
-            delta["id"] = current["id"]!!
+        if (current.containsKey("i")) {
+            delta["i"] = current["i"]!!
         }
 
-        if (delta.size == 1 && delta.containsKey("id")) {
+        if (delta.size == 1 && delta.containsKey("i")) {
             return emptyMap()
         }
 

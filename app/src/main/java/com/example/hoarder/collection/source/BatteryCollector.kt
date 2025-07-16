@@ -40,11 +40,7 @@ class BatteryCollector(private val ctx: Context) {
                 resultMap["p"] = percentage
 
                 capacityMah?.let {
-                    val finalCapacity = if (precision == -1) {
-                        RoundingUtils.smartCapacity(it)
-                    } else {
-                        it
-                    }
+                    val finalCapacity = RoundingUtils.smartCapacity(it)
                     if (finalCapacity > 0) {
                         resultMap["c"] = finalCapacity
                     }
