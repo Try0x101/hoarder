@@ -88,7 +88,8 @@ class ServiceCommandHandler(
         if (uploadActive.get()) {
             val forcedData = intent.getStringExtra("forcedData")
             if (forcedData != null && forcedData.isNotBlank()) {
-                dataUploader.queueForcedData(forcedData)
+                dataUploader.queueData(forcedData)
+                dataUploader.forceSendBuffer()
             }
         }
     }

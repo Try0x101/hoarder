@@ -1,13 +1,7 @@
 package com.example.hoarder.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.TextView
-import android.widget.Toast
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.utils.ToastHelper
 
 class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private val layoutManager = LayoutManager(a, p) { updateAllPrecisionLabels() }
@@ -19,11 +13,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         statusManager.updateDataCollectionUI(p.isDataCollectionEnabled())
         statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
         statusManager.updateAllPrecisionLabels()
-        setupJsonCopyListener()
         setupServerRowListener()
-    }
-
-    private fun setupJsonCopyListener() {
     }
 
     private fun setupServerRowListener() {

@@ -27,8 +27,8 @@ class UploadScheduler(
 
     companion object {
         private const val ACTION_UPLOAD_ALARM = "com.example.hoarder.UPLOAD_ALARM"
-        private const val BASE_DELAY_MS = 1000L
-        private const val MAX_DELAY_MS = 30000L
+        private const val BASE_DELAY_MS = 300000L
+        private const val MAX_DELAY_MS = 900000L
         private const val MAX_FAILURES = 5
     }
 

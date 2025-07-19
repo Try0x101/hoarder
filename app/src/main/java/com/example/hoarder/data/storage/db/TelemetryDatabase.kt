@@ -1,6 +1,7 @@
 package com.example.hoarder.data.storage.db
 
 import android.content.Context
+import android.database.Cursor
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.hoarder.data.models.BufferedPayload
@@ -41,6 +42,9 @@ interface LogDao {
 
     @Query("SELECT * FROM buffered_payloads ORDER BY timestamp ASC")
     fun getAllPayloads(): List<BufferedPayload>
+
+    @Query("SELECT * FROM buffered_payloads ORDER BY timestamp ASC")
+    fun getAllPayloadsCursor(): Cursor
 
     @Query("DELETE FROM buffered_payloads WHERE id IN (:ids)")
     fun deletePayloadsById(ids: List<Long>)

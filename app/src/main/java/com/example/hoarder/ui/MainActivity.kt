@@ -73,46 +73,24 @@ class MainActivity : AppCompatActivity() {
             lastData = json
             ui.updateRawJson(json)
         }
-        viewModel.isUploadEnabled.observe(this) { isEnabled ->
-            ui.updateUploadUI(
-                isEnabled,
-                viewModel.uploadStatus.value,
-                viewModel.uploadMessage.value,
-                viewModel.totalUploadedBytes.value,
-                viewModel.totalActualNetworkBytes.value,
-                viewModel.bufferedDataSize.value ?: 0L
-            )
-        }
-        viewModel.totalUploadedBytes.observe(this) {
-            ui.updateUploadUI(
-                viewModel.isUploadEnabled.value ?: false,
-                viewModel.uploadStatus.value,
-                viewModel.uploadMessage.value,
-                it,
-                viewModel.totalActualNetworkBytes.value,
-                viewModel.bufferedDataSize.value ?: 0L
-            )
-        }
-        viewModel.totalActualNetworkBytes.observe(this) {
-            ui.updateUploadUI(
-                viewModel.isUploadEnabled.value ?: false,
-                viewModel.uploadStatus.value,
-                viewModel.uploadMessage.value,
-                viewModel.totalUploadedBytes.value,
-                it,
-                viewModel.bufferedDataSize.value ?: 0L
-            )
-        }
-        viewModel.bufferedDataSize.observe(this) {
-            ui.updateUploadUI(
-                viewModel.isUploadEnabled.value ?: false,
-                viewModel.uploadStatus.value,
-                viewModel.uploadMessage.value,
-                viewModel.totalUploadedBytes.value,
-                viewModel.totalActualNetworkBytes.value,
-                it
-            )
-        }
+
+        viewModel.isUploadEnabled.observe(this) { updateFullUploadUI() }
+        viewModel.uploadStatus.observe(this) { updateFullUploadUI() }
+        viewModel.uploadMessage.observe(this) { updateFullUploadUI() }
+        viewModel.totalUploadedBytes.observe(this) { updateFullUploadUI() }
+        viewModel.totalActualNetworkBytes.observe(this) { updateFullUploadUI() }
+        viewModel.bufferedDataSize.observe(this) { updateFullUploadUI() }
+    }
+
+    private fun updateFullUploadUI() {
+        ui.updateUploadUI(
+            viewModel.isUploadEnabled.value ?: false,
+            viewModel.uploadStatus.value,
+            viewModel.uploadMessage.value,
+            viewModel.totalUploadedBytes.value,
+            viewModel.totalActualNetworkBytes.value,
+            viewModel.bufferedDataSize.value ?: 0L
+        )
     }
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<String>, res: IntArray) {

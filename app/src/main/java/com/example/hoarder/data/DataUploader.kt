@@ -3,6 +3,7 @@ package com.example.hoarder.data
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.database.Cursor
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -18,19 +19,21 @@ import com.example.hoarder.power.PowerManager
 import com.example.hoarder.transport.buffer.DataBuffer
 import com.example.hoarder.transport.buffer.UploadLogger
 import com.example.hoarder.transport.network.NetUtils
-import com.example.hoarder.transport.queue.UploadQueue
 import com.example.hoarder.transport.queue.UploadScheduler
+import com.example.hoarder.ui.formatters.ByteFormatter
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
 import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.Deflater
+import java.util.zip.DeflaterOutputStream
+import kotlin.math.pow
 
 class DataUploader(
     private val ctx: Context,
@@ -42,13 +45,10 @@ class DataUploader(
     private val ua = AtomicBoolean(false)
     private var ip = ""
     private var port = 5000
-    private val uploadQueue = UploadQueue()
-    private val lastUploadedMap = AtomicReference<Map<String, Any>?>(null)
     private val lastProcessedMap = AtomicReference<Map<String, Any>?>(null)
-    private val isOffline = AtomicBoolean(false)
-    private val offlineSessionBaseTimestamp = AtomicReference<Long?>(null)
     private val wasOffline = AtomicBoolean(false)
     private val networkCallbackRegistered = AtomicBoolean(false)
+    private val bulkUploadInProgress = AtomicBoolean(false)
 
     private val g: Gson = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private val mapType = object : TypeToken<MutableMap<String, Any>>() {}.type
@@ -63,7 +63,7 @@ class DataUploader(
     private val dataBuffer = DataBuffer(logDao, g)
     private val uploadLogger = UploadLogger(logDao)
     private val networkUploader = NetworkUploader(ctx)
-    private val scheduler = UploadScheduler(ctx, h, ::processQueue)
+    private val scheduler = UploadScheduler(ctx, h, ::forceSendBuffer)
 
     private val connectivityManager = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
@@ -84,15 +84,14 @@ class DataUploader(
 
     companion object {
         private const val KEY_LIVE_BATCH_TIMESTAMP = "liveBatchBaseTimestamp"
+        private const val HOT_PATH_RECORD_LIMIT = 1000
     }
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             if (wasOffline.getAndSet(false)) {
-                h.post {
-                    checkAutoSendBuffer()
-                }
+                // Network is back, but we don't auto-send. The scheduler or user will trigger it.
             }
         }
 
@@ -103,26 +102,21 @@ class DataUploader(
     }
 
     private val batchTimeoutRunnable = Runnable {
-        if (isTriggerByTimeoutEnabled && dataBuffer.getBufferedPayloadsCount() > 0) {
-            forceSendBuffer()
+        scope.launch {
+            if (isTriggerByTimeoutEnabled && dataBuffer.getBufferedPayloadsCount() > 0) {
+                forceSendBuffer()
+            }
         }
     }
 
     init {
         scope.launch {
             bufferedSize.set(dataBuffer.getBufferedDataSize())
-            val lastJson = sp.getString("lastUploadedJson", null)
-            if (lastJson != null) {
-                try {
-                    val map: Map<String, Any> = g.fromJson(lastJson, mapType)
-                    lastUploadedMap.set(map)
-                    lastProcessedMap.set(map)
-                } catch (e: Exception) {
-                    lastUploadedMap.set(null)
-                    lastProcessedMap.set(null)
-                }
-            }
             liveBatchBaseTimestamp.set(sp.getLong(KEY_LIVE_BATCH_TIMESTAMP, 0L).takeIf { it != 0L })
+
+            if (appPrefs.getBulkJobId() != null) {
+                resumeBulkUploadProcess()
+            }
         }
         updateBatchingConfiguration()
     }
@@ -170,92 +164,56 @@ class DataUploader(
         h.removeCallbacks(batchTimeoutRunnable)
     }
 
-    private fun processQueue() {
-        if (isBatchingEnabled.get()) return
-
-        if (!ua.get() || !hasValidServer()) {
-            if (ua.get()) {
-                h.post { notifyStatusDebounced("Error", "Server IP or Port became invalid.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
-                ua.set(false)
-            }
-            return
-        }
-
-        val (dataToProcessString, isForcedUpload) = uploadQueue.getNextItem()
-        if (dataToProcessString == null) return
-
-        if (isForcedUpload) {
-            lastUploadedMap.set(null)
-            lastProcessedMap.set(null)
-            isOffline.set(false)
-            offlineSessionBaseTimestamp.set(null)
-            processUpload(dataToProcessString, dataToProcessString, false)
-            return
-        }
-
-        val currentDataMap: Map<String, Any> = g.fromJson(dataToProcessString, mapType)
-        val previousDataMap = lastProcessedMap.get()
-
-        if (previousDataMap == null) {
-            processUpload(dataToProcessString, dataToProcessString, false)
-            return
-        }
-
-        val deltaMap = DeltaComputer.calculateDelta(previousDataMap, currentDataMap)
-        if (deltaMap.isEmpty()) {
-            lastProcessedMap.set(currentDataMap)
-            h.post { notifyStatusDebounced("No Change", "Data unchanged, skipping upload.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
+    fun queueData(data: String) {
+        if (isBatchingEnabled.get()) {
+            handleBatchingQueue(data)
         } else {
-            val deltaJson = g.toJson(deltaMap)
-            processUpload(deltaJson, dataToProcessString, true)
+            processSingleUpload(data)
         }
     }
 
-    private fun processUpload(uploadJson: String, fullJsonForBuffer: String, isDelta: Boolean) {
-        val currentMapState = g.fromJson<Map<String, Any>>(fullJsonForBuffer, mapType)
-
-        if (!NetUtils.isNetworkAvailable(ctx)) {
-            wasOffline.set(true)
-            handleUploadFailure(uploadJson, fullJsonForBuffer, currentMapState)
-            uploadLogger.addErrorLog("Internet not accessible")
-            h.post { notifyStatusDebounced("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
-            return
-        }
-
-        val result = networkUploader.uploadSingle(uploadJson, isDelta, ip, port, compressionLevel)
-
-        if (result.success) {
-            handleUploadSuccess(uploadJson, fullJsonForBuffer, currentMapState, result.uploadedBytes, result.actualNetworkBytes, isDelta)
-        } else {
-            handleUploadFailure(uploadJson, fullJsonForBuffer, currentMapState)
-            result.errorMessage?.let { uploadLogger.addErrorLog(it) }
-            h.post { notifyStatusDebounced(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
-        }
-    }
-
-    private fun checkAutoSendBuffer() {
-        if (!ua.get() || !hasValidServer()) return
-
+    private fun processSingleUpload(fullJson: String) {
         scope.launch {
-            val currentBufferSize = dataBuffer.getBufferedDataSize()
-            val warningThresholdBytes = appPrefs.getBufferWarningThresholdKb() * 1024L
+            if (!ua.get() || !hasValidServer()) {
+                handleUploadFailure(fullJson, g.fromJson(fullJson, mapType))
+                return@launch
+            }
 
-            if (currentBufferSize > 0 && currentBufferSize < warningThresholdBytes) {
-                h.post {
-                    notifyStatusDebounced("Auto-sending", "Automatically sending buffered data.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
-                    forceSendBuffer()
-                }
+            val currentDataMap: Map<String, Any> = g.fromJson(fullJson, mapType)
+            val previousDataMap = lastProcessedMap.get()
+            val deltaMap = if (previousDataMap == null) currentDataMap else DeltaComputer.calculateDelta(previousDataMap, currentDataMap)
+
+            lastProcessedMap.set(currentDataMap)
+
+            if (deltaMap.isEmpty()) {
+                h.post { notifyStatusDebounced("No Change", "Data unchanged, skipping upload.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
+                return@launch
+            }
+
+            val deltaJson = g.toJson(deltaMap)
+            val isDelta = previousDataMap != null
+
+            if (!NetUtils.isNetworkAvailable(ctx)) {
+                wasOffline.set(true)
+                handleUploadFailure(fullJson, currentDataMap)
+                uploadLogger.addErrorLog("Internet not accessible")
+                h.post { notifyStatusDebounced("Saving Locally", "Internet not accessible. Data saved locally.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
+                return@launch
+            }
+
+            val result = networkUploader.uploadSingle(deltaJson, isDelta, ip, port, compressionLevel)
+
+            if (result.success) {
+                handleUploadSuccess(deltaJson, fullJson, currentDataMap, result.uploadedBytes, result.actualNetworkBytes, isDelta)
+            } else {
+                handleUploadFailure(fullJson, currentDataMap)
+                result.errorMessage?.let { uploadLogger.addErrorLog(it) }
+                h.post { notifyStatusDebounced(result.statusMessage, result.errorMessage ?: "Upload failed", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
             }
         }
     }
 
     private fun handleUploadSuccess(uploadJson: String, fullJson: String, currentMap: Map<String, Any>, uploadedBytes: Long, networkBytes: Long, isDelta: Boolean) {
-        lastUploadedMap.set(currentMap)
-        lastProcessedMap.set(currentMap)
-        sp.edit().putString("lastUploadedJson", fullJson).apply()
-        isOffline.set(false)
-        offlineSessionBaseTimestamp.set(null)
-
         tb.addAndGet(uploadedBytes)
         actualNetworkBytes.addAndGet(networkBytes)
         sp.edit()
@@ -272,38 +230,12 @@ class DataUploader(
         h.post { notifyStatusDebounced(statusText, "Uploaded successfully.", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), networkBytes) }
     }
 
-    private fun handleUploadFailure(uploadJson: String, fullJsonForBuffer: String, currentMap: Map<String, Any>) {
-        val payloadToBuffer: String
-
-        if (!isOffline.getAndSet(true)) {
-            val baseTimestamp = System.currentTimeMillis() / 1000
-            offlineSessionBaseTimestamp.set(baseTimestamp)
-            val map: MutableMap<String, Any> = g.fromJson(fullJsonForBuffer, mapType)
-            map["bts"] = baseTimestamp
-            payloadToBuffer = g.toJson(map)
-        } else {
-            val baseTs = offlineSessionBaseTimestamp.get() ?: (System.currentTimeMillis() / 1000).also { offlineSessionBaseTimestamp.set(it) }
-            val offset = (System.currentTimeMillis() / 1000) - baseTs
-            val map: MutableMap<String, Any> = g.fromJson(uploadJson, mapType)
-            map["tso"] = offset
-            payloadToBuffer = g.toJson(map)
-        }
-
+    private suspend fun handleUploadFailure(fullJsonForBuffer: String, currentMap: Map<String, Any>) {
+        val payloadToBuffer = fullJsonForBuffer
         dataBuffer.saveToBuffer(payloadToBuffer)
-        scope.launch {
-            bufferedSize.set(dataBuffer.getBufferedDataSize())
-            h.post {
-                notifyStatusDebounced("Saving Locally", "Data added to local buffer.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
-            }
-        }
-        lastProcessedMap.set(currentMap)
-    }
-
-    fun queueData(data: String) {
-        if (isBatchingEnabled.get()) {
-            handleBatchingQueue(data)
-        } else {
-            uploadQueue.queueRegular(data)
+        bufferedSize.set(dataBuffer.getBufferedDataSize())
+        h.post {
+            notifyStatusDebounced("Saving Locally", "Data added to local buffer.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
         }
     }
 
@@ -337,11 +269,9 @@ class DataUploader(
                 dataBuffer.saveToBuffer(deltaJson)
                 lastProcessedMap.set(currentMap)
 
-                scope.launch {
-                    bufferedSize.set(dataBuffer.getBufferedDataSize())
-                    h.post {
-                        notifyStatusDebounced("Batching", "Data added to batch.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
-                    }
+                bufferedSize.set(dataBuffer.getBufferedDataSize())
+                h.post {
+                    notifyStatusDebounced("Batching", "Data added to batch.", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
                 }
             } else {
                 lastProcessedMap.set(currentMap)
@@ -361,7 +291,7 @@ class DataUploader(
         }
     }
 
-    private fun processBatchUpload(batch: List<BufferedPayload>) {
+    private fun processHotPathUpload(batch: List<BufferedPayload>) {
         val batchJsonStrings = batch.map { it.payload }
         val result = networkUploader.uploadBatch(batchJsonStrings, ip, port, compressionLevel)
 
@@ -369,8 +299,6 @@ class DataUploader(
             dataBuffer.clearBuffer(batch)
             liveBatchBaseTimestamp.set(null)
             sp.edit().remove(KEY_LIVE_BATCH_TIMESTAMP).apply()
-
-            bufferedSize.set(0L)
 
             tb.addAndGet(result.uploadedBytes)
             actualNetworkBytes.addAndGet(result.actualNetworkBytes)
@@ -381,10 +309,14 @@ class DataUploader(
 
             uploadLogger.addBatchSuccessLog(batchJsonStrings, result.uploadedBytes, result.actualNetworkBytes)
 
-            h.postDelayed({
-                notifyStatus("Connected", "All data uploaded", tb.get(), actualNetworkBytes.get(), 0L, result.actualNetworkBytes)
-            }, 100)
+            scope.launch {
+                bufferedSize.set(dataBuffer.getBufferedDataSize())
+                h.post {
+                    notifyStatusDebounced("OK (Batch)", "Batch uploaded successfully", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), result.actualNetworkBytes)
+                }
+            }
         } else {
+            wasOffline.set(!NetUtils.isNetworkAvailable(ctx))
             result.errorMessage?.let { uploadLogger.addErrorLog(it) }
             scope.launch {
                 bufferedSize.set(dataBuffer.getBufferedDataSize())
@@ -399,7 +331,7 @@ class DataUploader(
         val currentTime = System.currentTimeMillis()
         val statusKey = "$s|$m"
 
-        if (s == "OK (Batch)" || s == "Auto-sending" || statusKey != lastStatusMessage || (currentTime - lastStatusTime) > STATUS_UPDATE_DEBOUNCE_MS) {
+        if (statusKey != lastStatusMessage || (currentTime - lastStatusTime) > STATUS_UPDATE_DEBOUNCE_MS) {
             lastStatusTime = currentTime
             lastStatusMessage = statusKey
             notifyStatus(s, m, ub, anb, bufferSize, lastUploadSize)
@@ -419,10 +351,6 @@ class DataUploader(
         }
     }
 
-    fun queueForcedData(data: String) {
-        uploadQueue.queueForced(data)
-    }
-
     fun start() {
         ua.set(true)
         updateBatchingConfiguration()
@@ -435,7 +363,6 @@ class DataUploader(
 
     fun stop() {
         ua.set(false)
-        uploadQueue.clear()
         scheduler.stop()
         cancelBatchTimeout()
         unregisterNetworkCallback()
@@ -444,11 +371,7 @@ class DataUploader(
     fun resetCounter() {
         tb.set(0L)
         actualNetworkBytes.set(0L)
-        lastUploadedMap.set(null)
         lastProcessedMap.set(null)
-        isOffline.set(false)
-        offlineSessionBaseTimestamp.set(null)
-        uploadQueue.clear()
         sp.edit()
             .putLong("totalUploadedBytes", 0L)
             .putLong("totalActualNetworkBytes", 0L)
@@ -459,20 +382,171 @@ class DataUploader(
         }
     }
 
-    fun getUploadedBytes(): Long = tb.get()
-    fun getActualNetworkBytes(): Long = actualNetworkBytes.get()
-
     fun forceSendBuffer() {
         cancelBatchTimeout()
-        if (ua.get() && hasValidServer()) {
-            scheduler.submitOneTimeTask {
+        if (!ua.get() || !hasValidServer() || bulkUploadInProgress.get()) return
+
+        scope.launch {
+            val currentBufferSize = dataBuffer.getBufferedDataSize()
+            if (currentBufferSize == 0L) return@launch
+
+            val recordCount = dataBuffer.getBufferedPayloadsCount()
+            val bulkThresholdBytes = appPrefs.getBulkUploadThresholdKb() * 1024L
+
+            if (currentBufferSize >= bulkThresholdBytes || recordCount > HOT_PATH_RECORD_LIMIT) {
+                initiateBulkUploadProcess()
+            } else {
                 val bufferedData = dataBuffer.getBufferedData()
                 if (bufferedData.isNotEmpty()) {
-                    processBatchUpload(bufferedData)
+                    processHotPathUpload(bufferedData)
                 }
             }
         }
     }
+
+    private suspend fun initiateBulkUploadProcess() {
+        if (!bulkUploadInProgress.compareAndSet(false, true)) return
+
+        withContext(Dispatchers.Main) {
+            notifyStatus("Preparing", "Preparing large upload...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
+        }
+
+        appPrefs.setBulkJobState("MARSHALLING")
+        val tempFile = File(ctx.cacheDir, "bulk_upload_${System.currentTimeMillis()}.json.zlib")
+        appPrefs.setBulkTempFilePath(tempFile.absolutePath)
+
+        val success = marshallDataToFile(tempFile)
+        if (!success) {
+            cleanupBulkState(tempFile)
+            return
+        }
+
+        withContext(Dispatchers.Main) {
+            notifyStatus("Uploading", "Uploading bulk file (${ByteFormatter.format(tempFile.length())})...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
+        }
+        appPrefs.setBulkJobState("UPLOADING")
+        val result = withContext(Dispatchers.IO) {
+            networkUploader.uploadBulkFile(tempFile, ip, port)
+        }
+
+        if (result.success && result.jobId != null) {
+            appPrefs.setBulkJobId(result.jobId)
+            appPrefs.setBulkJobState("POLLING")
+            tempFile.delete()
+            appPrefs.setBulkTempFilePath(null)
+            schedulePollingTask(0, 2000L)
+        } else {
+            cleanupBulkState(tempFile, isError = true, errorMessage = result.errorMessage)
+        }
+    }
+
+    private suspend fun marshallDataToFile(file: File): Boolean {
+        return withContext(Dispatchers.IO) {
+            var cursor: Cursor? = null
+            try {
+                DeflaterOutputStream(FileOutputStream(file), Deflater(compressionLevel, true)).use { deflaterStream ->
+                    deflaterStream.write("[".toByteArray())
+                    cursor = logDao.getAllPayloadsCursor()
+                    var isFirst = true
+                    if (cursor?.moveToFirst() == true) {
+                        val payloadIndex = cursor!!.getColumnIndexOrThrow("payload")
+                        do {
+                            if (!isFirst) deflaterStream.write(",".toByteArray())
+                            val payload = cursor!!.getString(payloadIndex)
+                            deflaterStream.write(payload.toByteArray(Charsets.UTF_8))
+                            isFirst = false
+                        } while (cursor!!.moveToNext())
+                    }
+                    deflaterStream.write("]".toByteArray())
+                }
+                true
+            } catch (e: Exception) {
+                false
+            } finally {
+                cursor?.close()
+            }
+        }
+    }
+
+    private fun schedulePollingTask(retries: Int, delay: Long) {
+        h.postDelayed({
+            scope.launch { pollJobStatus(retries, delay) }
+        }, delay)
+    }
+
+    private suspend fun pollJobStatus(retries: Int, prevDelay: Long) {
+        val jobId = appPrefs.getBulkJobId() ?: return cleanupBulkState()
+
+        val status = withContext(Dispatchers.IO) { networkUploader.getJobStatus(jobId, ip, port) }
+
+        when (status?.get("status")) {
+            "COMPLETE" -> finalizeBulkSuccess()
+            "PROCESSING" -> {
+                val nextDelay = (prevDelay * 2).coerceAtMost(60000L)
+                val details = status["details"] as? String ?: "Processing..."
+                withContext(Dispatchers.Main) {
+                    notifyStatus("Processing", details, tb.get(), actualNetworkBytes.get(), bufferedSize.get())
+                }
+                schedulePollingTask(retries + 1, nextDelay)
+            }
+            "FAILED" -> {
+                val error = status["error"] as? String ?: "Unknown server error"
+                cleanupBulkState(isError = true, errorMessage = "Bulk upload failed on server: $error")
+            }
+            else -> {
+                if (retries < 5) {
+                    schedulePollingTask(retries + 1, prevDelay)
+                } else {
+                    cleanupBulkState(isError = true, errorMessage = "Polling failed after multiple retries.")
+                }
+            }
+        }
+    }
+
+    private suspend fun finalizeBulkSuccess() {
+        val records = withContext(Dispatchers.IO) { logDao.getAllPayloads() }
+        withContext(Dispatchers.IO) { dataBuffer.clearBuffer(records) }
+        cleanupBulkState()
+        withContext(Dispatchers.Main) {
+            notifyStatus("OK (Bulk)", "Bulk upload complete.", tb.get(), actualNetworkBytes.get(), 0L)
+        }
+    }
+
+    private fun cleanupBulkState(file: File? = null, isError: Boolean = false, errorMessage: String? = null) {
+        appPrefs.setBulkJobId(null)
+        appPrefs.setBulkJobState("IDLE")
+        val tempFilePath = appPrefs.getBulkTempFilePath()
+        if (tempFilePath != null) {
+            File(tempFilePath).delete()
+        }
+        file?.delete()
+        appPrefs.setBulkTempFilePath(null)
+        bulkUploadInProgress.set(false)
+        if (isError) {
+            h.post { notifyStatusDebounced("Error", errorMessage ?: "Bulk upload failed.", tb.get(), actualNetworkBytes.get(), bufferedSize.get()) }
+        }
+        scope.launch { bufferedSize.set(dataBuffer.getBufferedDataSize()) }
+    }
+
+    private suspend fun resumeBulkUploadProcess() {
+        val state = appPrefs.getBulkJobState()
+        val jobId = appPrefs.getBulkJobId()
+        val filePath = appPrefs.getBulkTempFilePath()
+
+        when (state) {
+            "POLLING" -> if (jobId != null) {
+                bulkUploadInProgress.set(true)
+                schedulePollingTask(0, 2000L)
+            } else cleanupBulkState()
+            "UPLOADING", "MARSHALLING" -> {
+                bulkUploadInProgress.set(false) // Reset to allow restart
+                if (filePath != null) File(filePath).delete()
+                initiateBulkUploadProcess()
+            }
+            else -> cleanupBulkState()
+        }
+    }
+
 
     fun cleanup() {
         scheduler.cleanup()
@@ -487,6 +561,7 @@ class DataUploader(
             putExtra("totalUploadedBytes", ub)
             putExtra("totalActualNetworkBytes", anb)
             putExtra("bufferedDataSize", bufferSize)
+            putExtra("bulkInProgress", bulkUploadInProgress.get())
             lastUploadSize?.let { putExtra("lastUploadSizeBytes", it) }
         })
     }
@@ -502,5 +577,15 @@ class DataUploader(
         batchMaxSizeKiloBytes = maxSizeKb
         isTriggerByMaxSizeEnabled = byMaxSize
         compressionLevel = compLevel
+
+        scope.launch {
+            val needsReschedule = dataBuffer.getBufferedPayloadsCount() > 0
+            withContext(Dispatchers.Main) {
+                cancelBatchTimeout()
+                if (needsReschedule && isTriggerByTimeoutEnabled) {
+                    h.postDelayed(batchTimeoutRunnable, batchTimeoutMillis)
+                }
+            }
+        }
     }
 }

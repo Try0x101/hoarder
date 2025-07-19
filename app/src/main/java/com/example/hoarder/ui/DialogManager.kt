@@ -14,7 +14,6 @@ import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
@@ -39,6 +38,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         val editText = view.findViewById<TextView>(R.id.serverIpPortEditText)
         val bufferThresholdEditText = view.findViewById<EditText>(R.id.bufferWarningThresholdEditText)
+        val bulkThresholdEditText = view.findViewById<EditText>(R.id.bulkUploadThresholdEditText)
         val statsLastHour = view.findViewById<TextView>(R.id.statsLastHour)
         val statsLastDay = view.findViewById<TextView>(R.id.statsLastDay)
         val statsLast7Days = view.findViewById<TextView>(R.id.statsLast7Days)
@@ -51,6 +51,7 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         editText.text = p.getServerAddress()
         bufferThresholdEditText.setText(p.getBufferWarningThresholdKb().toString())
+        bulkThresholdEditText.setText(p.getBulkUploadThresholdKb().toString())
         statsLastHour.text = "Calculating..."
         statsLastDay.text = "Calculating..."
         statsLast7Days.text = "Calculating..."
@@ -68,7 +69,13 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         fun updateButtonsState() {
             val bufferSize = a.viewModel.bufferedDataSize.value ?: 0L
-            if (bufferSize > 0) {
+            val bulkInProgress = a.viewModel.isBulkInProgress.value ?: false
+
+            if (bulkInProgress) {
+                sendBufferButton.visibility = View.VISIBLE
+                sendBufferButton.text = "Bulk upload in progress..."
+                sendBufferButton.isEnabled = false
+            } else if (bufferSize > 0) {
                 sendBufferButton.visibility = View.VISIBLE
                 sendBufferButton.text = "Send Buffered Data (${ByteFormatter.format(bufferSize)})"
                 sendBufferButton.isEnabled = true
@@ -91,10 +98,15 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
 
         val dialog = builder.setTitle("Server Settings")
             .setPositiveButton("Save") { _, _ ->
-                val thresholdText = bufferThresholdEditText.text.toString()
-                val threshold = thresholdText.toIntOrNull() ?: 5
-                p.setBufferWarningThresholdKb(threshold)
-                ToastHelper.showToast(a, "Buffer warning threshold saved", Toast.LENGTH_SHORT)
+                val bufferWarnText = bufferThresholdEditText.text.toString()
+                val bufferWarn = bufferWarnText.toIntOrNull() ?: 5
+                p.setBufferWarningThresholdKb(bufferWarn)
+
+                val bulkThresholdText = bulkThresholdEditText.text.toString()
+                val bulkThreshold = bulkThresholdText.toIntOrNull() ?: 10240
+                p.setBulkUploadThresholdKb(bulkThreshold)
+
+                ToastHelper.showToast(a, "Thresholds saved", Toast.LENGTH_SHORT)
             }
             .setNegativeButton("Close", null)
             .create()
@@ -105,8 +117,8 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                     updateButtonsState()
                     val status = intent.getStringExtra("status")
                     when (status) {
-                        "OK (Batch)" -> ToastHelper.showToast(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT)
-                        "HTTP Error", "Network Error" -> {
+                        "OK (Batch)", "OK (Bulk)" -> ToastHelper.showToast(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT)
+                        "HTTP Error", "Network Error", "Error" -> {
                             val message = intent.getStringExtra("message") ?: "Check logs for details."
                             ToastHelper.showToast(a, "Failed to send buffer: $message", Toast.LENGTH_LONG)
                         }
@@ -228,20 +240,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
             "${ByteFormatter.format(stats.payloadBytes)} / ${ByteFormatter.format(stats.actualNetworkBytes)}"
         } else {
             ByteFormatter.format(stats.payloadBytes)
-        }
-    }
-
-    private fun saveServerAddress(addr: String, dialog: AlertDialog) {
-        if (NetUtils.isValidIpPort(addr)) {
-            p.setServerAddress(addr)
-            ToastHelper.showToast(a, "Server address saved", Toast.LENGTH_SHORT)
-            if (p.isDataUploadEnabled()) {
-                a.stopUpload()
-                a.startUpload(addr)
-            }
-            dialog.dismiss()
-        } else {
-            ToastHelper.showToast(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT)
         }
     }
 

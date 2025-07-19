@@ -1,6 +1,9 @@
 package com.example.hoarder.data.uploader
 
 import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.io.File
 import java.io.IOException
 import java.net.ConnectException
 import java.net.HttpURLConnection
@@ -14,7 +17,8 @@ data class UploadResult(
     val actualNetworkBytes: Long,
     val statusMessage: String,
     val errorMessage: String? = null,
-    val compressionStats: String? = null
+    val compressionStats: String? = null,
+    val jobId: String? = null
 )
 
 class NetworkUploader(private val context: Context) {
@@ -22,8 +26,10 @@ class NetworkUploader(private val context: Context) {
     companion object {
         private const val SINGLE_TIMEOUT_MS = 5000
         private const val BATCH_TIMEOUT_MS = 15000
-        private const val CONNECT_TIMEOUT_MS = 3000
+        private const val BULK_TIMEOUT_MS = 60000
+        private const val CONNECT_TIMEOUT_MS = 5000
     }
+    private val gson = Gson()
 
     private fun safeApiCall(url: URL, apiCall: () -> UploadResult): UploadResult {
         return try {
@@ -39,14 +45,16 @@ class NetworkUploader(private val context: Context) {
         }
     }
 
-    private fun calculateHttpHeadersSize(url: URL, headers: Map<String, String>, payloadSize: Int): Long {
+    private fun calculateHttpHeadersSize(url: URL, headers: Map<String, String>, payloadSize: Long): Long {
         var size = 0L
-
-        size += "POST ${url.path} HTTP/1.1\r\n".toByteArray().size
+        val method = if (payloadSize >= 0) "POST" else "GET"
+        size += "$method ${url.path} HTTP/1.1\r\n".toByteArray().size
         size += "Host: ${url.host}:${url.port}\r\n".toByteArray().size
         size += "User-Agent: Dalvik/2.1.0 (Linux; U; Android)\r\n".toByteArray().size
         size += "Connection: keep-alive\r\n".toByteArray().size
-        size += "Content-Length: $payloadSize\r\n".toByteArray().size
+        if (payloadSize > 0) {
+            size += "Content-Length: $payloadSize\r\n".toByteArray().size
+        }
 
         headers.forEach { (key, value) ->
             size += "$key: $value\r\n".toByteArray().size
@@ -70,7 +78,7 @@ class NetworkUploader(private val context: Context) {
 
             connection.outputStream.use { it.write(payload) }
 
-            val httpHeadersSize = calculateHttpHeadersSize(url, headers, payload.size)
+            val httpHeadersSize = calculateHttpHeadersSize(url, headers, payload.size.toLong())
             val actualNetworkBytes = payload.size.toLong() + httpHeadersSize
 
             val responseCode = connection.responseCode
@@ -126,24 +134,60 @@ class NetworkUploader(private val context: Context) {
         return performUpload(url, compressionResult.compressed, headers, BATCH_TIMEOUT_MS, "OK (Batch)", compressionResult)
     }
 
-    fun testConnection(serverIp: String, serverPort: Int): UploadResult {
-        val url = URL("http://$serverIp:$serverPort/api/telemetry")
+    fun uploadBulkFile(file: File, serverIp: String, serverPort: Int): UploadResult {
+        val url = URL("http://$serverIp:$serverPort/api/bulk")
         return safeApiCall(url) {
+            val headers = mapOf(
+                "Content-Type" to "application/octet-stream",
+                "Content-Encoding" to "deflate"
+            )
+
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
-                requestMethod = "HEAD"
+                requestMethod = "POST"
+                headers.forEach { (key, value) -> setRequestProperty(key, value) }
+                doOutput = true
                 connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = 2000
+                readTimeout = BULK_TIMEOUT_MS
+                setChunkedStreamingMode(0)
             }
 
-            val httpHeadersSize = calculateHttpHeadersSize(url, emptyMap(), 0)
+            file.inputStream().use { fileStream ->
+                connection.outputStream.use { connStream ->
+                    fileStream.copyTo(connStream)
+                }
+            }
 
             val responseCode = connection.responseCode
-            if (responseCode in 200..299 || responseCode == 404 || responseCode == 405) {
-                UploadResult(true, 0L, httpHeadersSize, "Connected")
+            if (responseCode == 202) {
+                val responseBody = connection.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                val responseMap: Map<String, String> = gson.fromJson(responseBody, object : TypeToken<Map<String, String>>() {}.type)
+                val jobId = responseMap["job_id"]
+                UploadResult(true, file.length(), 0L, "Accepted", jobId = jobId)
             } else {
-                UploadResult(false, 0L, httpHeadersSize, "HTTP Error", "Server responded with HTTP $responseCode")
+                val errorResponse = connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.readText() ?: connection.responseMessage
+                UploadResult(false, 0L, 0L, "HTTP Error", "HTTP $responseCode: $errorResponse")
             }
+        }
+    }
+
+    fun getJobStatus(jobId: String, serverIp: String, serverPort: Int): Map<String, Any>? {
+        val url = URL("http://$serverIp:$serverPort/api/bulk/status/$jobId")
+        return try {
+            val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = SINGLE_TIMEOUT_MS
+            }
+            if (connection.responseCode == 200) {
+                val responseBody = connection.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
+                gson.fromJson(responseBody, object : TypeToken<Map<String, Any>>() {}.type)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 }

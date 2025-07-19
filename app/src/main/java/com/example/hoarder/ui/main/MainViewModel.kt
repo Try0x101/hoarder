@@ -34,6 +34,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isUploadEnabled = MutableLiveData<Boolean>()
     val isUploadEnabled: LiveData<Boolean> = _isUploadEnabled
 
+    private val _isBulkInProgress = MutableLiveData(false)
+    val isBulkInProgress: LiveData<Boolean> = _isBulkInProgress
+
     private val lbm = LocalBroadcastManager.getInstance(application)
     private val receivers = mutableListOf<BroadcastReceiver>()
 
@@ -51,6 +54,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _totalUploadedBytes.value = intent?.getLongExtra("totalUploadedBytes", 0L)
             _totalActualNetworkBytes.value = intent?.getLongExtra("totalActualNetworkBytes", 0L)
             _bufferedDataSize.value = intent?.getLongExtra("bufferedDataSize", 0L)
+            _isBulkInProgress.value = intent?.getBooleanExtra("bulkInProgress", false)
         }
     }
 

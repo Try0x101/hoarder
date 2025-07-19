@@ -72,4 +72,16 @@ class Prefs(ctx: Context) {
 
     fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 5)
     fun setBufferWarningThresholdKb(kb: Int) = p.edit().putInt("bufferWarningThresholdKb", kb).apply()
+
+    fun getBulkUploadThresholdKb() = p.getInt("bulkUploadThresholdKb", 10240)
+    fun setBulkUploadThresholdKb(kb: Int) = p.edit().putInt("bulkUploadThresholdKb", kb).apply()
+
+    fun getBulkJobId(): String? = p.getString("bulkJobId", null)
+    fun setBulkJobId(jobId: String?) = p.edit().putString("bulkJobId", jobId).apply()
+
+    fun getBulkJobState(): String = p.getString("bulkJobState", "IDLE") ?: "IDLE"
+    fun setBulkJobState(state: String) = p.edit().putString("bulkJobState", state).apply()
+
+    fun getBulkTempFilePath(): String? = p.getString("bulkTempFilePath", null)
+    fun setBulkTempFilePath(path: String?) = p.edit().putString("bulkTempFilePath", path).apply()
 }
