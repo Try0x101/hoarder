@@ -7,6 +7,7 @@ import android.telephony.*
 import androidx.core.content.ContextCompat
 import com.example.hoarder.common.math.RoundingUtils
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 class CellularCollector(private val ctx: Context) {
@@ -16,10 +17,12 @@ class CellularCollector(private val ctx: Context) {
     private val cellInfoCache = AtomicReference<List<CellInfo>?>(null)
     private val lastCellularData = AtomicReference<Map<String, Any>?>(null)
     private val lastProcessedCellId = AtomicReference<String?>(null)
+    private val lastFreshRequest = AtomicLong(0L)
     private var lastCellInfoUpdate = 0L
 
     companion object {
         private const val CELL_INFO_CACHE_TTL = 5000L
+        private const val FRESH_REQUEST_INTERVAL = 1000L
     }
 
     @Suppress("DEPRECATION")
@@ -41,9 +44,10 @@ class CellularCollector(private val ctx: Context) {
         val primaryCellId = extractPrimaryCellId(cellInfo)
         val lastCellId = lastProcessedCellId.get()
 
+        cellInfoCache.set(cellInfo)
+        lastCellInfoUpdate = System.currentTimeMillis()
+
         if (primaryCellId != lastCellId) {
-            cellInfoCache.set(cellInfo)
-            lastCellInfoUpdate = System.currentTimeMillis()
             lastProcessedCellId.set(primaryCellId)
             lastCellularData.set(null)
         }
@@ -104,93 +108,119 @@ class CellularCollector(private val ctx: Context) {
         )
     }
 
+    private fun getCurrentPowerMode(): String {
+        return ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+            .getString("powerMode", "continuous") ?: "continuous"
+    }
+
+    private fun requestFreshCellInfoAsync() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastFreshRequest.get() > FRESH_REQUEST_INTERVAL) {
+                lastFreshRequest.set(currentTime)
+
+                try {
+                    val callback = object : TelephonyManager.CellInfoCallback() {
+                        override fun onCellInfo(cellInfo: List<CellInfo>) {
+                            processCellInfoUpdate(cellInfo)
+                        }
+                    }
+                    tm.requestCellInfoUpdate(ctx.mainExecutor, callback)
+                } catch (e: Exception) {
+                }
+            }
+        }
+    }
+
     fun collect(dm: MutableMap<String, Any>, rp: Int) {
         if (!isInitialized.get() || !hasPermissions.get()) {
             setDefaultCellValues(dm)
             return
         }
 
+        val powerMode = getCurrentPowerMode()
+
         try {
-            val cachedData = lastCellularData.get()
-            if (cachedData != null && !shouldRefreshCellData()) {
-                dm.putAll(cachedData)
-                return
-            }
-
-            dm["o"] = getOperatorName()
-            dm["t"] = getNetworkTypeName()
-
-            var currentCellInfo = cellInfoCache.get()
-            if (currentCellInfo == null || shouldRefreshFromTelephony()) {
-                currentCellInfo = tm.allCellInfo
-                if (currentCellInfo != null) {
-                    processCellInfoUpdate(currentCellInfo)
-                }
-            }
-
-            if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
-                setDefaultCellValues(dm)
+            if (powerMode == "continuous") {
+                collectFreshCellularData(dm, rp)
             } else {
-                val collectedData = dm.filterKeys { it in setOf("o", "t", "ci", "tc", "mc", "mn", "r") }
-                lastCellularData.set(collectedData)
+                collectOptimizedCellularData(dm, rp)
             }
         } catch (e: Exception) {
             setDefaultCellValues(dm)
         }
     }
 
-    private fun shouldRefreshCellData(): Boolean {
-        return System.currentTimeMillis() - lastCellInfoUpdate > CELL_INFO_CACHE_TTL
+    private fun collectFreshCellularData(dm: MutableMap<String, Any>, rp: Int) {
+        dm["o"] = getOperatorName()
+        dm["t"] = getNetworkTypeName()
+
+        requestFreshCellInfoAsync()
+
+        val currentCellInfo = cellInfoCache.get() ?: tm.allCellInfo
+
+        if (currentCellInfo != null && processCellInfo(currentCellInfo, dm, rp)) {
+            return
+        } else {
+            setDefaultCellValues(dm)
+        }
     }
 
-    private fun shouldRefreshFromTelephony(): Boolean {
-        return cellInfoCache.get() == null || shouldRefreshCellData()
-    }
+    private fun collectOptimizedCellularData(dm: MutableMap<String, Any>, rp: Int) {
+        val currentTime = System.currentTimeMillis()
+        val cachedData = lastCellularData.get()
 
-    private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "Unknown"
+        if (cachedData != null && (currentTime - lastCellInfoUpdate) < CELL_INFO_CACHE_TTL) {
+            dm.putAll(cachedData)
+            return
+        }
 
-    private fun getNetworkTypeName(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            when (tm.dataNetworkType) {
-                TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
-                TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
-                TelephonyManager.NETWORK_TYPE_UMTS -> "UMTS"
-                TelephonyManager.NETWORK_TYPE_CDMA -> "CDMA"
-                TelephonyManager.NETWORK_TYPE_EVDO_0 -> "EVDO_0"
-                TelephonyManager.NETWORK_TYPE_EVDO_A -> "EVDO_A"
-                TelephonyManager.NETWORK_TYPE_1xRTT -> "1xRTT"
-                TelephonyManager.NETWORK_TYPE_HSDPA -> "HSDPA"
-                TelephonyManager.NETWORK_TYPE_HSUPA -> "HSUPA"
-                TelephonyManager.NETWORK_TYPE_HSPA -> "HSPA"
-                TelephonyManager.NETWORK_TYPE_IDEN -> "IDEN"
-                TelephonyManager.NETWORK_TYPE_EVDO_B -> "EVDO_B"
-                TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
-                TelephonyManager.NETWORK_TYPE_EHRPD -> "EHRPD"
-                TelephonyManager.NETWORK_TYPE_HSPAP -> "HSPAP"
-                TelephonyManager.NETWORK_TYPE_GSM -> "GSM"
-                TelephonyManager.NETWORK_TYPE_TD_SCDMA -> "TD_SCDMA"
-                TelephonyManager.NETWORK_TYPE_IWLAN -> "IWLAN"
-                TelephonyManager.NETWORK_TYPE_NR -> "5G NR"
-                else -> "Unknown"
-            }
-        } else "Unknown"
-    }
+        dm["o"] = getOperatorName()
+        dm["t"] = getNetworkTypeName()
 
-    private fun processCellInfo(cl: List<CellInfo>, dm: MutableMap<String, Any>, rp: Int): Boolean {
-        var foundRegistered = false
-        cl.forEach { ci ->
-            if (ci.isRegistered && !foundRegistered) {
-                foundRegistered = true
-                when (ci) {
-                    is CellInfoLte -> processLteCell(ci, dm, rp)
-                    is CellInfoWcdma -> processWcdmaCell(ci, dm, rp)
-                    is CellInfoGsm -> processGsmCell(ci, dm, rp)
-                    is CellInfoNr -> processNrCell(ci, dm, rp)
-                    else -> return@forEach
-                }
+        var currentCellInfo = cellInfoCache.get()
+        if (currentCellInfo == null || (currentTime - lastCellInfoUpdate) > CELL_INFO_CACHE_TTL) {
+            currentCellInfo = tm.allCellInfo
+            if (currentCellInfo != null) {
+                processCellInfoUpdate(currentCellInfo)
             }
         }
-        return foundRegistered
+
+        if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
+            setDefaultCellValues(dm)
+        } else {
+            val collectedData = dm.filterKeys { it in setOf("o", "t", "ci", "tc", "mc", "mn", "r") }
+            lastCellularData.set(collectedData)
+        }
+    }
+
+    private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "unknown"
+
+    private fun getNetworkTypeName(): String = when (tm.dataNetworkType) {
+        TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
+        TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyManager.NETWORK_TYPE_HSPA, TelephonyManager.NETWORK_TYPE_HSUPA, TelephonyManager.NETWORK_TYPE_HSDPA -> "HSPA"
+        TelephonyManager.NETWORK_TYPE_UMTS -> "UMTS"
+        TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
+        TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
+        TelephonyManager.NETWORK_TYPE_GSM -> "GSM"
+        TelephonyManager.NETWORK_TYPE_CDMA -> "CDMA"
+        TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A, TelephonyManager.NETWORK_TYPE_EVDO_B -> "EVDO"
+        TelephonyManager.NETWORK_TYPE_1xRTT -> "1xRTT"
+        TelephonyManager.NETWORK_TYPE_IDEN -> "IDEN"
+        TelephonyManager.NETWORK_TYPE_NR -> "5G"
+        else -> "unknown"
+    }
+
+    private fun processCellInfo(cellInfoList: List<CellInfo>, dm: MutableMap<String, Any>, rp: Int): Boolean {
+        val registeredCell = cellInfoList.firstOrNull { it.isRegistered } ?: return false
+
+        return when (registeredCell) {
+            is CellInfoLte -> { processLteCell(registeredCell, dm, rp); true }
+            is CellInfoWcdma -> { processWcdmaCell(registeredCell, dm, rp); true }
+            is CellInfoGsm -> { processGsmCell(registeredCell, dm, rp); true }
+            is CellInfoNr -> { processNrCell(registeredCell, dm, rp); true }
+            else -> false
+        }
     }
 
     private fun processLteCell(ci: CellInfoLte, dm: MutableMap<String, Any>, rp: Int) {
@@ -203,7 +233,8 @@ class CellularCollector(private val ctx: Context) {
         ci.cellIdentity.mncString?.let { dm["mn"] = it }
         val ss = ci.cellSignalStrength
         if (ss.dbm != Int.MAX_VALUE) {
-            dm["r"] = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            dm["r"] = rssi
         }
     }
 
@@ -217,7 +248,8 @@ class CellularCollector(private val ctx: Context) {
         ci.cellIdentity.mncString?.let { dm["mn"] = it }
         val ss = ci.cellSignalStrength
         if (ss.dbm != Int.MAX_VALUE) {
-            dm["r"] = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            dm["r"] = rssi
         }
     }
 
@@ -231,7 +263,8 @@ class CellularCollector(private val ctx: Context) {
         ci.cellIdentity.mncString?.let { dm["mn"] = it }
         val ss = ci.cellSignalStrength
         if (ss.dbm != Int.MAX_VALUE) {
-            dm["r"] = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
+            dm["r"] = rssi
         }
     }
 
@@ -245,13 +278,14 @@ class CellularCollector(private val ctx: Context) {
         }
         cin?.mncString?.let { dm["mn"] = it }
         val ss = ci.cellSignalStrength as? CellSignalStrengthNr
-        if (ss?.ssRsrp != null && ss.ssRsrp != Int.MIN_VALUE) {
-            dm["r"] = if (rp == -1) RoundingUtils.smartRSSI(ss.ssRsrp) else RoundingUtils.rs(ss.ssRsrp, rp)
+        ss?.dbm?.takeIf { it != Int.MAX_VALUE }?.let {
+            val rssi = if (rp == -1) RoundingUtils.smartRSSI(it) else RoundingUtils.rs(it, rp)
+            dm["r"] = rssi
         }
     }
 
     private fun setDefaultCellValues(dm: MutableMap<String, Any>) {
-        dm["o"] = "Unknown"
-        dm["t"] = "Unknown"
+        dm["o"] = "unknown"
+        dm["t"] = "unknown"
     }
 }
