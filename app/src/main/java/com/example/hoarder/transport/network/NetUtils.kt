@@ -22,9 +22,7 @@ object NetUtils {
             if (n == null || n < 0 || n > 255) return false
         }
 
-        if (port == null || port <= 0 || port > 65535) return false
-
-        return true
+        return !(port == null || port <= 0 || port > 65535)
     }
 
     fun isNetworkAvailable(context: Context): Boolean {

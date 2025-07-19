@@ -1,40 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/jsonTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/amoled_true_blue"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp"/>
-
-    <TextView
-        android:id="@+id/jsonContent"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/amoled_light_gray"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:typeface="monospace"
-        android:visibility="gone"/>
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <ScrollView
-        android:id="@+id/readableScrollView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone">
+        <TextView
+            android:id="@+id/jsonTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/amoled_true_blue"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
 
-        <LinearLayout
-            android:id="@+id/readableDataContainer"
+        <TextView
+            android:id="@+id/jsonContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
-    </ScrollView>
+            android:textColor="@color/amoled_light_gray"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:typeface="monospace"
+            android:visibility="gone" />
 
-</LinearLayout>
+        <ScrollView
+            android:id="@+id/readableScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/readableDataContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+
+    </LinearLayout>
+</ScrollView>

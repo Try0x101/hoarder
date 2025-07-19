@@ -17,10 +17,10 @@ class Prefs(ctx: Context) {
     fun isDataCollectionEnabled() = p.getBoolean("dataCollectionToggleState", true)
     fun setDataCollectionEnabled(e: Boolean) = p.edit().putBoolean("dataCollectionToggleState", e).apply()
 
-    fun isDataUploadEnabled() = p.getBoolean("dataUploadToggleState", false)
+    fun isDataUploadEnabled() = p.getBoolean("dataUploadToggleState", true)
     fun setDataUploadEnabled(e: Boolean) = p.edit().putBoolean("dataUploadToggleState", e).apply()
 
-    fun isBatchUploadEnabled() = p.getBoolean("batchUploadEnabled", false)
+    fun isBatchUploadEnabled() = p.getBoolean("batchUploadEnabled", true)
     fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean("batchUploadEnabled", e).apply()
 
     fun getServerAddress() = p.getString("serverIpPortAddress", "") ?: ""
@@ -47,30 +47,28 @@ class Prefs(ctx: Context) {
     fun getBatchRecordCount() = p.getInt("batchRecordCount", 20)
     fun setBatchRecordCount(s: Int) = p.edit().putInt("batchRecordCount", s).apply()
 
-    fun isBatchTriggerByCountEnabled() = p.getBoolean("batchTriggerByCountEnabled", true)
+    fun isBatchTriggerByCountEnabled() = p.getBoolean("batchTriggerByCountEnabled", false)
     fun setBatchTriggerByCountEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByCountEnabled", e).apply()
 
     fun getBatchTimeout() = p.getInt("batchTimeoutSec", 60)
     fun setBatchTimeout(t: Int) = p.edit().putInt("batchTimeoutSec", t).apply()
 
-    fun isBatchTriggerByTimeoutEnabled() = p.getBoolean("batchTriggerByTimeoutEnabled", true)
+    fun isBatchTriggerByTimeoutEnabled() = p.getBoolean("batchTriggerByTimeoutEnabled", false)
     fun setBatchTriggerByTimeoutEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByTimeoutEnabled", e).apply()
 
-    fun getBatchMaxSizeKb() = p.getInt("batchMaxSizeKb", 100)
+    fun getBatchMaxSizeKb() = p.getInt("batchMaxSizeKb", 5)
     fun setBatchMaxSizeKb(s: Int) = p.edit().putInt("batchMaxSizeKb", s).apply()
 
     fun isBatchTriggerByMaxSizeEnabled() = p.getBoolean("batchTriggerByMaxSizeEnabled", true)
     fun setBatchTriggerByMaxSizeEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByMaxSizeEnabled", e).apply()
 
-
-
-    fun getCompressionLevel() = p.getInt("compressionLevel", 6)
+    fun getCompressionLevel() = p.getInt("compressionLevel", 9)
     fun setCompressionLevel(l: Int) = p.edit().putInt("compressionLevel", l).apply()
 
-    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_CONTINUOUS)
+    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_OPTIMIZED)
     fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()
 
-    fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 5)
+    fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 20480)
     fun setBufferWarningThresholdKb(kb: Int) = p.edit().putInt("bufferWarningThresholdKb", kb).apply()
 
     fun getBulkUploadThresholdKb() = p.getInt("bulkUploadThresholdKb", 10240)

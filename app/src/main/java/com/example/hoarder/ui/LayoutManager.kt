@@ -232,7 +232,7 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
                         val type =
                             object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
                         val dataMap: Map<String, Any> = gsonParser.fromJson(json, type)
-                        val prefs = Prefs(container.context)
+                        Prefs(container.context)
 
                         val fieldDefinitions = linkedMapOf(
                             "i" to ("Device ID" to ""),

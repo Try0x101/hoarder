@@ -15,8 +15,6 @@ class CellularCollector(private val ctx: Context) {
     private val isInitialized = AtomicBoolean(false)
     private val hasPermissions = AtomicBoolean(false)
     private val cellInfoCache = AtomicReference<List<CellInfo>?>(null)
-    private val lastCellularData = AtomicReference<Map<String, Any>?>(null)
-    private val lastProcessedCellId = AtomicReference<String?>(null)
     private val lastFreshRequest = AtomicLong(0L)
     private var lastCellInfoUpdate = 0L
 
@@ -41,16 +39,8 @@ class CellularCollector(private val ctx: Context) {
     }
 
     private fun processCellInfoUpdate(cellInfo: List<CellInfo>) {
-        val primaryCellId = extractPrimaryCellId(cellInfo)
-        val lastCellId = lastProcessedCellId.get()
-
         cellInfoCache.set(cellInfo)
         lastCellInfoUpdate = System.currentTimeMillis()
-
-        if (primaryCellId != lastCellId) {
-            lastProcessedCellId.set(primaryCellId)
-            lastCellularData.set(null)
-        }
     }
 
     private fun extractPrimaryCellId(cellInfoList: List<CellInfo>): String? {
@@ -137,60 +127,18 @@ class CellularCollector(private val ctx: Context) {
             setDefaultCellValues(dm)
             return
         }
-
-        val powerMode = getCurrentPowerMode()
-
         try {
-            if (powerMode == "continuous") {
-                collectFreshCellularData(dm, rp)
+            dm["o"] = getOperatorName()
+            dm["t"] = getNetworkTypeName()
+            requestFreshCellInfoAsync()
+            val currentCellInfo = cellInfoCache.get() ?: tm.allCellInfo
+            if (currentCellInfo != null && processCellInfo(currentCellInfo, dm, rp)) {
+                return
             } else {
-                collectOptimizedCellularData(dm, rp)
+                setDefaultCellValues(dm)
             }
         } catch (e: Exception) {
             setDefaultCellValues(dm)
-        }
-    }
-
-    private fun collectFreshCellularData(dm: MutableMap<String, Any>, rp: Int) {
-        dm["o"] = getOperatorName()
-        dm["t"] = getNetworkTypeName()
-
-        requestFreshCellInfoAsync()
-
-        val currentCellInfo = cellInfoCache.get() ?: tm.allCellInfo
-
-        if (currentCellInfo != null && processCellInfo(currentCellInfo, dm, rp)) {
-            return
-        } else {
-            setDefaultCellValues(dm)
-        }
-    }
-
-    private fun collectOptimizedCellularData(dm: MutableMap<String, Any>, rp: Int) {
-        val currentTime = System.currentTimeMillis()
-        val cachedData = lastCellularData.get()
-
-        if (cachedData != null && (currentTime - lastCellInfoUpdate) < CELL_INFO_CACHE_TTL) {
-            dm.putAll(cachedData)
-            return
-        }
-
-        dm["o"] = getOperatorName()
-        dm["t"] = getNetworkTypeName()
-
-        var currentCellInfo = cellInfoCache.get()
-        if (currentCellInfo == null || (currentTime - lastCellInfoUpdate) > CELL_INFO_CACHE_TTL) {
-            currentCellInfo = tm.allCellInfo
-            if (currentCellInfo != null) {
-                processCellInfoUpdate(currentCellInfo)
-            }
-        }
-
-        if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
-            setDefaultCellValues(dm)
-        } else {
-            val collectedData = dm.filterKeys { it in setOf("o", "t", "ci", "tc", "mc", "mn", "r") }
-            lastCellularData.set(collectedData)
         }
     }
 

@@ -77,8 +77,6 @@ class DataUploader(
     private var isTriggerByMaxSizeEnabled = true
     private var compressionLevel = 6
 
-    private val liveBatchBaseTimestamp = AtomicReference<Long?>(null)
-
     private var lastStatusTime = 0L
     private var lastStatusMessage = ""
     private val STATUS_UPDATE_DEBOUNCE_MS = 2000L
@@ -113,7 +111,7 @@ class DataUploader(
     init {
         scope.launch {
             bufferedSize.set(dataBuffer.getBufferedDataSize())
-            liveBatchBaseTimestamp.set(sp.getLong(KEY_LIVE_BATCH_TIMESTAMP, 0L).takeIf { it != 0L })
+            // Removed liveBatchBaseTimestamp initialization
 
             if (appPrefs.getBulkJobId() != null) {
                 resumeBulkUploadProcess()
@@ -249,22 +247,27 @@ class DataUploader(
             if (deltaMap.isNotEmpty()) {
                 val deltaMapWithTimestamp: MutableMap<String, Any> = deltaMap.toMutableMap()
 
-                val currentBatchCount = dataBuffer.getBufferedPayloadsCount()
-                if (currentBatchCount == 0) {
+                // --- FIX: Use buffer ground-truth for batch timestamping logic ---
+                // Check if any record in the buffer contains a 'bts' (base timestamp)
+                val batchHasBaseTimestamp = withContext(Dispatchers.IO) {
+                    dataBuffer.getBufferedData().any { it.payload.contains("\"bts\"") }
+                }
+
+                if (!batchHasBaseTimestamp) {
+                    // This is the first record of a new batch or buffer; assign a base timestamp
                     val baseTimestamp = System.currentTimeMillis() / 1000
-                    liveBatchBaseTimestamp.set(baseTimestamp)
-                    sp.edit().putLong(KEY_LIVE_BATCH_TIMESTAMP, baseTimestamp).apply()
                     deltaMapWithTimestamp["bts"] = baseTimestamp
                 } else {
-                    val baseTs = liveBatchBaseTimestamp.get()
-                        ?: sp.getLong(KEY_LIVE_BATCH_TIMESTAMP, 0L).takeIf { it != 0L }
-                        ?: (System.currentTimeMillis() / 1000).also {
-                            liveBatchBaseTimestamp.set(it)
-                            sp.edit().putLong(KEY_LIVE_BATCH_TIMESTAMP, it).apply()
-                        }
+                    // Extract base timestamp from the first record in the buffer
+                    val firstRecord =
+                        withContext(Dispatchers.IO) { dataBuffer.getBufferedData().first() }
+                    val baseTsPayload = g.fromJson(firstRecord.payload, Map::class.java)
+                    val baseTs = (baseTsPayload["bts"] as? Double)?.toLong()
+                        ?: (System.currentTimeMillis() / 1000)
                     val offset = (System.currentTimeMillis() / 1000) - baseTs
                     deltaMapWithTimestamp["tso"] = offset
                 }
+                // --- END OF FIX ---
 
                 val deltaJson = g.toJson(deltaMapWithTimestamp)
                 dataBuffer.saveToBuffer(deltaJson)
@@ -298,9 +301,6 @@ class DataUploader(
 
         if (result.success) {
             dataBuffer.clearBuffer(batch)
-            liveBatchBaseTimestamp.set(null)
-            sp.edit().remove(KEY_LIVE_BATCH_TIMESTAMP).apply()
-
             tb.addAndGet(result.uploadedBytes)
             actualNetworkBytes.addAndGet(result.actualNetworkBytes)
             sp.edit()

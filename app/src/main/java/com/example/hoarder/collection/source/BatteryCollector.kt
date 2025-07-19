@@ -40,9 +40,11 @@ class BatteryCollector(private val ctx: Context) {
                 resultMap["p"] = percentage
 
                 capacityMah?.let {
-                    val finalCapacity = RoundingUtils.smartCapacity(it)
-                    if (finalCapacity > 0) {
-                        resultMap["c"] = finalCapacity
+                    // Report only the rounded (down to nearest 100) battery property as total capacity, do not adjust or subtract
+                    // This is for consistency with display/measurement granularity
+                    val roundedCapacity = RoundingUtils.smartCapacity(it)
+                    if (roundedCapacity > 0) {
+                        resultMap["c"] = roundedCapacity
                     }
                 }
 

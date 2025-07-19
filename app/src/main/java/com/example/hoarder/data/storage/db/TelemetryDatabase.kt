@@ -97,7 +97,7 @@ abstract class TelemetryDatabase : RoomDatabase() {
                     TelemetryDatabase::class.java,
                     "telemetry_database"
                 )
-                    .addCallback(object : RoomDatabase.Callback() {
+                    .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
                             db.execSQL("CREATE INDEX IF NOT EXISTS index_telemetry_timestamp ON telemetry_records(timestamp)")

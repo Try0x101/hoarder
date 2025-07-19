@@ -127,9 +127,18 @@ class DataCollector(
             return shouldCollect
         }
 
+        if (!isMoving && (currentTime - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS)) {
+            Log.d(TAG, "Heartbeat timer forcing forced data collection despite identical readings.")
+            lastHeartbeatTime = currentTime
+            return true
+        }
+
         Log.d(TAG, "Normal collection conditions met")
         return true
     }
+
+    private val HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000L // 10 minutes
+    private var lastHeartbeatTime = 0L
 
     private fun getCurrentPowerMode(): String {
         val mode = sharedPrefs.getString("powerMode", "continuous") ?: "continuous"
@@ -270,6 +279,7 @@ class DataCollector(
             }
 
             lastCollectionTime = currentTime
+            lastHeartbeatTime = currentTime
             Log.d(TAG, "collectDataOnce COMPLETE")
         } catch (e: Exception) {
             Log.e(TAG, "Error in collectDataOnce", e)
