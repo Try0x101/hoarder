@@ -247,27 +247,31 @@ class DataUploader(
             if (deltaMap.isNotEmpty()) {
                 val deltaMapWithTimestamp: MutableMap<String, Any> = deltaMap.toMutableMap()
 
-                // --- FIX: Use buffer ground-truth for batch timestamping logic ---
-                // Check if any record in the buffer contains a 'bts' (base timestamp)
-                val batchHasBaseTimestamp = withContext(Dispatchers.IO) {
-                    dataBuffer.getBufferedData().any { it.payload.contains("\"bts\"") }
-                }
+                // Get buffer *before* adding new record
+                val bufferedData = withContext(Dispatchers.IO) { dataBuffer.getBufferedData() }
+                // Find base timestamp (bts) from earliest already-buffered record
+                val earliestBase = bufferedData
+                    .asSequence()
+                    .mapNotNull { it.payload }
+                    .mapNotNull { payload ->
+                        try {
+                            val map = g.fromJson(payload, Map::class.java)
+                            (map["bts"] as? Double)?.toLong() ?: (map["bts"] as? Long)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    .minOrNull()
 
-                if (!batchHasBaseTimestamp) {
-                    // This is the first record of a new batch or buffer; assign a base timestamp
+                if (earliestBase == null) {
+                    // If no anchor exists, this is a new batch anchor
                     val baseTimestamp = System.currentTimeMillis() / 1000
                     deltaMapWithTimestamp["bts"] = baseTimestamp
                 } else {
-                    // Extract base timestamp from the first record in the buffer
-                    val firstRecord =
-                        withContext(Dispatchers.IO) { dataBuffer.getBufferedData().first() }
-                    val baseTsPayload = g.fromJson(firstRecord.payload, Map::class.java)
-                    val baseTs = (baseTsPayload["bts"] as? Double)?.toLong()
-                        ?: (System.currentTimeMillis() / 1000)
-                    val offset = (System.currentTimeMillis() / 1000) - baseTs
+                    // Calculate tso relative to true anchor
+                    val offset = (System.currentTimeMillis() / 1000) - earliestBase
                     deltaMapWithTimestamp["tso"] = offset
                 }
-                // --- END OF FIX ---
 
                 val deltaJson = g.toJson(deltaMapWithTimestamp)
                 dataBuffer.saveToBuffer(deltaJson)
