@@ -2,6 +2,7 @@ package com.example.hoarder.data.uploader
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import com.example.hoarder.common.time.TimestampUtils
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -136,6 +137,7 @@ class BufferManager(private val ctx: Context, private val sp: SharedPreferences)
 
         } catch (e: Exception) {
             addErrorLog("Failed to save upload details: ${e.message}")
+            Log.e("BufferManager", "Exception during saveLastUploadDetails", e)
         }
     }
 
@@ -161,7 +163,7 @@ class BufferManager(private val ctx: Context, private val sp: SharedPreferences)
                 file.delete()
             }
         } catch (e: Exception) {
-            // File cleanup failed, not critical
+            Log.e("BufferManager", "Exception during file cleanup in cleanupOldData", e)
         }
     }
 }

@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -164,7 +165,9 @@ class BackgroundService: Service(){
                     withContext(Dispatchers.IO) {
                         dataUploader.cleanup()
                     }
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    Log.e("BackgroundService", "Exception during periodic cleanup", e)
+                }
             }
         }
     }
@@ -211,12 +214,16 @@ class BackgroundService: Service(){
             dataUploader.cleanup()
             powerManager.stop()
             serviceScope.cancel()
-        } catch (e: Exception) { }
+        } catch (e: Exception) {
+            Log.e("BackgroundService", "Exception during cleanup", e)
+        }
 
         if (receiverRegistered.compareAndSet(true, false)) {
             try {
                 LocalBroadcastManager.getInstance(this).unregisterReceiver(cr)
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                Log.e("BackgroundService", "Exception during receiver unregister", e)
+            }
         }
 
         isInitialized.set(false)

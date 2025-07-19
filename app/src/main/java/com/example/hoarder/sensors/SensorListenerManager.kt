@@ -6,6 +6,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.LocationListener
 import android.location.LocationManager
+import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SensorListenerManager(
@@ -38,12 +39,16 @@ class SensorListenerManager(
             if (gpsRegistered.getAndSet(false)) {
                 try {
                     locationManager.removeUpdates(locationListener)
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    Log.e("SensorListenerManager", "Error removing location updates", e)
+                }
             }
 
             try {
                 sensorManager.unregisterListener(sensorEventListener)
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                Log.e("SensorListenerManager", "Error unregistering sensor listener", e)
+            }
         }
     }
 
@@ -51,7 +56,9 @@ class SensorListenerManager(
         if (gpsRegistered.getAndSet(false)) {
             try {
                 locationManager.removeUpdates(locationListener)
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                Log.e("SensorListenerManager", "Error removing location updates (pauseGps)", e)
+            }
         }
     }
 
@@ -71,13 +78,17 @@ class SensorListenerManager(
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, requestInterval, requestDistance, locationListener)
             }
-        } catch (e: SecurityException) { }
+        } catch (e: SecurityException) {
+            Log.e("SensorListenerManager", "Security error requesting GPS location", e)
+        }
 
         try {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, requestInterval, requestDistance, locationListener)
             }
-        } catch (e: SecurityException) { }
+        } catch (e: SecurityException) {
+            Log.e("SensorListenerManager", "Security error requesting network location", e)
+        }
     }
 
     private fun registerPressureSensor() {

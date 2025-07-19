@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Typeface
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -123,6 +124,7 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
             copyToClipboard("Hoarder Page Log", allPageJson)
             ToastHelper.showToast(ctx, "Copied ${pageEntries.size} records from page", Toast.LENGTH_SHORT)
         } catch (e: Exception) {
+            Log.e("LogViewer", "Error copying log page", e)
             ToastHelper.showToast(ctx, "Error copying page: ${e.message}", Toast.LENGTH_SHORT)
         }
     }
@@ -134,6 +136,7 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
             clipboard.setPrimaryClip(clip)
             ToastHelper.showToast(ctx, "Log entry copied to clipboard", Toast.LENGTH_SHORT)
         } catch (e: Exception) {
+            Log.e("LogViewer", "Clipboard copy failed", e)
             ToastHelper.showToast(ctx, "Failed to copy to clipboard", Toast.LENGTH_SHORT)
         }
     }
@@ -210,6 +213,7 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
                         true
                     }
                 } catch (e: Exception) {
+                    Log.e("LogViewer", "Failed to format log entry", e)
                     header.text = "Format Error"
                     content.text = e.message ?: "Could not display entry."
                 }

@@ -15,6 +15,7 @@ import com.example.hoarder.data.processing.DeltaComputer
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.data.storage.db.TelemetryDatabase
 import com.example.hoarder.data.uploader.NetworkUploader
+import com.example.hoarder.data.uploader.UploadResult
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.transport.buffer.DataBuffer
 import com.example.hoarder.transport.buffer.UploadLogger
@@ -407,36 +408,63 @@ class DataUploader(
     private suspend fun initiateBulkUploadProcess() {
         if (!bulkUploadInProgress.compareAndSet(false, true)) return
 
-        withContext(Dispatchers.Main) {
-            notifyStatus("Preparing", "Preparing large upload...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
-        }
+        try {
+            withContext(Dispatchers.Main) {
+                notifyStatus(
+                    "Preparing",
+                    "Preparing large upload...",
+                    tb.get(),
+                    actualNetworkBytes.get(),
+                    bufferedSize.get()
+                )
+            }
 
-        appPrefs.setBulkJobState("MARSHALLING")
-        val tempFile = File(ctx.cacheDir, "bulk_upload_${System.currentTimeMillis()}.json.zlib")
-        appPrefs.setBulkTempFilePath(tempFile.absolutePath)
+            appPrefs.setBulkJobState("MARSHALLING")
+            val tempFile = File(ctx.cacheDir, "bulk_upload_${System.currentTimeMillis()}.json.zlib")
+            appPrefs.setBulkTempFilePath(tempFile.absolutePath)
 
-        val success = marshallDataToFile(tempFile)
-        if (!success) {
-            cleanupBulkState(tempFile)
-            return
-        }
+            val success = try {
+                marshallDataToFile(tempFile)
+            } catch (e: Exception) {
+                android.util.Log.e("DataUploader", "Bulk marshalling failed", e)
+                false
+            }
+            if (!success) {
+                cleanupBulkState(tempFile)
+                return
+            }
 
-        withContext(Dispatchers.Main) {
-            notifyStatus("Uploading", "Uploading bulk file (${ByteFormatter.format(tempFile.length())})...", tb.get(), actualNetworkBytes.get(), bufferedSize.get())
-        }
-        appPrefs.setBulkJobState("UPLOADING")
-        val result = withContext(Dispatchers.IO) {
-            networkUploader.uploadBulkFile(tempFile, ip, port)
-        }
+            withContext(Dispatchers.Main) {
+                notifyStatus(
+                    "Uploading",
+                    "Uploading bulk file (${ByteFormatter.format(tempFile.length())})...",
+                    tb.get(),
+                    actualNetworkBytes.get(),
+                    bufferedSize.get()
+                )
+            }
+            appPrefs.setBulkJobState("UPLOADING")
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    networkUploader.uploadBulkFile(tempFile, ip, port)
+                } catch (e: Exception) {
+                    android.util.Log.e("DataUploader", "Bulk upload failed", e)
+                    UploadResult(false, 0L, 0L, "Bulk Error", "Internal error: ${e.message}")
+                }
+            }
 
-        if (result.success && result.jobId != null) {
-            appPrefs.setBulkJobId(result.jobId)
-            appPrefs.setBulkJobState("POLLING")
-            tempFile.delete()
-            appPrefs.setBulkTempFilePath(null)
-            schedulePollingTask(0, 2000L)
-        } else {
-            cleanupBulkState(tempFile, isError = true, errorMessage = result.errorMessage)
+            if (result.success && result.jobId != null) {
+                appPrefs.setBulkJobId(result.jobId)
+                appPrefs.setBulkJobState("POLLING")
+                tempFile.delete()
+                appPrefs.setBulkTempFilePath(null)
+                schedulePollingTask(0, 2000L)
+            } else {
+                cleanupBulkState(tempFile, isError = true, errorMessage = result.errorMessage)
+            }
+        } finally {
+            // Ensure flag is always reset
+            bulkUploadInProgress.set(false)
         }
     }
 
@@ -461,6 +489,7 @@ class DataUploader(
                 }
                 true
             } catch (e: Exception) {
+                android.util.Log.e("DataUploader", "Exception during marshallDataToFile", e)
                 false
             } finally {
                 cursor?.close()

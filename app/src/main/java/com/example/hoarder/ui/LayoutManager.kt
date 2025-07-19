@@ -20,6 +20,13 @@ import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.WeakHashMap
+import kotlinx.coroutines.Job
+import com.example.hoarder.common.math.RoundingUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LayoutManager(private val a: MainActivity, private val p: Prefs, private val onPrecisionChanged: () -> Unit) {
     private lateinit var dataCollectionHeader: RelativeLayout
@@ -211,113 +218,135 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
             }
         }
 
+        private val readableContentCache = WeakHashMap<LinearLayout, String?>()
+        private val readableJobCache = WeakHashMap<LinearLayout, Job?>()
+
         private fun populateReadableDataView(container: LinearLayout, json: String?) {
-            val context = container.context
-            container.removeAllViews()
+            if (readableContentCache[container] == json) return
+            readableContentCache[container] = json
+            readableJobCache[container]?.cancel()
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val rows = withContext(Dispatchers.Default) {
+                    val rowsList = mutableListOf<View>()
+                    try {
+                        val type =
+                            object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
+                        val dataMap: Map<String, Any> = gsonParser.fromJson(json, type)
+                        val prefs = Prefs(container.context)
 
-            if (json.isNullOrEmpty() || json.startsWith("Collection is inactive")) {
-                val noDataView = TextView(context).apply {
-                    text = "Collection is inactive or waiting for data..."
-                    setTextColor(context.getColor(R.color.amoled_light_gray))
-                    textSize = 12f
-                }
-                container.addView(noDataView)
-                return
-            }
+                        val fieldDefinitions = linkedMapOf(
+                            "i" to ("Device ID" to ""),
+                            "n" to ("Device Name" to ""),
+                            "y" to ("Latitude" to "°"),
+                            "x" to ("Longitude" to "°"),
+                            "a" to ("Altitude" to " m"),
+                            "s" to ("Speed" to " km/h"),
+                            "ac" to ("GPS Accuracy" to " m"),
+                            "p" to ("Battery Level" to "%"),
+                            "c" to ("Battery Capacity" to " mAh"),
+                            "d" to ("Download Speed" to " Mbps"),
+                            "u" to ("Upload Speed" to " Mbps"),
+                            "b" to ("WiFi BSSID" to ""),
+                            "o" to ("Network Operator" to ""),
+                            "t" to ("Network Type" to ""),
+                            "r" to ("Signal Strength" to " dBm"),
+                            "ci" to ("Cell ID" to ""),
+                            "tc" to ("Tracking Area Code" to ""),
+                            "mc" to ("Mobile Country Code" to ""),
+                            "mn" to ("Mobile Network Code" to ""),
+                            "bts" to ("Base Timestamp" to ""),
+                            "tso" to ("Timestamp Offset" to " s")
+                        )
 
-            try {
-                val type = object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
-                val dataMap: Map<String, Any> = gsonParser.fromJson(json, type)
+                        for ((key, def) in fieldDefinitions) {
+                            if (dataMap.containsKey(key)) {
+                                val (label, unit) = def
+                                val rawValue = dataMap[key]
+                                var valueStr: String? = null
 
-                val fieldDefinitions = linkedMapOf(
-                    "i" to ("Device ID" to ""), "n" to ("Device Name" to ""),
-                    "y" to ("Latitude" to "°"), "x" to ("Longitude" to "°"),
-                    "a" to ("Altitude" to " m"), "s" to ("Speed" to " km/h"),
-                    "ac" to ("GPS Accuracy" to " m"), "p" to ("Battery Level" to "%"),
-                    "c" to ("Battery Capacity" to " mAh"), "d" to ("Download Speed" to " Mbps"),
-                    "u" to ("Upload Speed" to " Mbps"), "b" to ("WiFi BSSID" to ""),
-                    "o" to ("Network Operator" to ""), "t" to ("Network Type" to ""),
-                    "r" to ("Signal Strength" to " dBm"), "ci" to ("Cell ID" to ""),
-                    "tc" to ("Tracking Area Code" to ""), "mc" to ("Mobile Country Code" to ""),
-                    "mn" to ("Mobile Network Code" to ""), "bts" to ("Base Timestamp" to ""),
-                    "tso" to ("Timestamp Offset" to " s")
-                )
+                                when (key) {
+                                    "y", "x" -> valueStr = rawValue.toString()
+                                    "a" -> valueStr = rawValue.toString()
+                                    "ac" -> valueStr = rawValue.toString()
+                                    "p" -> valueStr = rawValue.toString()
+                                    "r" -> valueStr = rawValue.toString()
+                                    "s" -> valueStr = rawValue.toString()
+                                    "d" -> valueStr = rawValue.toString()
+                                    "u" -> valueStr = rawValue.toString()
+                                    "c" -> valueStr = rawValue.toString()
+                                    "bts" -> valueStr =
+                                        ((rawValue as? Double)?.toLong() ?: rawValue.toString()
+                                            .toLongOrNull())?.let {
+                                            SimpleDateFormat(
+                                                "yyyy-MM-dd HH:mm:ss",
+                                                Locale.getDefault()
+                                            ).format(Date(it * 1000))
+                                        } ?: rawValue.toString()
+                                    "b" -> {
+                                        val bssid = rawValue.toString()
+                                        valueStr = if (bssid == "0" || bssid.length != 12) {
+                                            "Disconnected"
+                                        } else {
+                                            bssid.chunked(2).joinToString(":")
+                                                .uppercase(Locale.ROOT)
+                                        }
+                                    }
 
-                fieldDefinitions.forEach { (key, def) ->
-                    if (dataMap.containsKey(key)) {
-                        val (label, unit) = def
-                        val rawValue = dataMap[key]
-                        var valueStr: String
+                                    "ci", "tc", "mc", "mn" -> {
+                                        valueStr = when (rawValue) {
+                                            is Number -> rawValue.toLong().toString()
+                                            is String -> rawValue.toDoubleOrNull()?.toLong()
+                                                ?.toString() ?: rawValue
 
-                        when (key) {
-                            "y", "x" -> {
-                                valueStr = rawValue.toString()
-                            }
-                            "b" -> {
-                                val bssid = rawValue.toString()
-                                valueStr = if (bssid == "0" || bssid.length != 12) {
-                                    "Disconnected"
-                                } else {
-                                    bssid.chunked(2).joinToString(":").uppercase(Locale.ROOT)
+                                            else -> rawValue.toString()
+                                        }
+                                    }
+                                    else -> valueStr = rawValue?.toString() ?: "-"
                                 }
-                            }
-                            "bts" -> {
-                                val timestamp = (rawValue as? Double)?.toLong()
-                                valueStr = if (timestamp != null) {
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp * 1000))
-                                } else {
-                                    rawValue.toString()
+
+                                val row = RelativeLayout(container.context).apply {
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        LinearLayout.LayoutParams.MATCH_PARENT,
+                                        LinearLayout.LayoutParams.WRAP_CONTENT
+                                    ).apply { topMargin = 4; bottomMargin = 4 }
                                 }
-                            }
-                            else -> {
-                                valueStr = when (rawValue) {
-                                    is Double -> BigDecimal(rawValue).toPlainString()
-                                    else -> rawValue.toString()
+
+                                val labelView = TextView(container.context).apply {
+                                    text = label
+                                    setTextColor(container.context.getColor(R.color.amoled_white))
+                                    textSize = 13f
                                 }
+
+                                val valueView = TextView(container.context).apply {
+                                    text = "${valueStr ?: "-"}$unit"
+                                    setTextColor(container.context.getColor(R.color.amoled_light_gray))
+                                    textSize = 13f
+                                    typeface = Typeface.MONOSPACE
+                                    layoutParams = RelativeLayout.LayoutParams(
+                                        RelativeLayout.LayoutParams.WRAP_CONTENT,
+                                        RelativeLayout.LayoutParams.WRAP_CONTENT
+                                    ).apply { addRule(RelativeLayout.ALIGN_PARENT_END) }
+                                }
+                                row.addView(labelView)
+                                row.addView(valueView)
+                                rowsList.add(row)
                             }
                         }
-
-                        if (valueStr.endsWith(".0")) {
-                            valueStr = valueStr.substring(0, valueStr.length - 2)
+                    } catch (e: Exception) {
+                        val errorView = TextView(container.context).apply {
+                            text = "Error parsing data: ${e.message}"
+                            setTextColor(container.context.getColor(R.color.amoled_red))
+                            textSize = 12f
                         }
-
-                        val row = RelativeLayout(context).apply {
-                            layoutParams = LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            ).apply { topMargin = 4; bottomMargin = 4 }
-                        }
-
-                        val labelView = TextView(context).apply {
-                            text = label
-                            setTextColor(context.getColor(R.color.amoled_white))
-                            textSize = 13f
-                        }
-
-                        val valueView = TextView(context).apply {
-                            text = "$valueStr$unit"
-                            setTextColor(context.getColor(R.color.amoled_light_gray))
-                            textSize = 13f
-                            typeface = Typeface.MONOSPACE
-                            layoutParams = RelativeLayout.LayoutParams(
-                                RelativeLayout.LayoutParams.WRAP_CONTENT,
-                                RelativeLayout.LayoutParams.WRAP_CONTENT
-                            ).apply { addRule(RelativeLayout.ALIGN_PARENT_END) }
-                        }
-                        row.addView(labelView)
-                        row.addView(valueView)
-                        container.addView(row)
+                        rowsList.clear(); rowsList.add(errorView)
                     }
+                    rowsList
                 }
-
-            } catch (e: Exception) {
-                val errorView = TextView(context).apply {
-                    text = "Error parsing data: ${e.message}"
-                    setTextColor(context.getColor(R.color.amoled_red))
-                    textSize = 12f
-                }
-                container.addView(errorView)
+                container.removeAllViews()
+                rows.forEach { container.addView(it) }
+                readableJobCache.remove(container)
             }
+            readableJobCache[container] = job
         }
 
         inner class JsonViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
