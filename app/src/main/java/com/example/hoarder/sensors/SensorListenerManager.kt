@@ -102,4 +102,18 @@ class SensorListenerManager(
             )
         }
     }
+
+    fun registerPassiveListener() {
+        if (listenersRegistered.compareAndSet(false, true)) {
+            try {
+                locationManager.requestLocationUpdates(
+                    LocationManager.PASSIVE_PROVIDER,
+                    0L,
+                    0f,
+                    locationListener
+                )
+            } catch (e: SecurityException) {
+            }
+        }
+    }
 }

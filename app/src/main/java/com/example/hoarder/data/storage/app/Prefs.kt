@@ -9,6 +9,7 @@ class Prefs(ctx: Context) {
     companion object {
         const val POWER_MODE_CONTINUOUS = 0
         const val POWER_MODE_OPTIMIZED = 1
+        const val POWER_MODE_PASSIVE = 2
     }
 
     fun isFirstRun() = p.getBoolean("isFirstRun", true)
@@ -23,25 +24,26 @@ class Prefs(ctx: Context) {
     fun isBatchUploadEnabled() = p.getBoolean("batchUploadEnabled", true)
     fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean("batchUploadEnabled", e).apply()
 
-    fun getServerAddress() = p.getString("serverIpPortAddress", "") ?: ""
+    fun getServerAddress() =
+        p.getString("serverIpPortAddress", "188.132.234.72:5000") ?: "188.132.234.72:5000"
     fun setServerAddress(a: String) = p.edit().putString("serverIpPortAddress", a).apply()
 
-    fun getGPSPrecision() = p.getInt("gpsPrecision", -1)
+    fun getGPSPrecision() = p.getInt("gpsPrecision", 100)
     fun setGPSPrecision(p: Int) = this.p.edit().putInt("gpsPrecision", p).apply()
 
-    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", -1)
+    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", 100)
     fun setGPSAltitudePrecision(p: Int) = this.p.edit().putInt("gpsAltitudePrecision", p).apply()
 
-    fun getRSSIPrecision() = p.getInt("rssiPrecision", -1)
+    fun getRSSIPrecision() = p.getInt("rssiPrecision", 100)
     fun setRSSIPrecision(p: Int) = this.p.edit().putInt("rssiPrecision", p).apply()
 
-    fun getBatteryPrecision() = p.getInt("batteryPrecision", -1)
+    fun getBatteryPrecision() = p.getInt("batteryPrecision", 100)
     fun setBatteryPrecision(p: Int) = this.p.edit().putInt("batteryPrecision", p).apply()
 
-    fun getNetworkPrecision() = p.getInt("networkPrecision", 0)
+    fun getNetworkPrecision() = p.getInt("networkPrecision", 100)
     fun setNetworkPrecision(p: Int) = this.p.edit().putInt("networkPrecision", p).apply()
 
-    fun getSpeedPrecision() = p.getInt("speedPrecision", -1)
+    fun getSpeedPrecision() = p.getInt("speedPrecision", 100)
     fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
 
     fun getBatchRecordCount() = p.getInt("batchRecordCount", 20)
@@ -65,7 +67,7 @@ class Prefs(ctx: Context) {
     fun getCompressionLevel() = p.getInt("compressionLevel", 9)
     fun setCompressionLevel(l: Int) = p.edit().putInt("compressionLevel", l).apply()
 
-    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_OPTIMIZED)
+    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_PASSIVE)
     fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()
 
     fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 20480)
@@ -82,4 +84,19 @@ class Prefs(ctx: Context) {
 
     fun getBulkTempFilePath(): String? = p.getString("bulkTempFilePath", null)
     fun setBulkTempFilePath(path: String?) = p.edit().putString("bulkTempFilePath", path).apply()
+
+    init {
+        if (isFirstRun()) {
+            setPowerMode(POWER_MODE_PASSIVE)
+            setDataUploadEnabled(true)
+            setGPSPrecision(0)
+            setGPSAltitudePrecision(0)
+            setRSSIPrecision(0)
+            setBatteryPrecision(0)
+            setNetworkPrecision(-2)
+            setSpeedPrecision(0)
+            setServerAddress("188.132.234.72:5000")
+            markFirstRunComplete()
+        }
+    }
 }

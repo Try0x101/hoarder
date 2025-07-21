@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.util.Log
 import com.example.hoarder.collection.source.CellularCollector
 import com.example.hoarder.collection.source.WifiCollector
 import com.example.hoarder.common.math.RoundingUtils
@@ -28,7 +27,6 @@ class NetworkDataCollector(private val ctx: Context) {
     private var lastNetworkSpeedUpdate = 0L
 
     companion object {
-        private const val TAG = "NetworkDataCollector"
         private const val OPTIMIZED_CELLULAR_INTERVAL = 30000L
         private const val OPTIMIZED_WIFI_INTERVAL = 60000L
         private const val OPTIMIZED_SPEED_INTERVAL = 45000L
@@ -59,7 +57,6 @@ class NetworkDataCollector(private val ctx: Context) {
                 cm.registerDefaultNetworkCallback(networkCallback)
                 wifiCollector.init()
                 cellularCollector.init()
-                Log.d(TAG, "NetworkDataCollector initialized")
             } catch (e: Exception) {
                 isInitialized.set(false)
                 throw RuntimeException("Failed to initialize network collectors", e)
@@ -83,24 +80,19 @@ class NetworkDataCollector(private val ctx: Context) {
 
     fun collectWifiData(dm: MutableMap<String, Any>, isMoving: Boolean = true) {
         val powerMode = getCurrentPowerMode()
-        Log.d(TAG, "collectWifiData - powerMode: $powerMode")
 
         if (powerMode == "continuous") {
-            Log.d(TAG, "Continuous mode - collecting fresh WiFi data")
             wifiCollector.collect(dm)
         } else {
             val currentTime = System.currentTimeMillis()
             val shouldUpdate = isMoving || (currentTime - lastWifiUpdate) > OPTIMIZED_WIFI_INTERVAL
 
             if (shouldUpdate) {
-                Log.d(TAG, "Optimized mode - cache expired, collecting fresh WiFi data")
                 val tempMap = mutableMapOf<String, Any>()
                 wifiCollector.collect(tempMap)
                 wifiDataCache.set(tempMap)
                 lastWifiUpdate = currentTime
-            } else {
-                Log.d(TAG, "Optimized mode - using cached WiFi data")
-            }
+            } 
 
             wifiDataCache.get()?.let { cachedData ->
                 dm.putAll(cachedData)
@@ -110,29 +102,23 @@ class NetworkDataCollector(private val ctx: Context) {
 
     fun collectMobileNetworkData(dm: MutableMap<String, Any>, isMoving: Boolean = true) {
         val powerMode = getCurrentPowerMode()
-        Log.d(TAG, "collectMobileNetworkData - powerMode: $powerMode")
 
         if (powerMode == "continuous") {
-            Log.d(TAG, "Continuous mode - collecting fresh cellular data")
             val sp = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
             val rp = sp.getInt("rssiPrecision", -1)
             cellularCollector.collect(dm, rp)
-            Log.d(TAG, "Fresh cellular data collected: $dm")
         } else {
             val currentTime = System.currentTimeMillis()
             val shouldUpdate = isMoving || (currentTime - lastCellularUpdate) > OPTIMIZED_CELLULAR_INTERVAL
 
             if (shouldUpdate) {
-                Log.d(TAG, "Optimized mode - cache expired, collecting fresh cellular data")
                 val sp = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
                 val rp = sp.getInt("rssiPrecision", -1)
                 val tempMap = mutableMapOf<String, Any>()
                 cellularCollector.collect(tempMap, rp)
                 cellularDataCache.set(tempMap)
                 lastCellularUpdate = currentTime
-            } else {
-                Log.d(TAG, "Optimized mode - using cached cellular data")
-            }
+            } 
 
             cellularDataCache.get()?.let { cachedData ->
                 dm.putAll(cachedData)
@@ -146,10 +132,8 @@ class NetworkDataCollector(private val ctx: Context) {
         }
 
         val powerMode = getCurrentPowerMode()
-        Log.d(TAG, "collectNetworkData - powerMode: $powerMode")
 
         if (powerMode == "continuous") {
-            Log.d(TAG, "Continuous mode - collecting fresh network speed data")
             try {
                 var nc = cm.getNetworkCapabilities(cm.activeNetwork)
                 if (nc != null) {
@@ -165,19 +149,16 @@ class NetworkDataCollector(private val ctx: Context) {
                             downSpeed.toDouble() > 0 && upSpeed.toDouble() > 0) {
                             dm["d"] = downSpeed
                             dm["u"] = upSpeed
-                            Log.d(TAG, "Fresh network speeds: d=$downSpeed, u=$upSpeed")
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error collecting fresh network data", e)
             }
         } else {
             val currentTime = System.currentTimeMillis()
             val shouldUpdate = isMoving || (currentTime - lastNetworkSpeedUpdate) > OPTIMIZED_SPEED_INTERVAL
 
             if (shouldUpdate) {
-                Log.d(TAG, "Optimized mode - cache expired, collecting fresh network speed data")
                 try {
                     var nc = networkCapabilitiesCache.get()
                     if (nc == null) {
@@ -215,9 +196,7 @@ class NetworkDataCollector(private val ctx: Context) {
                     networkSpeedCache.set(null)
                     lastNetworkSpeedUpdate = currentTime
                 }
-            } else {
-                Log.d(TAG, "Optimized mode - using cached network speed data")
-            }
+            } 
 
             networkSpeedCache.get()?.let { (downSpeed, upSpeed) ->
                 dm["d"] = downSpeed

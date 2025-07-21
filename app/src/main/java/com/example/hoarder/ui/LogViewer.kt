@@ -13,7 +13,6 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -23,7 +22,6 @@ import com.example.hoarder.data.models.LogEntry
 import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
 import com.example.hoarder.ui.dialogs.log.LogPaginator
 import com.example.hoarder.ui.dialogs.log.LogRepository
-import com.example.hoarder.utils.ToastHelper
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
 import kotlinx.coroutines.launch
@@ -122,10 +120,8 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
             }
 
             copyToClipboard("Hoarder Page Log", allPageJson)
-            ToastHelper.showToast(ctx, "Copied ${pageEntries.size} records from page", Toast.LENGTH_SHORT)
         } catch (e: Exception) {
             Log.e("LogViewer", "Error copying log page", e)
-            ToastHelper.showToast(ctx, "Error copying page: ${e.message}", Toast.LENGTH_SHORT)
         }
     }
 
@@ -134,10 +130,8 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
             val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText(label, text)
             clipboard.setPrimaryClip(clip)
-            ToastHelper.showToast(ctx, "Log entry copied to clipboard", Toast.LENGTH_SHORT)
         } catch (e: Exception) {
             Log.e("LogViewer", "Clipboard copy failed", e)
-            ToastHelper.showToast(ctx, "Failed to copy to clipboard", Toast.LENGTH_SHORT)
         }
     }
 

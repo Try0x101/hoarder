@@ -113,10 +113,10 @@ class ServiceCommandHandler(
     private fun handleBatchingSettingsChange(intent: Intent) {
         val enabled = intent.getBooleanExtra("enabled", false)
         val recordCount = intent.getIntExtra("recordCount", 20)
-        val byCount = intent.getBooleanExtra("byCount", true)
+        val byCount = intent.getBooleanExtra("byCount", false)
         val timeout = intent.getIntExtra("timeout", 60)
-        val byTimeout = intent.getBooleanExtra("byTimeout", true)
-        val maxSize = intent.getIntExtra("maxSize", 100)
+        val byTimeout = intent.getBooleanExtra("byTimeout", false)
+        val maxSize = intent.getIntExtra("maxSize", 5)
         val byMaxSize = intent.getBooleanExtra("byMaxSize", true)
         val compLevel = intent.getIntExtra("compLevel", 6)
 
@@ -130,5 +130,8 @@ class ServiceCommandHandler(
         updateAppPreferences("batchMaxSizeKb", maxSize)
         updateAppPreferences("batchTriggerByMaxSizeEnabled", byMaxSize)
         updateAppPreferences("compressionLevel", compLevel)
+        if (!enabled && uploadActive.get()) {
+            dataUploader.forceSendBuffer()
+        }
     }
 }

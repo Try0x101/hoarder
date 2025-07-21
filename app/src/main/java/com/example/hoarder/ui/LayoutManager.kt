@@ -128,7 +128,11 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         }
 
         powerModeRadioGroup.setOnCheckedChangeListener { _, checkedId ->
-            val newMode = if (checkedId == R.id.radioOptimized) Prefs.POWER_MODE_OPTIMIZED else Prefs.POWER_MODE_CONTINUOUS
+            val newMode = when (checkedId) {
+                R.id.radioOptimized -> Prefs.POWER_MODE_OPTIMIZED
+                R.id.radioPassive -> Prefs.POWER_MODE_PASSIVE
+                else -> Prefs.POWER_MODE_CONTINUOUS
+            }
             p.setPowerMode(newMode)
             updatePowerSavingUI()
             a.onPowerModeChanged()
@@ -140,8 +144,12 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
 
     private fun updatePowerSavingUI() {
         val currentMode = p.getPowerMode()
-        powerSavingSubtitle.text = if (currentMode == Prefs.POWER_MODE_OPTIMIZED) "Optimized" else "Continuous"
-        val checkedRadioId = if (currentMode == Prefs.POWER_MODE_OPTIMIZED) R.id.radioOptimized else R.id.radioContinuous
+        val (subtitle, checkedRadioId) = when (currentMode) {
+            Prefs.POWER_MODE_OPTIMIZED -> "Optimized" to R.id.radioOptimized
+            Prefs.POWER_MODE_PASSIVE -> "Passive" to R.id.radioPassive
+            else -> "Continuous" to R.id.radioContinuous
+        }
+        powerSavingSubtitle.text = subtitle
         if (powerModeRadioGroup.checkedRadioButtonId != checkedRadioId) {
             powerModeRadioGroup.check(checkedRadioId)
         }

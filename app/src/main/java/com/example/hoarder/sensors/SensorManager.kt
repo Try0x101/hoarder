@@ -79,9 +79,13 @@ class SensorManager(
             .onEach { state ->
                 if (isInitialized.get()) {
                     listenerManager.unregisterListeners()
-                    configureListeners(state.mode, state.isMoving)
-                    manageGpsState(state.isMoving)
-                    listenerManager.registerListeners()
+                    if (state.mode == com.example.hoarder.data.storage.app.Prefs.POWER_MODE_PASSIVE) {
+                        listenerManager.registerPassiveListener()
+                    } else {
+                        configureListeners(state.mode, state.isMoving)
+                        manageGpsState(state.isMoving)
+                        listenerManager.registerListeners()
+                    }
                 }
             }
             .launchIn(sensorScope)

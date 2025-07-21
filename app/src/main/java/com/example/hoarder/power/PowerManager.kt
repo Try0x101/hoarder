@@ -86,6 +86,7 @@ class PowerManager(
                     }
                 }
             }
+            Prefs.POWER_MODE_PASSIVE -> 300000L
             else -> 1000L
         }
     }

@@ -1,6 +1,5 @@
 package com.example.hoarder.data.uploader
 
-import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.zip.Deflater
@@ -82,7 +81,6 @@ object CompressionUtils {
                 )
             }
         } catch (e: Exception) {
-            Log.e("CompressionUtils", "Compression failed, using uncompressed", e)
             CompressionResult(
                 compressed = originalBytes,
                 originalSize = originalSize,

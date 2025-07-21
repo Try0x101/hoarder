@@ -1,5 +1,6 @@
 package com.example.hoarder.ui
 
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -8,7 +9,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -23,7 +23,6 @@ import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.main.MainViewModel
 import com.example.hoarder.utils.NotifUtils
 import com.example.hoarder.utils.PermHandler
-import com.example.hoarder.utils.ToastHelper
 
 class MainActivity : AppCompatActivity() {
     private val h = Handler(Looper.getMainLooper())
@@ -37,14 +36,13 @@ class MainActivity : AppCompatActivity() {
     private val pr = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             if (i?.action == "com.example.hoarder.PERMISSIONS_REQUIRED") {
-                ToastHelper.showToast(this@MainActivity, "Location permissions required", Toast.LENGTH_LONG)
                 permHandler.requestPerms()
             }
         }
     }
 
-    override fun onCreate(sb: Bundle?) {
-        super.onCreate(sb)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, i ->
@@ -66,6 +64,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             if (permHandler.hasAllPerms()) ss() else permHandler.requestPerms()
         }
+
+        // cancel hoarder persistent notification if shown
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(99999)
+        // then start background service as before
     }
 
     private fun observeViewModel() {
@@ -131,7 +134,6 @@ class MainActivity : AppCompatActivity() {
         ss()
         startCollection()
 
-        ToastHelper.showToast(this, "Setup complete. App will run in background.")
         h.postDelayed({ finishAffinity() }, 2000)
     }
 

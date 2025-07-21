@@ -430,6 +430,25 @@
                             android:layout_marginBottom="8dp"
                             android:lineSpacingExtra="4dp"
                             android:text="All-Day Tracking / Low Power.\n• Motion Detection: Uses Google Activity Recognition API for accurate movement detection.\n• Adaptive Intervals: Collection slows down when stationary (1-5 mins) and adapts to speed when moving (5-30 secs).\n• Smart GPS: Automatically disabled after 10 mins of being stationary to save power.\n• Use Case: Recommended for normal all-day use with minimal battery drain." />
+
+                        <RadioButton
+                            android:id="@+id/radioPassive"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Passive"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:lineSpacingExtra="4dp"
+                            android:text="Stealth / Ultra Low Power.\n• Location Piggyback: Only uses location updates from other apps, never activates GPS.\n• No Background Wakeups: Works only when device/system/app provides data via events.\n• Ideal for: Maximum battery life while retaining background persistence." />
                     </RadioGroup>
                 </LinearLayout>
             </LinearLayout>

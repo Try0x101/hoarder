@@ -1,12 +1,10 @@
 package com.example.hoarder.utils
 
-import com.example.hoarder.utils.ToastHelper
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
-import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicBoolean
@@ -77,7 +75,7 @@ class PermHandler(private val a: Activity, private val h: Handler) {
                 act?.invoke()
                 act = null
             } else {
-                ToastHelper.showToast(a, "App requires all permissions to function.", Toast.LENGTH_LONG)
+                // No action
             }
         }
     }

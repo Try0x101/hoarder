@@ -197,12 +197,10 @@ class BackgroundService: Service(){
     override fun onDestroy(){
         super.onDestroy()
         cleanup()
-        ServiceUtils.restartService(applicationContext)
     }
 
     override fun onTaskRemoved(r: Intent?){
         super.onTaskRemoved(r)
-        ServiceUtils.scheduleRestart(applicationContext)
     }
 
     private fun cleanup() {
@@ -262,11 +260,26 @@ class BackgroundService: Service(){
             .build()
     }
 
-    private fun hasRequiredPermissions() =
-        (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED) &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
+    private fun hasRequiredPermissions(): Boolean {
+        val mode = appPrefs.getPowerMode()
+        return if (mode == com.example.hoarder.data.storage.app.Prefs.POWER_MODE_PASSIVE) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED) &&
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.FOREGROUND_SERVICE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
 }

@@ -13,7 +13,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
-import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
@@ -22,7 +21,6 @@ import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.ui.dialogs.server.ServerStatsManager
 import com.example.hoarder.ui.formatters.ByteFormatter
-import com.example.hoarder.utils.ToastHelper
 import com.google.gson.Gson
 import kotlinx.coroutines.launch
 
@@ -105,8 +103,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                 val bulkThresholdText = bulkThresholdEditText.text.toString()
                 val bulkThreshold = bulkThresholdText.toIntOrNull() ?: 10240
                 p.setBulkUploadThresholdKb(bulkThreshold)
-
-                ToastHelper.showToast(a, "Thresholds saved", Toast.LENGTH_SHORT)
             }
             .setNegativeButton("Close", null)
             .create()
@@ -117,10 +113,9 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                     updateButtonsState()
                     val status = intent.getStringExtra("status")
                     when (status) {
-                        "OK (Batch)", "OK (Bulk)" -> ToastHelper.showToast(a, "Buffered data sent successfully!", Toast.LENGTH_SHORT)
+                        "OK (Batch)", "OK (Bulk)" -> {}
                         "HTTP Error", "Network Error", "Error" -> {
                             val message = intent.getStringExtra("message") ?: "Check logs for details."
-                            ToastHelper.showToast(a, "Failed to send buffer: $message", Toast.LENGTH_LONG)
                         }
                     }
                 }
@@ -133,7 +128,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                 a.lifecycleScope.launch {
                     logRepository.clearAllLogs()
                     LocalBroadcastManager.getInstance(a).sendBroadcast(Intent("com.example.hoarder.GET_STATE"))
-                    ToastHelper.showToast(a, "Logs cleared", Toast.LENGTH_SHORT)
                     val (lastHour, lastDay, last7Days) = serverStatsManager.calculateUploadStats()
                     statsLastHour.text = formatStats(lastHour)
                     statsLastDay.text = formatStats(lastDay)
@@ -151,13 +145,11 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 if (NetUtils.isValidIpPort(editText.text.toString())) {
                     p.setServerAddress(editText.text.toString())
-                    ToastHelper.showToast(a, "Server address saved", Toast.LENGTH_SHORT)
                     if (p.isDataUploadEnabled()) {
                         a.stopUpload()
                         a.startUpload(p.getServerAddress())
                     }
                 } else {
-                    ToastHelper.showToast(a, "Invalid server IP:Port format", Toast.LENGTH_SHORT)
                 }
                 true
             } else {
@@ -229,7 +221,6 @@ class DialogManager(private val a: MainActivity, private val p: Prefs) {
                     p.getBatchMaxSizeKb(), p.isBatchTriggerByMaxSizeEnabled(),
                     p.getCompressionLevel()
                 )
-                ToastHelper.showToast(a, "Batching settings saved", Toast.LENGTH_SHORT)
                 dialog.dismiss()
             }
             .show()
