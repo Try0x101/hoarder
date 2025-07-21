@@ -90,7 +90,9 @@ class DataUploader(
         override fun onAvailable(network: Network) {
             super.onAvailable(network)
             if (wasOffline.getAndSet(false)) {
-                // Network is back, but we don't auto-send. The scheduler or user will trigger it.
+                scope.launch {
+                    forceSendBuffer()
+                }
             }
         }
 
@@ -111,7 +113,6 @@ class DataUploader(
     init {
         scope.launch {
             bufferedSize.set(dataBuffer.getBufferedDataSize())
-            // Removed liveBatchBaseTimestamp initialization
 
             if (appPrefs.getBulkJobId() != null) {
                 resumeBulkUploadProcess()
@@ -247,9 +248,7 @@ class DataUploader(
             if (deltaMap.isNotEmpty()) {
                 val deltaMapWithTimestamp: MutableMap<String, Any> = deltaMap.toMutableMap()
 
-                // Get buffer *before* adding new record
                 val bufferedData = withContext(Dispatchers.IO) { dataBuffer.getBufferedData() }
-                // Find base timestamp (bts) from earliest already-buffered record
                 val earliestBase = bufferedData
                     .asSequence()
                     .mapNotNull { it.payload }
@@ -264,11 +263,9 @@ class DataUploader(
                     .minOrNull()
 
                 if (earliestBase == null) {
-                    // If no anchor exists, this is a new batch anchor
                     val baseTimestamp = System.currentTimeMillis() / 1000
                     deltaMapWithTimestamp["bts"] = baseTimestamp
                 } else {
-                    // Calculate tso relative to true anchor
                     val offset = (System.currentTimeMillis() / 1000) - earliestBase
                     deltaMapWithTimestamp["tso"] = offset
                 }
@@ -467,7 +464,6 @@ class DataUploader(
                 cleanupBulkState(tempFile, isError = true, errorMessage = result.errorMessage)
             }
         } finally {
-            // Ensure flag is always reset
             bulkUploadInProgress.set(false)
         }
     }
@@ -572,7 +568,7 @@ class DataUploader(
                 schedulePollingTask(0, 2000L)
             } else cleanupBulkState()
             "UPLOADING", "MARSHALLING" -> {
-                bulkUploadInProgress.set(false) // Reset to allow restart
+                bulkUploadInProgress.set(false)
                 if (filePath != null) File(filePath).delete()
                 initiateBulkUploadProcess()
             }

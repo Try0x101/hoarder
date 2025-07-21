@@ -69,12 +69,23 @@
                         android:track="@drawable/switch_track_selector" />
                 </RelativeLayout>
 
-                <androidx.viewpager2.widget.ViewPager2
+                <ScrollView
                     android:id="@+id/dataCollectionContent"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:visibility="gone"
-                    android:orientation="horizontal" />
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/jsonContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:typeface="monospace"/>
+
+                </ScrollView>
             </LinearLayout>
 
             <LinearLayout

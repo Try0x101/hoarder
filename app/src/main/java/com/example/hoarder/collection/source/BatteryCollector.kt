@@ -24,13 +24,14 @@ class BatteryCollector(private val ctx: Context) {
                 if (l < 0 || s <= 0) return
 
                 val p = l * 100 / s.toFloat()
-                var capacityMah: Int? = null
+                var totalCapacityMah: Int? = null
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     try {
                         val chargeCounter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                        if (chargeCounter != Int.MIN_VALUE) {
-                            capacityMah = chargeCounter / 1000
+                        if (chargeCounter != Int.MIN_VALUE && p > 1) {
+                            val calculatedTotalUah = chargeCounter / (p / 100.0f)
+                            totalCapacityMah = (calculatedTotalUah / 1000).toInt()
                         }
                     } catch (e: Exception) { }
                 }
@@ -39,9 +40,7 @@ class BatteryCollector(private val ctx: Context) {
                 val percentage = if (precision == -1) RoundingUtils.smartBattery(p.toInt()) else RoundingUtils.rb(p.toInt(), precision)
                 resultMap["p"] = percentage
 
-                capacityMah?.let {
-                    // Report only the rounded (down to nearest 100) battery property as total capacity, do not adjust or subtract
-                    // This is for consistency with display/measurement granularity
+                totalCapacityMah?.let {
                     val roundedCapacity = RoundingUtils.smartCapacity(it)
                     if (roundedCapacity > 0) {
                         resultMap["c"] = roundedCapacity

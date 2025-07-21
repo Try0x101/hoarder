@@ -33,7 +33,8 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var dataCollectionSwitch: Switch
     private lateinit var dataCollectionSubtitle: TextView
     private lateinit var dataCollectionArrow: ImageView
-    private lateinit var dataCollectionContent: ViewPager2
+    private lateinit var dataCollectionContent: ScrollView
+    private lateinit var jsonContent: TextView
     private lateinit var dataDescriptionHeader: RelativeLayout
     private lateinit var dataDescriptionArrow: ImageView
     private lateinit var dataDescriptionContent: LinearLayout
@@ -51,11 +52,10 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     private lateinit var powerModeRadioGroup: RadioGroup
 
     private val precisionChooser by lazy { PrecisionChooserDialog(a, p, onPrecisionChanged) }
-    private lateinit var jsonPagerAdapter: JsonPagerAdapter
+    private val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
 
     fun setupUI() {
         findViews()
-        setupPager()
         setupState()
         setupListeners()
     }
@@ -66,6 +66,7 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         dataCollectionSubtitle = a.findViewById(R.id.dataCollectionSubtitle)
         dataCollectionArrow = a.findViewById(R.id.dataCollectionArrow)
         dataCollectionContent = a.findViewById(R.id.dataCollectionContent)
+        jsonContent = a.findViewById(R.id.jsonContent)
         dataDescriptionHeader = a.findViewById(R.id.dataDescriptionHeader)
         dataDescriptionArrow = a.findViewById(R.id.dataDescriptionArrow)
         dataDescriptionContent = a.findViewById(R.id.dataDescriptionContent)
@@ -81,11 +82,6 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         powerSavingContent = a.findViewById(R.id.powerSavingContent)
         powerSavingSubtitle = a.findViewById(R.id.powerSavingSubtitle)
         powerModeRadioGroup = a.findViewById(R.id.powerModeRadioGroup)
-    }
-
-    private fun setupPager() {
-        jsonPagerAdapter = JsonPagerAdapter()
-        dataCollectionContent.adapter = jsonPagerAdapter
     }
 
     private fun setupState() {
@@ -180,7 +176,7 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
         content.visibility = if (isVisible) View.GONE else View.VISIBLE
         arrow.animate().rotation(if (isVisible) 0f else 180f).setDuration(300).start()
         if (content.id == R.id.dataCollectionContent && !isVisible) {
-            jsonPagerAdapter.updateJson(a.getLastData())
+            updateJson(a.getLastData())
         }
     }
 
@@ -191,191 +187,13 @@ class LayoutManager(private val a: MainActivity, private val p: Prefs, private v
     }
 
     fun updateJson(json: String?) {
-        jsonPagerAdapter.updateJson(json)
-    }
-
-    inner class JsonPagerAdapter : RecyclerView.Adapter<JsonPagerAdapter.JsonViewHolder>() {
-        private var optimizedJson: String? = null
-        private val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
-        private val gsonParser = com.google.gson.Gson()
-
-        fun updateJson(json: String?) {
-            optimizedJson = json
-            notifyDataSetChanged()
+        val prettyJson = if (json.isNullOrEmpty() || json.startsWith("Collection is inactive")) {
+            "Collection is inactive or waiting for data..."
+        } else {
+            try {
+                gson.toJson(com.google.gson.JsonParser.parseString(json))
+            } catch (e: Exception) { json }
         }
-
-        override fun getItemCount(): Int = 2
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): JsonViewHolder {
-            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_json_page, parent, false)
-            return JsonViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: JsonViewHolder, position: Int) {
-            when (position) {
-                0 -> holder.bindOptimized("Optimized Data (swipe →)", optimizedJson)
-                1 -> holder.bindReadable("Readable Format (swipe ←)", optimizedJson)
-            }
-        }
-
-        private val readableContentCache = WeakHashMap<LinearLayout, String?>()
-        private val readableJobCache = WeakHashMap<LinearLayout, Job?>()
-
-        private fun populateReadableDataView(container: LinearLayout, json: String?) {
-            if (readableContentCache[container] == json) return
-            readableContentCache[container] = json
-            readableJobCache[container]?.cancel()
-            val job = CoroutineScope(Dispatchers.Main).launch {
-                val rows = withContext(Dispatchers.Default) {
-                    val rowsList = mutableListOf<View>()
-                    try {
-                        val type =
-                            object : com.google.gson.reflect.TypeToken<Map<String, Any>>() {}.type
-                        val dataMap: Map<String, Any> = gsonParser.fromJson(json, type)
-                        Prefs(container.context)
-
-                        val fieldDefinitions = linkedMapOf(
-                            "i" to ("Device ID" to ""),
-                            "n" to ("Device Name" to ""),
-                            "y" to ("Latitude" to "°"),
-                            "x" to ("Longitude" to "°"),
-                            "a" to ("Altitude" to " m"),
-                            "s" to ("Speed" to " km/h"),
-                            "ac" to ("GPS Accuracy" to " m"),
-                            "p" to ("Battery Level" to "%"),
-                            "c" to ("Battery Capacity" to " mAh"),
-                            "d" to ("Download Speed" to " Mbps"),
-                            "u" to ("Upload Speed" to " Mbps"),
-                            "b" to ("WiFi BSSID" to ""),
-                            "o" to ("Network Operator" to ""),
-                            "t" to ("Network Type" to ""),
-                            "r" to ("Signal Strength" to " dBm"),
-                            "ci" to ("Cell ID" to ""),
-                            "tc" to ("Tracking Area Code" to ""),
-                            "mc" to ("Mobile Country Code" to ""),
-                            "mn" to ("Mobile Network Code" to ""),
-                            "bts" to ("Base Timestamp" to ""),
-                            "tso" to ("Timestamp Offset" to " s")
-                        )
-
-                        for ((key, def) in fieldDefinitions) {
-                            if (dataMap.containsKey(key)) {
-                                val (label, unit) = def
-                                val rawValue = dataMap[key]
-                                var valueStr: String? = null
-
-                                when (key) {
-                                    "y", "x" -> valueStr = rawValue.toString()
-                                    "a" -> valueStr = rawValue.toString()
-                                    "ac" -> valueStr = rawValue.toString()
-                                    "p" -> valueStr = rawValue.toString()
-                                    "r" -> valueStr = rawValue.toString()
-                                    "s" -> valueStr = rawValue.toString()
-                                    "d" -> valueStr = rawValue.toString()
-                                    "u" -> valueStr = rawValue.toString()
-                                    "c" -> valueStr = rawValue.toString()
-                                    "bts" -> valueStr =
-                                        ((rawValue as? Double)?.toLong() ?: rawValue.toString()
-                                            .toLongOrNull())?.let {
-                                            SimpleDateFormat(
-                                                "yyyy-MM-dd HH:mm:ss",
-                                                Locale.getDefault()
-                                            ).format(Date(it * 1000))
-                                        } ?: rawValue.toString()
-                                    "b" -> {
-                                        val bssid = rawValue.toString()
-                                        valueStr = if (bssid == "0" || bssid.length != 12) {
-                                            "Disconnected"
-                                        } else {
-                                            bssid.chunked(2).joinToString(":")
-                                                .uppercase(Locale.ROOT)
-                                        }
-                                    }
-
-                                    "ci", "tc", "mc", "mn" -> {
-                                        valueStr = when (rawValue) {
-                                            is Number -> rawValue.toLong().toString()
-                                            is String -> rawValue.toDoubleOrNull()?.toLong()
-                                                ?.toString() ?: rawValue
-
-                                            else -> rawValue.toString()
-                                        }
-                                    }
-                                    else -> valueStr = rawValue?.toString() ?: "-"
-                                }
-
-                                val row = RelativeLayout(container.context).apply {
-                                    layoutParams = LinearLayout.LayoutParams(
-                                        LinearLayout.LayoutParams.MATCH_PARENT,
-                                        LinearLayout.LayoutParams.WRAP_CONTENT
-                                    ).apply { topMargin = 4; bottomMargin = 4 }
-                                }
-
-                                val labelView = TextView(container.context).apply {
-                                    text = label
-                                    setTextColor(container.context.getColor(R.color.amoled_white))
-                                    textSize = 13f
-                                }
-
-                                val valueView = TextView(container.context).apply {
-                                    text = "${valueStr ?: "-"}$unit"
-                                    setTextColor(container.context.getColor(R.color.amoled_light_gray))
-                                    textSize = 13f
-                                    typeface = Typeface.MONOSPACE
-                                    layoutParams = RelativeLayout.LayoutParams(
-                                        RelativeLayout.LayoutParams.WRAP_CONTENT,
-                                        RelativeLayout.LayoutParams.WRAP_CONTENT
-                                    ).apply { addRule(RelativeLayout.ALIGN_PARENT_END) }
-                                }
-                                row.addView(labelView)
-                                row.addView(valueView)
-                                rowsList.add(row)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        val errorView = TextView(container.context).apply {
-                            text = "Error parsing data: ${e.message}"
-                            setTextColor(container.context.getColor(R.color.amoled_red))
-                            textSize = 12f
-                        }
-                        rowsList.clear(); rowsList.add(errorView)
-                    }
-                    rowsList
-                }
-                container.removeAllViews()
-                rows.forEach { container.addView(it) }
-                readableJobCache.remove(container)
-            }
-            readableJobCache[container] = job
-        }
-
-        inner class JsonViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            private val titleView: TextView = itemView.findViewById(R.id.jsonTitle)
-            private val jsonContentView: TextView = itemView.findViewById(R.id.jsonContent)
-            private val readableScrollView: ScrollView = itemView.findViewById(R.id.readableScrollView)
-            private val readableDataContainer: LinearLayout = itemView.findViewById(R.id.readableDataContainer)
-
-            fun bindOptimized(title: String, content: String?) {
-                titleView.text = title
-                jsonContentView.visibility = View.VISIBLE
-                readableScrollView.visibility = View.GONE
-
-                val prettyJson = if (content.isNullOrEmpty() || content.startsWith("Collection is inactive")) {
-                    "Collection is inactive or waiting for data..."
-                } else {
-                    try {
-                        gson.toJson(com.google.gson.JsonParser.parseString(content))
-                    } catch (e: Exception) { content }
-                }
-                jsonContentView.text = prettyJson
-            }
-
-            fun bindReadable(title: String, content: String?) {
-                titleView.text = title
-                jsonContentView.visibility = View.GONE
-                readableScrollView.visibility = View.VISIBLE
-                populateReadableDataView(readableDataContainer, content)
-            }
-        }
+        jsonContent.text = prettyJson
     }
 }
