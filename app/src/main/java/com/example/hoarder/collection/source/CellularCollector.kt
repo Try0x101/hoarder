@@ -58,6 +58,7 @@ class CellularCollector(private val ctx: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     fun init() {
         if (isInitialized.compareAndSet(false, true)) {
             try {
@@ -76,6 +77,7 @@ class CellularCollector(private val ctx: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     fun cleanup() {
         if (isInitialized.get() && hasPermissions.get()) {
             try {
@@ -130,8 +132,21 @@ class CellularCollector(private val ctx: Context) {
         try {
             dm["o"] = getOperatorName()
             dm["t"] = getNetworkTypeName()
-            requestFreshCellInfoAsync()
-            val currentCellInfo = cellInfoCache.get() ?: tm.allCellInfo
+
+            val powerMode = getCurrentPowerMode()
+            var currentCellInfo: List<CellInfo>?
+
+            if (powerMode == "continuous") {
+                requestFreshCellInfoAsync()
+                currentCellInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
+            } else {
+                currentCellInfo = cellInfoCache.get()
+                if (currentCellInfo == null) {
+                    currentCellInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
+                    currentCellInfo?.let { processCellInfoUpdate(it) }
+                }
+            }
+
             if (currentCellInfo != null && processCellInfo(currentCellInfo, dm, rp)) {
                 return
             } else {
@@ -144,6 +159,7 @@ class CellularCollector(private val ctx: Context) {
 
     private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "unknown"
 
+    @Suppress("DEPRECATION")
     private fun getNetworkTypeName(): String = when (tm.dataNetworkType) {
         TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
         TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyManager.NETWORK_TYPE_HSPA, TelephonyManager.NETWORK_TYPE_HSUPA, TelephonyManager.NETWORK_TYPE_HSDPA -> "HSPA"
