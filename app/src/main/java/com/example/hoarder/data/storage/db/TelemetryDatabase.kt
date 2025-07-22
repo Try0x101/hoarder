@@ -55,6 +55,9 @@ interface LogDao {
     @Query("SELECT COUNT(*) FROM buffered_payloads")
     fun getBufferedPayloadsCount(): Int
 
+    @Query("SELECT json_extract(payload, '$.bts') FROM buffered_payloads WHERE json_extract(payload, '$.bts') IS NOT NULL ORDER BY json_extract(payload, '$.bts') ASC LIMIT 1")
+    fun getEarliestBaseTimestamp(): Long?
+
     @Query("DELETE FROM buffered_payloads WHERE timestamp < :cutoffTime")
     fun deleteOldPayloads(cutoffTime: Long)
 

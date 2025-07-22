@@ -26,6 +26,10 @@ class DataBuffer(private val logDao: LogDao, private val gson: Gson) {
         return logDao.getBufferedPayloadsCount()
     }
 
+    fun getEarliestTimestamp(): Long? {
+        return logDao.getEarliestBaseTimestamp()
+    }
+
     fun clearBuffer(processedPayloads: List<BufferedPayload>) {
         val ids = processedPayloads.map { it.id }
         if (ids.isNotEmpty()) {
