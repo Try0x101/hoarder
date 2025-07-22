@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.*
 import androidx.core.content.ContextCompat
-import com.example.hoarder.common.math.RoundingUtils
+import com.example.hoarder.collection.source.cellular.CellProcessor
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -19,7 +19,6 @@ class CellularCollector(private val ctx: Context) {
     private var lastCellInfoUpdate = 0L
 
     companion object {
-        private const val CELL_INFO_CACHE_TTL = 5000L
         private const val FRESH_REQUEST_INTERVAL = 1000L
     }
 
@@ -41,21 +40,6 @@ class CellularCollector(private val ctx: Context) {
     private fun processCellInfoUpdate(cellInfo: List<CellInfo>) {
         cellInfoCache.set(cellInfo)
         lastCellInfoUpdate = System.currentTimeMillis()
-    }
-
-    private fun extractPrimaryCellId(cellInfoList: List<CellInfo>): String? {
-        return cellInfoList.firstOrNull { it.isRegistered }?.let { cellInfo ->
-            when (cellInfo) {
-                is CellInfoLte -> cellInfo.cellIdentity.ci.takeIf { it != Int.MAX_VALUE }?.toString()
-                is CellInfoWcdma -> cellInfo.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.toString()
-                is CellInfoGsm -> cellInfo.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.toString()
-                is CellInfoNr -> {
-                    val cin = cellInfo.cellIdentity as? CellIdentityNr
-                    cin?.nci?.toString()
-                }
-                else -> null
-            }
-        }
     }
 
     @Suppress("DEPRECATION")
@@ -100,26 +84,35 @@ class CellularCollector(private val ctx: Context) {
         )
     }
 
-    private fun getCurrentPowerMode(): String {
-        return ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
-            .getString("powerMode", "continuous") ?: "continuous"
-    }
-
     private fun requestFreshCellInfoAsync() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastFreshRequest.get() > FRESH_REQUEST_INTERVAL) {
                 lastFreshRequest.set(currentTime)
-
                 try {
-                    val callback = object : TelephonyManager.CellInfoCallback() {
+                    tm.requestCellInfoUpdate(ctx.mainExecutor, object : TelephonyManager.CellInfoCallback() {
                         override fun onCellInfo(cellInfo: List<CellInfo>) {
                             processCellInfoUpdate(cellInfo)
                         }
-                    }
-                    tm.requestCellInfoUpdate(ctx.mainExecutor, callback)
+                    })
                 } catch (e: Exception) {
                 }
+            }
+        }
+    }
+
+    private fun getCellInfoForCollection(): List<CellInfo>? {
+        val powerMode = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+            .getString("powerMode", "continuous") ?: "continuous"
+
+        return if (powerMode == "continuous") {
+            requestFreshCellInfoAsync()
+            try { tm.allCellInfo } catch (e: SecurityException) { null }
+        } else {
+            cellInfoCache.get() ?: run {
+                val freshInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
+                freshInfo?.let { processCellInfoUpdate(it) }
+                freshInfo
             }
         }
     }
@@ -132,24 +125,8 @@ class CellularCollector(private val ctx: Context) {
         try {
             dm["o"] = getOperatorName()
             dm["t"] = getNetworkTypeName()
-
-            val powerMode = getCurrentPowerMode()
-            var currentCellInfo: List<CellInfo>?
-
-            if (powerMode == "continuous") {
-                requestFreshCellInfoAsync()
-                currentCellInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
-            } else {
-                currentCellInfo = cellInfoCache.get()
-                if (currentCellInfo == null) {
-                    currentCellInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
-                    currentCellInfo?.let { processCellInfoUpdate(it) }
-                }
-            }
-
-            if (currentCellInfo != null && processCellInfo(currentCellInfo, dm, rp)) {
-                return
-            } else {
+            val currentCellInfo = getCellInfoForCollection()
+            if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
                 setDefaultCellValues(dm)
             }
         } catch (e: Exception) {
@@ -160,91 +137,16 @@ class CellularCollector(private val ctx: Context) {
     private fun getOperatorName(): String = tm.networkOperatorName?.takeIf { it.isNotBlank() } ?: "unknown"
 
     @Suppress("DEPRECATION")
-    private fun getNetworkTypeName(): String = when (tm.dataNetworkType) {
-        TelephonyManager.NETWORK_TYPE_LTE -> "LTE"
-        TelephonyManager.NETWORK_TYPE_HSPAP, TelephonyManager.NETWORK_TYPE_HSPA, TelephonyManager.NETWORK_TYPE_HSUPA, TelephonyManager.NETWORK_TYPE_HSDPA -> "HSPA"
-        TelephonyManager.NETWORK_TYPE_UMTS -> "UMTS"
-        TelephonyManager.NETWORK_TYPE_EDGE -> "EDGE"
-        TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS"
-        TelephonyManager.NETWORK_TYPE_GSM -> "GSM"
-        TelephonyManager.NETWORK_TYPE_CDMA -> "CDMA"
-        TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyManager.NETWORK_TYPE_EVDO_A, TelephonyManager.NETWORK_TYPE_EVDO_B -> "EVDO"
-        TelephonyManager.NETWORK_TYPE_1xRTT -> "1xRTT"
-        TelephonyManager.NETWORK_TYPE_IDEN -> "IDEN"
-        TelephonyManager.NETWORK_TYPE_NR -> "5G"
-        else -> "unknown"
-    }
+    private fun getNetworkTypeName(): String = CellProcessor.getNetworkTypeName(tm.dataNetworkType)
 
     private fun processCellInfo(cellInfoList: List<CellInfo>, dm: MutableMap<String, Any>, rp: Int): Boolean {
         val registeredCell = cellInfoList.firstOrNull { it.isRegistered } ?: return false
-
         return when (registeredCell) {
-            is CellInfoLte -> { processLteCell(registeredCell, dm, rp); true }
-            is CellInfoWcdma -> { processWcdmaCell(registeredCell, dm, rp); true }
-            is CellInfoGsm -> { processGsmCell(registeredCell, dm, rp); true }
-            is CellInfoNr -> { processNrCell(registeredCell, dm, rp); true }
+            is CellInfoLte -> { CellProcessor.processLteCell(registeredCell, dm, rp); true }
+            is CellInfoWcdma -> { CellProcessor.processWcdmaCell(registeredCell, dm, rp); true }
+            is CellInfoGsm -> { CellProcessor.processGsmCell(registeredCell, dm, rp); true }
+            is CellInfoNr -> { CellProcessor.processNrCell(registeredCell, dm, rp); true }
             else -> false
-        }
-    }
-
-    private fun processLteCell(ci: CellInfoLte, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.ci.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.tac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
-    }
-
-    private fun processWcdmaCell(ci: CellInfoWcdma, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.lac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
-    }
-
-    private fun processGsmCell(ci: CellInfoGsm, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.lac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
-    }
-
-    private fun processNrCell(ci: CellInfoNr, dm: MutableMap<String, Any>, rp: Int) {
-        val cin = ci.cellIdentity as? CellIdentityNr
-        cin?.nci?.let { dm["ci"] = it }
-        cin?.tac?.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        cin?.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        cin?.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength as? CellSignalStrengthNr
-        ss?.dbm?.takeIf { it != Int.MAX_VALUE }?.let {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(it) else RoundingUtils.rs(it, rp)
-            dm["r"] = rssi
         }
     }
 

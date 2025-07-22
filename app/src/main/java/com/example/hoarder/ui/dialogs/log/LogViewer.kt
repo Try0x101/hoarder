@@ -1,10 +1,9 @@
-package com.example.hoarder.ui
+package com.example.hoarder.ui.dialogs.log
 
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Typeface
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -18,10 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.hoarder.R
-import com.example.hoarder.data.models.LogEntry
-import com.example.hoarder.ui.dialogs.log.LogEntryFormatter
-import com.example.hoarder.ui.dialogs.log.LogPaginator
-import com.example.hoarder.ui.dialogs.log.LogRepository
+import com.example.hoarder.ui.MainActivity
 import com.google.gson.GsonBuilder
 import com.google.gson.ToNumberPolicy
 import kotlinx.coroutines.launch
@@ -60,7 +56,9 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
         val refreshButton = view.findViewById<Button>(R.id.refreshButton)
         builder.setView(view)
 
-        val logAdapter = LogAdapter(emptyList())
+        val logAdapter = LogAdapter(ctx, emptyList(), logEntryFormatter) { copyText ->
+            copyToClipboard("Hoarder Log Record", copyText)
+        }
         recyclerView.layoutManager = LinearLayoutManager(ctx)
         recyclerView.adapter = logAdapter
 
@@ -82,25 +80,12 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
         controlsContainer.visibility = View.VISIBLE
         refreshLogs()
 
-        prevButton.setOnClickListener {
-            logPaginator.prevPage()
-            renderPage()
-        }
+        prevButton.setOnClickListener { logPaginator.prevPage(); renderPage() }
+        nextButton.setOnClickListener { logPaginator.nextPage(); renderPage() }
+        copyPageButton.setOnClickListener { copyCurrentPage() }
+        refreshButton.setOnClickListener { refreshLogs() }
 
-        nextButton.setOnClickListener {
-            logPaginator.nextPage()
-            renderPage()
-        }
-
-        copyPageButton.setOnClickListener {
-            copyCurrentPage()
-        }
-
-        refreshButton.setOnClickListener {
-            refreshLogs()
-        }
-
-        val title = when(logType) {
+        val title = when (logType) {
             "cached" -> "Batch Upload Log"
             "success" -> "Upload Log"
             "error" -> "Error Log"
@@ -118,7 +103,6 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
             val allPageJson = pageEntries.joinToString(separator = ",\n\n") { entry ->
                 logEntryFormatter.formatLogEntry(entry).copyText
             }
-
             copyToClipboard("Hoarder Page Log", allPageJson)
         } catch (e: Exception) {
             Log.e("LogViewer", "Error copying log page", e)
@@ -154,64 +138,5 @@ class LogViewer(private val ctx: Context, private val logRepository: LogReposito
         prevButton.isEnabled = logPaginator.hasPrevPage()
         nextButton.isEnabled = logPaginator.hasNextPage()
         copyPageButton.isEnabled = hasData
-    }
-
-    private inner class LogAdapter(private var entries: List<LogEntry>) : RecyclerView.Adapter<LogAdapter.LogViewHolder>() {
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): LogViewHolder {
-            val container = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = RecyclerView.LayoutParams(
-                    RecyclerView.LayoutParams.MATCH_PARENT,
-                    RecyclerView.LayoutParams.WRAP_CONTENT
-                )
-            }
-            return LogViewHolder(container)
-        }
-
-        override fun onBindViewHolder(holder: LogViewHolder, position: Int) {
-            holder.bind(entries[position], position)
-        }
-
-        override fun getItemCount(): Int = entries.size
-
-        fun updateData(newEntries: List<LogEntry>) {
-            entries = newEntries
-            notifyDataSetChanged()
-        }
-
-        private inner class LogViewHolder(itemView: LinearLayout) : RecyclerView.ViewHolder(itemView) {
-            private val header: TextView = TextView(ctx).apply {
-                textSize = 16f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(ContextCompat.getColor(ctx, R.color.amoled_white))
-                setPadding(0, 0, 0, 8)
-                itemView.addView(this)
-            }
-
-            private val content: TextView = TextView(ctx).apply {
-                textSize = 12f
-                typeface = Typeface.MONOSPACE
-                setTextColor(ContextCompat.getColor(ctx, R.color.amoled_light_gray))
-                itemView.addView(this)
-            }
-
-            fun bind(entry: LogEntry, position: Int) {
-                (itemView.layoutParams as? RecyclerView.LayoutParams)?.topMargin = if (position > 0) 24 else 0
-                try {
-                    val formatted = logEntryFormatter.formatLogEntry(entry)
-                    header.text = formatted.header
-                    content.text = formatted.content
-                    itemView.setOnLongClickListener {
-                        copyToClipboard("Hoarder Log Record", formatted.copyText)
-                        true
-                    }
-                } catch (e: Exception) {
-                    Log.e("LogViewer", "Failed to format log entry", e)
-                    header.text = "Format Error"
-                    content.text = e.message ?: "Could not display entry."
-                }
-            }
-        }
     }
 }
