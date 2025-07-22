@@ -6,19 +6,21 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.example.hoarder.power.PowerManager
 import com.example.hoarder.ui.MainActivity
+import com.example.hoarder.ui.service.ServiceCommander
 import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
 
 class ActivityTransitionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
-        if (intent?.action == "com.example.hoarder.ACTIVITY_TRANSITION" && context != null) {
+        if (intent?.action == PowerManager.ACTION_ACTIVITY_TRANSITION && context != null) {
             if (ActivityTransitionResult.hasResult(intent)) {
                 val result = ActivityTransitionResult.extractResult(intent)
                 result?.transitionEvents?.forEach { event ->
                     val isMoving = event.activityType != DetectedActivity.STILL
                     val serviceIntent = Intent(context, BackgroundService::class.java).apply {
-                        action = "com.example.hoarder.MOTION_STATE_CHANGED"
+                        action = ServiceCommander.ACTION_MOTION_STATE_CHANGED
                         putExtra("isMoving", isMoving)
                     }
                     context.startService(serviceIntent)

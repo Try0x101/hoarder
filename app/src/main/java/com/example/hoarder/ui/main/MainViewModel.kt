@@ -10,6 +10,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.ui.service.ServiceCommander
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -59,9 +60,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun registerReceivers() {
-        lbm.registerReceiver(dataReceiver, IntentFilter("com.example.hoarder.DATA_UPDATE"))
+        lbm.registerReceiver(dataReceiver, IntentFilter(ServiceCommander.ACTION_DATA_UPDATE))
         receivers.add(dataReceiver)
-        lbm.registerReceiver(uploadReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+        lbm.registerReceiver(uploadReceiver, IntentFilter(ServiceCommander.ACTION_UPLOAD_STATUS))
         receivers.add(uploadReceiver)
     }
 

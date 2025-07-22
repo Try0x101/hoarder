@@ -1,16 +1,14 @@
 package com.example.hoarder.data.batching
 
-import android.os.Handler
 import com.example.hoarder.data.storage.app.Prefs
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BatchingManager(
     private val appPrefs: Prefs,
-    private val handler: Handler,
     private val coroutineScope: CoroutineScope,
     private val forceSendBuffer: () -> Unit
 ) {
@@ -22,8 +20,7 @@ class BatchingManager(
     private var maxSizeKiloBytes = 100
     private var isTriggerByMaxSizeEnabled = true
     private val isTimeoutScheduled = AtomicBoolean(false)
-
-    private val timeoutRunnable = Runnable { coroutineScope.launch { if (isEnabled && isTriggerByTimeoutEnabled) forceSendBuffer() } }
+    private var timeoutJob: Job? = null
 
     init {
         updateConfiguration()
@@ -57,9 +54,10 @@ class BatchingManager(
         }
 
         if (isTriggerByTimeoutEnabled && isTimeoutScheduled.compareAndSet(false, true)) {
-            coroutineScope.launch {
-                withContext(Dispatchers.Main) {
-                    handler.postDelayed(timeoutRunnable, timeoutMillis)
+            timeoutJob = coroutineScope.launch {
+                delay(timeoutMillis)
+                if (isEnabled && isTriggerByTimeoutEnabled) {
+                    forceSendBuffer()
                 }
             }
         }
@@ -67,7 +65,8 @@ class BatchingManager(
 
     fun onForceSendBuffer() {
         if (isTimeoutScheduled.getAndSet(false)) {
-            handler.removeCallbacks(timeoutRunnable)
+            timeoutJob?.cancel()
+            timeoutJob = null
         }
     }
 }

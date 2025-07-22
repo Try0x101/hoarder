@@ -10,80 +10,106 @@ class Prefs(ctx: Context) {
         const val POWER_MODE_CONTINUOUS = 0
         const val POWER_MODE_OPTIMIZED = 1
         const val POWER_MODE_PASSIVE = 2
+
+        const val KEY_IS_FIRST_RUN = "isFirstRun"
+        const val KEY_DATA_COLLECTION_ENABLED = "dataCollectionToggleState"
+        const val KEY_DATA_UPLOAD_ENABLED = "dataUploadToggleState"
+        const val KEY_BATCH_UPLOAD_ENABLED = "batchUploadEnabled"
+        const val KEY_SERVER_ADDRESS = "serverIpPortAddress"
+        const val KEY_GPS_PRECISION = "gpsPrecision"
+        const val KEY_GPS_ALTITUDE_PRECISION = "gpsAltitudePrecision"
+        const val KEY_RSSI_PRECISION = "rssiPrecision"
+        const val KEY_BATTERY_PRECISION = "batteryPrecision"
+        const val KEY_NETWORK_PRECISION = "networkPrecision"
+        const val KEY_SPEED_PRECISION = "speedPrecision"
+        const val KEY_BATCH_RECORD_COUNT = "batchRecordCount"
+        const val KEY_BATCH_TRIGGER_BY_COUNT_ENABLED = "batchTriggerByCountEnabled"
+        const val KEY_BATCH_TIMEOUT_SEC = "batchTimeoutSec"
+        const val KEY_BATCH_TRIGGER_BY_TIMEOUT_ENABLED = "batchTriggerByTimeoutEnabled"
+        const val KEY_BATCH_MAX_SIZE_KB = "batchMaxSizeKb"
+        const val KEY_BATCH_TRIGGER_BY_MAX_SIZE_ENABLED = "batchTriggerByMaxSizeEnabled"
+        const val KEY_COMPRESSION_LEVEL = "compressionLevel"
+        const val KEY_POWER_SAVING_MODE = "powerSavingMode"
+        const val KEY_BUFFER_WARNING_THRESHOLD_KB = "bufferWarningThresholdKb"
+        const val KEY_BULK_UPLOAD_THRESHOLD_KB = "bulkUploadThresholdKb"
+        const val KEY_BULK_JOB_ID = "bulkJobId"
+        const val KEY_BULK_JOB_STATE = "bulkJobState"
+        const val KEY_BULK_TEMP_FILE_PATH = "bulkTempFilePath"
+        const val KEY_TOTAL_UPLOADED_BYTES = "totalUploadedBytes"
+        const val KEY_TOTAL_ACTUAL_NETWORK_BYTES = "totalActualNetworkBytes"
     }
 
-    fun isFirstRun() = p.getBoolean("isFirstRun", true)
-    fun markFirstRunComplete() = p.edit().putBoolean("isFirstRun", false).apply()
+    fun isFirstRun() = p.getBoolean(KEY_IS_FIRST_RUN, true)
+    fun markFirstRunComplete() = p.edit().putBoolean(KEY_IS_FIRST_RUN, false).apply()
 
-    fun isDataCollectionEnabled() = p.getBoolean("dataCollectionToggleState", true)
-    fun setDataCollectionEnabled(e: Boolean) = p.edit().putBoolean("dataCollectionToggleState", e).apply()
+    fun isDataCollectionEnabled() = p.getBoolean(KEY_DATA_COLLECTION_ENABLED, true)
+    fun setDataCollectionEnabled(e: Boolean) = p.edit().putBoolean(KEY_DATA_COLLECTION_ENABLED, e).apply()
 
-    fun isDataUploadEnabled() = p.getBoolean("dataUploadToggleState", true)
-    fun setDataUploadEnabled(e: Boolean) = p.edit().putBoolean("dataUploadToggleState", e).apply()
+    fun isDataUploadEnabled() = p.getBoolean(KEY_DATA_UPLOAD_ENABLED, true)
+    fun setDataUploadEnabled(e: Boolean) = p.edit().putBoolean(KEY_DATA_UPLOAD_ENABLED, e).apply()
 
-    fun isBatchUploadEnabled() = p.getBoolean("batchUploadEnabled", true)
-    fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean("batchUploadEnabled", e).apply()
+    fun isBatchUploadEnabled() = p.getBoolean(KEY_BATCH_UPLOAD_ENABLED, true)
+    fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean(KEY_BATCH_UPLOAD_ENABLED, e).apply()
 
-    fun getServerAddress() =
-        p.getString("serverIpPortAddress", "188.132.234.72:5000") ?: "188.132.234.72:5000"
-    fun setServerAddress(a: String) = p.edit().putString("serverIpPortAddress", a).apply()
+    fun getServerAddress() = p.getString(KEY_SERVER_ADDRESS, "188.132.234.72:5000") ?: "188.132.234.72:5000"
+    fun setServerAddress(a: String) = p.edit().putString(KEY_SERVER_ADDRESS, a).apply()
 
-    fun getGPSPrecision() = p.getInt("gpsPrecision", 100)
-    fun setGPSPrecision(p: Int) = this.p.edit().putInt("gpsPrecision", p).apply()
+    fun getGPSPrecision() = p.getInt(KEY_GPS_PRECISION, 100)
+    fun setGPSPrecision(pr: Int) = this.p.edit().putInt(KEY_GPS_PRECISION, pr).apply()
 
-    fun getGPSAltitudePrecision() = p.getInt("gpsAltitudePrecision", 100)
-    fun setGPSAltitudePrecision(p: Int) = this.p.edit().putInt("gpsAltitudePrecision", p).apply()
+    fun getGPSAltitudePrecision() = p.getInt(KEY_GPS_ALTITUDE_PRECISION, 100)
+    fun setGPSAltitudePrecision(pr: Int) = this.p.edit().putInt(KEY_GPS_ALTITUDE_PRECISION, pr).apply()
 
-    fun getRSSIPrecision() = p.getInt("rssiPrecision", 100)
-    fun setRSSIPrecision(p: Int) = this.p.edit().putInt("rssiPrecision", p).apply()
+    fun getRSSIPrecision() = p.getInt(KEY_RSSI_PRECISION, 100)
+    fun setRSSIPrecision(pr: Int) = this.p.edit().putInt(KEY_RSSI_PRECISION, pr).apply()
 
-    fun getBatteryPrecision() = p.getInt("batteryPrecision", 100)
-    fun setBatteryPrecision(p: Int) = this.p.edit().putInt("batteryPrecision", p).apply()
+    fun getBatteryPrecision() = p.getInt(KEY_BATTERY_PRECISION, 100)
+    fun setBatteryPrecision(pr: Int) = this.p.edit().putInt(KEY_BATTERY_PRECISION, pr).apply()
 
-    fun getNetworkPrecision() = p.getInt("networkPrecision", 100)
-    fun setNetworkPrecision(p: Int) = this.p.edit().putInt("networkPrecision", p).apply()
+    fun getNetworkPrecision() = p.getInt(KEY_NETWORK_PRECISION, 100)
+    fun setNetworkPrecision(pr: Int) = this.p.edit().putInt(KEY_NETWORK_PRECISION, pr).apply()
 
-    fun getSpeedPrecision() = p.getInt("speedPrecision", 100)
-    fun setSpeedPrecision(p: Int) = this.p.edit().putInt("speedPrecision", p).apply()
+    fun getSpeedPrecision() = p.getInt(KEY_SPEED_PRECISION, 100)
+    fun setSpeedPrecision(pr: Int) = this.p.edit().putInt(KEY_SPEED_PRECISION, pr).apply()
 
-    fun getBatchRecordCount() = p.getInt("batchRecordCount", 20)
-    fun setBatchRecordCount(s: Int) = p.edit().putInt("batchRecordCount", s).apply()
+    fun getBatchRecordCount() = p.getInt(KEY_BATCH_RECORD_COUNT, 20)
+    fun setBatchRecordCount(s: Int) = p.edit().putInt(KEY_BATCH_RECORD_COUNT, s).apply()
 
-    fun isBatchTriggerByCountEnabled() = p.getBoolean("batchTriggerByCountEnabled", false)
-    fun setBatchTriggerByCountEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByCountEnabled", e).apply()
+    fun isBatchTriggerByCountEnabled() = p.getBoolean(KEY_BATCH_TRIGGER_BY_COUNT_ENABLED, false)
+    fun setBatchTriggerByCountEnabled(e: Boolean) = p.edit().putBoolean(KEY_BATCH_TRIGGER_BY_COUNT_ENABLED, e).apply()
 
-    fun getBatchTimeout() = p.getInt("batchTimeoutSec", 60)
-    fun setBatchTimeout(t: Int) = p.edit().putInt("batchTimeoutSec", t).apply()
+    fun getBatchTimeout() = p.getInt(KEY_BATCH_TIMEOUT_SEC, 60)
+    fun setBatchTimeout(t: Int) = p.edit().putInt(KEY_BATCH_TIMEOUT_SEC, t).apply()
 
-    fun isBatchTriggerByTimeoutEnabled() = p.getBoolean("batchTriggerByTimeoutEnabled", false)
-    fun setBatchTriggerByTimeoutEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByTimeoutEnabled", e).apply()
+    fun isBatchTriggerByTimeoutEnabled() = p.getBoolean(KEY_BATCH_TRIGGER_BY_TIMEOUT_ENABLED, false)
+    fun setBatchTriggerByTimeoutEnabled(e: Boolean) = p.edit().putBoolean(KEY_BATCH_TRIGGER_BY_TIMEOUT_ENABLED, e).apply()
 
-    fun getBatchMaxSizeKb() = p.getInt("batchMaxSizeKb", 5)
-    fun setBatchMaxSizeKb(s: Int) = p.edit().putInt("batchMaxSizeKb", s).apply()
+    fun getBatchMaxSizeKb() = p.getInt(KEY_BATCH_MAX_SIZE_KB, 5)
+    fun setBatchMaxSizeKb(s: Int) = p.edit().putInt(KEY_BATCH_MAX_SIZE_KB, s).apply()
 
-    fun isBatchTriggerByMaxSizeEnabled() = p.getBoolean("batchTriggerByMaxSizeEnabled", true)
-    fun setBatchTriggerByMaxSizeEnabled(e: Boolean) = p.edit().putBoolean("batchTriggerByMaxSizeEnabled", e).apply()
+    fun isBatchTriggerByMaxSizeEnabled() = p.getBoolean(KEY_BATCH_TRIGGER_BY_MAX_SIZE_ENABLED, true)
+    fun setBatchTriggerByMaxSizeEnabled(e: Boolean) = p.edit().putBoolean(KEY_BATCH_TRIGGER_BY_MAX_SIZE_ENABLED, e).apply()
 
-    fun getCompressionLevel() = p.getInt("compressionLevel", 9)
-    fun setCompressionLevel(l: Int) = p.edit().putInt("compressionLevel", l).apply()
+    fun getCompressionLevel() = p.getInt(KEY_COMPRESSION_LEVEL, 9)
+    fun setCompressionLevel(l: Int) = p.edit().putInt(KEY_COMPRESSION_LEVEL, l).apply()
 
-    fun getPowerMode() = p.getInt("powerSavingMode", POWER_MODE_PASSIVE)
-    fun setPowerMode(m: Int) = p.edit().putInt("powerSavingMode", m).apply()
+    fun getPowerMode() = p.getInt(KEY_POWER_SAVING_MODE, POWER_MODE_PASSIVE)
+    fun setPowerMode(m: Int) = p.edit().putInt(KEY_POWER_SAVING_MODE, m).apply()
 
-    fun getBufferWarningThresholdKb() = p.getInt("bufferWarningThresholdKb", 20480)
-    fun setBufferWarningThresholdKb(kb: Int) = p.edit().putInt("bufferWarningThresholdKb", kb).apply()
+    fun getBufferWarningThresholdKb() = p.getInt(KEY_BUFFER_WARNING_THRESHOLD_KB, 20480)
+    fun setBufferWarningThresholdKb(kb: Int) = p.edit().putInt(KEY_BUFFER_WARNING_THRESHOLD_KB, kb).apply()
 
-    fun getBulkUploadThresholdKb() = p.getInt("bulkUploadThresholdKb", 10240)
-    fun setBulkUploadThresholdKb(kb: Int) = p.edit().putInt("bulkUploadThresholdKb", kb).apply()
+    fun getBulkUploadThresholdKb() = p.getInt(KEY_BULK_UPLOAD_THRESHOLD_KB, 10240)
+    fun setBulkUploadThresholdKb(kb: Int) = p.edit().putInt(KEY_BULK_UPLOAD_THRESHOLD_KB, kb).apply()
 
-    fun getBulkJobId(): String? = p.getString("bulkJobId", null)
-    fun setBulkJobId(jobId: String?) = p.edit().putString("bulkJobId", jobId).apply()
+    fun getBulkJobId(): String? = p.getString(KEY_BULK_JOB_ID, null)
+    fun setBulkJobId(jobId: String?) = p.edit().putString(KEY_BULK_JOB_ID, jobId).apply()
 
-    fun getBulkJobState(): String = p.getString("bulkJobState", "IDLE") ?: "IDLE"
-    fun setBulkJobState(state: String) = p.edit().putString("bulkJobState", state).apply()
+    fun getBulkJobState(): String = p.getString(KEY_BULK_JOB_STATE, "IDLE") ?: "IDLE"
+    fun setBulkJobState(state: String) = p.edit().putString(KEY_BULK_JOB_STATE, state).apply()
 
-    fun getBulkTempFilePath(): String? = p.getString("bulkTempFilePath", null)
-    fun setBulkTempFilePath(path: String?) = p.edit().putString("bulkTempFilePath", path).apply()
+    fun getBulkTempFilePath(): String? = p.getString(KEY_BULK_TEMP_FILE_PATH, null)
+    fun setBulkTempFilePath(path: String?) = p.edit().putString(KEY_BULK_TEMP_FILE_PATH, path).apply()
 
     init {
         if (isFirstRun()) {

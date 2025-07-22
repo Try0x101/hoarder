@@ -40,8 +40,8 @@ class DataUploader(
 
     private val g: Gson = GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE).create()
     private val mapType = object : TypeToken<MutableMap<String, Any>>() {}.type
-    private val tb = AtomicLong(sp.getLong("totalUploadedBytes", 0L))
-    private val actualNetworkBytes = AtomicLong(sp.getLong("totalActualNetworkBytes", 0L))
+    private val tb = AtomicLong(sp.getLong(Prefs.KEY_TOTAL_UPLOADED_BYTES, 0L))
+    private val actualNetworkBytes = AtomicLong(sp.getLong(Prefs.KEY_TOTAL_ACTUAL_NETWORK_BYTES, 0L))
     private val bufferedSize = AtomicLong(0L)
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -54,7 +54,7 @@ class DataUploader(
     private val scheduler = UploadScheduler(ctx, h, ::forceSendBuffer)
     private val notifier = UploaderNotifier(ctx)
     private val connectivityHandler = NetworkConnectivityHandler(ctx, ::handleReconnect)
-    private val batchingManager = BatchingManager(appPrefs, h, scope, ::forceSendBuffer)
+    private val batchingManager = BatchingManager(appPrefs, scope, ::forceSendBuffer)
     private var compressionLevel = 6
 
     companion object {
@@ -189,7 +189,7 @@ class DataUploader(
     fun hasValidServer(): Boolean = ip.isNotBlank() && port > 0
     fun start() { ua.set(true); reapplyBatchingConfiguration(); connectivityHandler.start(); scheduler.start(); h.post { notifier.notifyStatus("Connecting", "...", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), bulkUploadInProgress.get()) } }
     fun stop() { ua.set(false); scheduler.stop(); batchingManager.onForceSendBuffer(); connectivityHandler.stop() }
-    fun resetCounter() { tb.set(0L); actualNetworkBytes.set(0L); lastProcessedMap.set(null); sp.edit().putLong("totalUploadedBytes", 0L).putLong("totalActualNetworkBytes", 0L).apply(); h.post { postStatusNotification("Paused", "Upload paused") } }
+    fun resetCounter() { tb.set(0L); actualNetworkBytes.set(0L); lastProcessedMap.set(null); sp.edit().putLong(Prefs.KEY_TOTAL_UPLOADED_BYTES, 0L).putLong(Prefs.KEY_TOTAL_ACTUAL_NETWORK_BYTES, 0L).apply(); h.post { postStatusNotification("Paused", "Upload paused") } }
     fun forceSendBuffer() { batchingManager.onForceSendBuffer(); scope.launch { flushBuffer() } }
     fun cleanup() { scheduler.cleanup(); stop() }
 

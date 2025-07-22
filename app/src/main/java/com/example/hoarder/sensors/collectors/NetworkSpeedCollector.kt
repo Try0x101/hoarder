@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import com.example.hoarder.common.math.RoundingUtils
+import com.example.hoarder.data.storage.app.Prefs
 import java.util.concurrent.atomic.AtomicReference
 
 class NetworkSpeedCollector(private val ctx: Context, private val sp: SharedPreferences) {
@@ -38,8 +39,8 @@ class NetworkSpeedCollector(private val ctx: Context, private val sp: SharedPref
     }
 
     fun collect(dm: MutableMap<String, Any>, isMoving: Boolean) {
-        val powerMode = sp.getString("powerMode", "continuous") ?: "continuous"
-        if (powerMode == "continuous") {
+        val powerMode = sp.getInt(Prefs.KEY_POWER_SAVING_MODE, Prefs.POWER_MODE_CONTINUOUS)
+        if (powerMode == Prefs.POWER_MODE_CONTINUOUS) {
             collectFresh(dm)
         } else {
             collectCached(dm, isMoving)
@@ -73,7 +74,7 @@ class NetworkSpeedCollector(private val ctx: Context, private val sp: SharedPref
             networkSpeedCache.set(null)
             return
         }
-        val np = sp.getInt("networkPrecision", 0)
+        val np = sp.getInt(Prefs.KEY_NETWORK_PRECISION, 0)
         val downKbps = nc.linkDownstreamBandwidthKbps
         val upKbps = nc.linkUpstreamBandwidthKbps
         if (downKbps > 0 && upKbps > 0) {
@@ -89,7 +90,7 @@ class NetworkSpeedCollector(private val ctx: Context, private val sp: SharedPref
 
     private fun updateDataMapWithCapabilities(dm: MutableMap<String, Any>, nc: NetworkCapabilities?) {
         if (nc == null) return
-        val np = sp.getInt("networkPrecision", 0)
+        val np = sp.getInt(Prefs.KEY_NETWORK_PRECISION, 0)
         val downKbps = nc.linkDownstreamBandwidthKbps
         val upKbps = nc.linkUpstreamBandwidthKbps
         if (downKbps > 0 && upKbps > 0) {

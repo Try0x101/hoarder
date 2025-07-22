@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
 
     private val pr = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
-            if (i?.action == "com.example.hoarder.PERMISSIONS_REQUIRED") {
+            if (i?.action == ServiceCommander.ACTION_PERMISSIONS_REQUIRED) {
                 permHandler.requestPerms()
             }
         }
@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.registerReceivers()
         observeViewModel()
 
-        LocalBroadcastManager.getInstance(this).registerReceiver(pr, IntentFilter("com.example.hoarder.PERMISSIONS_REQUIRED"))
+        LocalBroadcastManager.getInstance(this).registerReceiver(pr, IntentFilter(ServiceCommander.ACTION_PERMISSIONS_REQUIRED))
 
         if (prefs.isFirstRun()) {
             permHandler.setPendingAction { handleFirstRun() }

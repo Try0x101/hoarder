@@ -11,6 +11,7 @@ import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
+import com.example.hoarder.ui.service.ServiceCommander
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,7 +34,7 @@ class ServiceInitializer(
 ) {
     fun initialize() {
         if (!hasRequiredPermissions()) {
-            LocalBroadcastManager.getInstance(context).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            LocalBroadcastManager.getInstance(context).sendBroadcast(Intent(ServiceCommander.ACTION_PERMISSIONS_REQUIRED))
             stopService()
             return
         }
@@ -42,7 +43,7 @@ class ServiceInitializer(
             dataCollector.init()
             powerManager.start()
         } catch (e: SecurityException) {
-            LocalBroadcastManager.getInstance(context).sendBroadcast(Intent("com.example.hoarder.PERMISSIONS_REQUIRED"))
+            LocalBroadcastManager.getInstance(context).sendBroadcast(Intent(ServiceCommander.ACTION_PERMISSIONS_REQUIRED))
             stopService()
             return
         }
@@ -71,7 +72,7 @@ class ServiceInitializer(
         }
 
         if (shouldCollect) {
-            commandHandler.handle(Intent("com.example.hoarder.START_COLLECTION"))
+            commandHandler.handle(Intent(ServiceCommander.ACTION_START_COLLECTION))
         }
 
         if (shouldUpload && dataUploader.hasValidServer() && uploadActive.compareAndSet(false, true)) {

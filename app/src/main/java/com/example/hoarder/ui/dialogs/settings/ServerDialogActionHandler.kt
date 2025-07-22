@@ -14,6 +14,7 @@ import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.ui.dialogs.log.LogViewer
 import com.example.hoarder.ui.formatters.ByteFormatter
+import com.example.hoarder.ui.service.ServiceCommander
 import kotlinx.coroutines.launch
 
 class ServerDialogActionHandler(
@@ -28,7 +29,7 @@ class ServerDialogActionHandler(
 
     private val uploadStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.hoarder.UPLOAD_STATUS") {
+            if (intent?.action == ServiceCommander.ACTION_UPLOAD_STATUS) {
                 updateSendButtonState()
             }
         }
@@ -51,7 +52,7 @@ class ServerDialogActionHandler(
         view.findViewById<Button>(R.id.clearLogsButton).setOnClickListener {
             a.lifecycleScope.launch {
                 logRepository.clearAllLogs()
-                LocalBroadcastManager.getInstance(a).sendBroadcast(Intent("com.example.hoarder.GET_STATE"))
+                LocalBroadcastManager.getInstance(a).sendBroadcast(Intent(ServiceCommander.ACTION_GET_STATE))
                 statsViewManager.updateStats()
             }
         }
@@ -59,7 +60,7 @@ class ServerDialogActionHandler(
     }
 
     fun registerReceiver() {
-        LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, IntentFilter("com.example.hoarder.UPLOAD_STATUS"))
+        LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, IntentFilter(ServiceCommander.ACTION_UPLOAD_STATUS))
     }
 
     fun unregisterReceiver() {

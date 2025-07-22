@@ -3,6 +3,7 @@ package com.example.hoarder.data.uploader.handler
 import android.content.SharedPreferences
 import com.example.hoarder.data.models.BufferedPayload
 import com.example.hoarder.data.processing.DeltaComputer
+import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.data.uploader.NetworkUploader
 import com.example.hoarder.transport.buffer.DataBuffer
 import com.example.hoarder.transport.buffer.UploadLogger
@@ -58,8 +59,8 @@ class UploadHandler(
         totalUploadedBytes.addAndGet(uploaded)
         totalActualNetworkBytes.addAndGet(actual)
         sp.edit()
-            .putLong("totalUploadedBytes", totalUploadedBytes.get())
-            .putLong("totalActualNetworkBytes", totalActualNetworkBytes.get())
+            .putLong(Prefs.KEY_TOTAL_UPLOADED_BYTES, totalUploadedBytes.get())
+            .putLong(Prefs.KEY_TOTAL_ACTUAL_NETWORK_BYTES, totalActualNetworkBytes.get())
             .apply()
     }
 }

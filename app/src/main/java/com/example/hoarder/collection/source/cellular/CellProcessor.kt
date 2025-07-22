@@ -1,74 +1,60 @@
 package com.example.hoarder.collection.source.cellular
 
+import android.telephony.CellIdentityNr
 import android.telephony.CellInfoGsm
 import android.telephony.CellInfoLte
 import android.telephony.CellInfoNr
 import android.telephony.CellInfoWcdma
-import android.telephony.CellIdentityNr
 import android.telephony.CellSignalStrengthNr
 import android.telephony.TelephonyManager
 import com.example.hoarder.common.math.RoundingUtils
 
 object CellProcessor {
+
+    private fun processCell(
+        cellId: Number?,
+        tacLac: Int?,
+        mcc: String?,
+        mnc: String?,
+        dbm: Int?,
+        dm: MutableMap<String, Any>,
+        rp: Int
+    ) {
+        cellId?.let {
+            val longVal = it.toLong()
+            if (longVal != Int.MAX_VALUE.toLong() && longVal != Long.MAX_VALUE) {
+                dm["ci"] = it
+            }
+        }
+        tacLac?.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
+        mcc?.let { mccVal ->
+            dm["mc"] = mccVal.toIntOrNull() ?: mccVal
+        }
+        mnc?.let { dm["mn"] = it }
+        dbm?.takeIf { it != Int.MAX_VALUE }?.let {
+            dm["r"] = if (rp == -1) RoundingUtils.smartRSSI(it) else RoundingUtils.rs(it, rp)
+        }
+    }
+
     fun processLteCell(ci: CellInfoLte, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.ci.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.tac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
+        val identity = ci.cellIdentity
+        processCell(identity.ci, identity.tac, identity.mccString, identity.mncString, ci.cellSignalStrength.dbm, dm, rp)
     }
 
     fun processWcdmaCell(ci: CellInfoWcdma, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.lac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
+        val identity = ci.cellIdentity
+        processCell(identity.cid, identity.lac, identity.mccString, identity.mncString, ci.cellSignalStrength.dbm, dm, rp)
     }
 
     fun processGsmCell(ci: CellInfoGsm, dm: MutableMap<String, Any>, rp: Int) {
-        ci.cellIdentity.cid.takeIf { it != Int.MAX_VALUE }?.let { dm["ci"] = it }
-        ci.cellIdentity.lac.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        ci.cellIdentity.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        ci.cellIdentity.mncString?.let { dm["mn"] = it }
-        val ss = ci.cellSignalStrength
-        if (ss.dbm != Int.MAX_VALUE) {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(ss.dbm) else RoundingUtils.rs(ss.dbm, rp)
-            dm["r"] = rssi
-        }
+        val identity = ci.cellIdentity
+        processCell(identity.cid, identity.lac, identity.mccString, identity.mncString, ci.cellSignalStrength.dbm, dm, rp)
     }
 
     fun processNrCell(ci: CellInfoNr, dm: MutableMap<String, Any>, rp: Int) {
         val cin = ci.cellIdentity as? CellIdentityNr
-        cin?.nci?.let { dm["ci"] = it }
-        cin?.tac?.takeIf { it != Int.MAX_VALUE }?.let { dm["tc"] = it }
-        cin?.mccString?.let { mcc ->
-            val mccNum = mcc.toIntOrNull()
-            dm["mc"] = mccNum ?: mcc
-        }
-        cin?.mncString?.let { dm["mn"] = it }
         val ss = ci.cellSignalStrength as? CellSignalStrengthNr
-        ss?.dbm?.takeIf { it != Int.MAX_VALUE }?.let {
-            val rssi = if (rp == -1) RoundingUtils.smartRSSI(it) else RoundingUtils.rs(it, rp)
-            dm["r"] = rssi
-        }
+        processCell(cin?.nci, cin?.tac, cin?.mccString, cin?.mncString, ss?.dbm, dm, rp)
     }
 
     @Suppress("DEPRECATION")

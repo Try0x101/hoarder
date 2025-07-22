@@ -15,6 +15,7 @@ import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
+import com.example.hoarder.ui.service.ServiceCommander
 import com.example.hoarder.utils.NotifUtils
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,7 +53,7 @@ class BackgroundService: Service(){
 
         dataCollector = DataCollector(this, h, powerManager) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
-                .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString", json))
+                .sendBroadcast(Intent(ServiceCommander.ACTION_DATA_UPDATE).putExtra("jsonString", json))
         }
 
         commandHandler = ServiceCommandHandler(this, serviceScope, dataCollector, dataUploader, powerManager,
@@ -68,21 +69,21 @@ class BackgroundService: Service(){
     private fun registerServiceReceiver() {
         if (receiverRegistered.compareAndSet(false, true)) {
             LocalBroadcastManager.getInstance(this).registerReceiver(cr, IntentFilter().apply{
-                addAction("com.example.hoarder.START_COLLECTION")
-                addAction("com.example.hoarder.STOP_COLLECTION")
-                addAction("com.example.hoarder.START_UPLOAD")
-                addAction("com.example.hoarder.STOP_UPLOAD")
-                addAction("com.example.hoarder.FORCE_UPLOAD")
-                addAction("com.example.hoarder.SEND_BUFFER")
-                addAction("com.example.hoarder.GET_STATE")
-                addAction("com.example.hoarder.POWER_MODE_CHANGED")
-                addAction("com.example.hoarder.BATCHING_SETTINGS_CHANGED")
+                addAction(ServiceCommander.ACTION_START_COLLECTION)
+                addAction(ServiceCommander.ACTION_STOP_COLLECTION)
+                addAction(ServiceCommander.ACTION_START_UPLOAD)
+                addAction(ServiceCommander.ACTION_STOP_UPLOAD)
+                addAction(ServiceCommander.ACTION_FORCE_UPLOAD)
+                addAction(ServiceCommander.ACTION_SEND_BUFFER)
+                addAction(ServiceCommander.ACTION_GET_STATE)
+                addAction(ServiceCommander.ACTION_POWER_MODE_CHANGED)
+                addAction(ServiceCommander.ACTION_BATCHING_SETTINGS_CHANGED)
             })
         }
     }
 
     override fun onStartCommand(i: Intent?, f:Int, s:Int):Int{
-        if (i?.action == "com.example.hoarder.MOTION_STATE_CHANGED") {
+        if (i?.action == ServiceCommander.ACTION_MOTION_STATE_CHANGED) {
             if (!isInitialized.get()) initService()
             commandHandler.handle(i)
             return START_STICKY
@@ -114,7 +115,7 @@ class BackgroundService: Service(){
 
     private fun broadcastStateUpdate() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(
-            Intent("com.example.hoarder.SERVICE_STATE_UPDATE").apply {
+            Intent(ServiceCommander.ACTION_SERVICE_STATE_UPDATE).apply {
                 putExtra("dataCollectionActive", ca.get())
                 putExtra("dataUploadActive", ua.get())
                 putExtra("serviceInitialized", isInitialized.get())

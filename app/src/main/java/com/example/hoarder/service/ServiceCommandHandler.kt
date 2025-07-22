@@ -7,6 +7,7 @@ import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
+import com.example.hoarder.ui.service.ServiceCommander
 import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -23,23 +24,23 @@ class ServiceCommandHandler(
 ) {
     fun handle(intent: Intent?) {
         when (intent?.action) {
-            "com.example.hoarder.START_COLLECTION" -> handleStartCollection()
-            "com.example.hoarder.STOP_COLLECTION" -> handleStopCollection()
-            "com.example.hoarder.START_UPLOAD" -> handleStartUpload(intent)
-            "com.example.hoarder.STOP_UPLOAD" -> handleStopUpload()
-            "com.example.hoarder.FORCE_UPLOAD" -> handleForceUpload(intent)
-            "com.example.hoarder.SEND_BUFFER" -> handleSendBuffer()
-            "com.example.hoarder.GET_STATE" -> broadcastStateUpdate()
-            "com.example.hoarder.POWER_MODE_CHANGED" -> handlePowerModeChange(intent)
-            "com.example.hoarder.MOTION_STATE_CHANGED" -> handleMotionStateChange(intent)
-            "com.example.hoarder.BATCHING_SETTINGS_CHANGED" -> handleBatchingSettingsChange(intent)
+            ServiceCommander.ACTION_START_COLLECTION -> handleStartCollection()
+            ServiceCommander.ACTION_STOP_COLLECTION -> handleStopCollection()
+            ServiceCommander.ACTION_START_UPLOAD -> handleStartUpload(intent)
+            ServiceCommander.ACTION_STOP_UPLOAD -> handleStopUpload()
+            ServiceCommander.ACTION_FORCE_UPLOAD -> handleForceUpload(intent)
+            ServiceCommander.ACTION_SEND_BUFFER -> handleSendBuffer()
+            ServiceCommander.ACTION_GET_STATE -> broadcastStateUpdate()
+            ServiceCommander.ACTION_POWER_MODE_CHANGED -> handlePowerModeChange(intent)
+            ServiceCommander.ACTION_MOTION_STATE_CHANGED -> handleMotionStateChange(intent)
+            ServiceCommander.ACTION_BATCHING_SETTINGS_CHANGED -> handleBatchingSettingsChange(intent)
         }
     }
 
     private fun handleStartCollection() {
         if (collectionActive.compareAndSet(false, true)) {
             dataCollector.start()
-            updateAppPreferences("dataCollectionToggleState", true)
+            updateAppPreferences(Prefs.KEY_DATA_COLLECTION_ENABLED, true)
             broadcastStateUpdate()
         }
     }
@@ -47,9 +48,9 @@ class ServiceCommandHandler(
     private fun handleStopCollection() {
         if (collectionActive.compareAndSet(true, false)) {
             dataCollector.stop()
-            updateAppPreferences("dataCollectionToggleState", false)
+            updateAppPreferences(Prefs.KEY_DATA_COLLECTION_ENABLED, false)
             LocalBroadcastManager.getInstance(context)
-                .sendBroadcast(Intent("com.example.hoarder.DATA_UPDATE").putExtra("jsonString", ""))
+                .sendBroadcast(Intent(ServiceCommander.ACTION_DATA_UPDATE).putExtra("jsonString", ""))
             broadcastStateUpdate()
         }
     }
@@ -63,14 +64,14 @@ class ServiceCommandHandler(
                 dataUploader.resetCounter()
                 dataUploader.setServer(ip[0], ip[1].toInt())
                 dataUploader.start()
-                updateAppPreferences("dataUploadToggleState", true)
-                updateAppPreferences("serverIpPortAddress", "${ip[0]}:${ip[1]}")
+                updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, true)
+                updateAppPreferences(Prefs.KEY_SERVER_ADDRESS, "${ip[0]}:${ip[1]}")
                 broadcastStateUpdate()
             }
         } else {
             uploadActive.set(false)
             dataUploader.postStatusNotification("Error", "Invalid Server IP:Port for starting upload.")
-            updateAppPreferences("dataUploadToggleState", false)
+            updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, false)
             broadcastStateUpdate()
         }
     }
@@ -79,7 +80,7 @@ class ServiceCommandHandler(
         if (uploadActive.compareAndSet(true, false)) {
             dataUploader.stop()
             dataUploader.resetCounter()
-            updateAppPreferences("dataUploadToggleState", false)
+            updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, false)
             broadcastStateUpdate()
         }
     }
@@ -122,14 +123,14 @@ class ServiceCommandHandler(
 
         dataUploader.updateBatchSettings(enabled, recordCount, byCount, timeout, byTimeout, maxSize, byMaxSize, compLevel)
 
-        updateAppPreferences("batchUploadEnabled", enabled)
-        updateAppPreferences("batchRecordCount", recordCount)
-        updateAppPreferences("batchTriggerByCountEnabled", byCount)
-        updateAppPreferences("batchTimeoutSec", timeout)
-        updateAppPreferences("batchTriggerByTimeoutEnabled", byTimeout)
-        updateAppPreferences("batchMaxSizeKb", maxSize)
-        updateAppPreferences("batchTriggerByMaxSizeEnabled", byMaxSize)
-        updateAppPreferences("compressionLevel", compLevel)
+        updateAppPreferences(Prefs.KEY_BATCH_UPLOAD_ENABLED, enabled)
+        updateAppPreferences(Prefs.KEY_BATCH_RECORD_COUNT, recordCount)
+        updateAppPreferences(Prefs.KEY_BATCH_TRIGGER_BY_COUNT_ENABLED, byCount)
+        updateAppPreferences(Prefs.KEY_BATCH_TIMEOUT_SEC, timeout)
+        updateAppPreferences(Prefs.KEY_BATCH_TRIGGER_BY_TIMEOUT_ENABLED, byTimeout)
+        updateAppPreferences(Prefs.KEY_BATCH_MAX_SIZE_KB, maxSize)
+        updateAppPreferences(Prefs.KEY_BATCH_TRIGGER_BY_MAX_SIZE_ENABLED, byMaxSize)
+        updateAppPreferences(Prefs.KEY_COMPRESSION_LEVEL, compLevel)
         if (!enabled && uploadActive.get()) {
             dataUploader.forceSendBuffer()
         }

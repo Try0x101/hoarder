@@ -10,6 +10,7 @@ import com.example.hoarder.collection.source.CellularCollector
 import com.example.hoarder.collection.source.LocationCollector
 import com.example.hoarder.collection.source.WifiCollector
 import com.example.hoarder.data.DataUploader
+import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.collectors.BatteryDataSubCollector
 import com.example.hoarder.sensors.collectors.LocationDataSubCollector
@@ -93,17 +94,17 @@ class DataCollector(
     private fun updatePrecisionCache() {
         if (System.currentTimeMillis() - lastPrecisionUpdate > 10000L) {
             precisionCache.clear()
-            precisionCache["battery"] = sharedPrefs.getInt("batteryPrecision", -1)
-            precisionCache["gps"] = sharedPrefs.getInt("gpsPrecision", -1)
-            precisionCache["speed"] = sharedPrefs.getInt("speedPrecision", -1)
-            precisionCache["altitude"] = sharedPrefs.getInt("gpsAltitudePrecision", -1)
-            precisionCache["rssi"] = sharedPrefs.getInt("rssiPrecision", -1)
+            precisionCache["battery"] = sharedPrefs.getInt(Prefs.KEY_BATTERY_PRECISION, -1)
+            precisionCache["gps"] = sharedPrefs.getInt(Prefs.KEY_GPS_PRECISION, -1)
+            precisionCache["speed"] = sharedPrefs.getInt(Prefs.KEY_SPEED_PRECISION, -1)
+            precisionCache["altitude"] = sharedPrefs.getInt(Prefs.KEY_GPS_ALTITUDE_PRECISION, -1)
+            precisionCache["rssi"] = sharedPrefs.getInt(Prefs.KEY_RSSI_PRECISION, -1)
             lastPrecisionUpdate = System.currentTimeMillis()
         }
     }
 
     private fun shouldCollectData(isMoving: Boolean): Boolean {
-        if (sharedPrefs.getString("powerMode", "continuous") == "continuous") return true
+        if (sharedPrefs.getInt(Prefs.KEY_POWER_SAVING_MODE, Prefs.POWER_MODE_CONTINUOUS) == Prefs.POWER_MODE_CONTINUOUS) return true
         if (!isMoving && identicalReadingsCount >= 2) {
             if (System.currentTimeMillis() - lastHeartbeatTime > HEARTBEAT_INTERVAL_MS) {
                 lastHeartbeatTime = System.currentTimeMillis()
@@ -120,8 +121,8 @@ class DataCollector(
         reusableDataMap["i"] = deviceId
         reusableDataMap["n"] = deviceModel
         updatePrecisionCache()
-        val powerMode = sharedPrefs.getString("powerMode", "continuous")
-        if (powerMode == "continuous") {
+        val powerMode = sharedPrefs.getInt(Prefs.KEY_POWER_SAVING_MODE, Prefs.POWER_MODE_CONTINUOUS)
+        if (powerMode == Prefs.POWER_MODE_CONTINUOUS) {
             batterySubCollector.collectDirect(reusableDataMap)
             locationSubCollector.collectDirect(reusableDataMap)
         } else {
@@ -131,7 +132,7 @@ class DataCollector(
         wifiCollector.collect(reusableDataMap)
         cellularCollector.collect(reusableDataMap, precisionCache["rssi"] ?: -1)
         networkSpeedCollector.collect(reusableDataMap, isMoving)
-        if (hasDataChanged() || powerMode == "continuous") {
+        if (hasDataChanged() || powerMode == Prefs.POWER_MODE_CONTINUOUS) {
             processCollectedData(gson.toJson(reusableDataMap))
             updateLastDataSnapshot()
             identicalReadingsCount = 0
