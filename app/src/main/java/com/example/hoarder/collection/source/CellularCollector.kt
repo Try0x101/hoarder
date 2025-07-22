@@ -25,15 +25,11 @@ class CellularCollector(private val ctx: Context) {
     @Suppress("DEPRECATION")
     private val phoneStateListener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         object : TelephonyCallback(), TelephonyCallback.CellInfoListener {
-            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) {
-                processCellInfoUpdate(cellInfo)
-            }
+            override fun onCellInfoChanged(cellInfo: MutableList<CellInfo>) = processCellInfoUpdate(cellInfo)
         }
     } else {
         object : PhoneStateListener() {
-            override fun onCellInfoChanged(cellInfo: List<CellInfo>?) {
-                cellInfo?.let { processCellInfoUpdate(it) }
-            }
+            override fun onCellInfoChanged(cellInfo: List<CellInfo>?) { cellInfo?.let(::processCellInfoUpdate) }
         }
     }
 
@@ -44,20 +40,19 @@ class CellularCollector(private val ctx: Context) {
 
     @Suppress("DEPRECATION")
     fun init() {
-        if (isInitialized.compareAndSet(false, true)) {
-            try {
-                tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                checkPermissions()
-                if (hasPermissions.get()) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        tm.registerTelephonyCallback(ctx.mainExecutor, phoneStateListener as TelephonyCallback)
-                    } else {
-                        tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_CELL_INFO)
-                    }
+        if (!isInitialized.compareAndSet(false, true)) return
+        try {
+            tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            checkPermissions()
+            if (hasPermissions.get()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    tm.registerTelephonyCallback(ctx.mainExecutor, phoneStateListener as TelephonyCallback)
+                } else {
+                    tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_CELL_INFO)
                 }
-            } catch (e: Exception) {
-                isInitialized.set(false)
             }
+        } catch (e: Exception) {
+            isInitialized.set(false)
         }
     }
 
@@ -70,18 +65,12 @@ class CellularCollector(private val ctx: Context) {
                 } else {
                     tm.listen(phoneStateListener as PhoneStateListener, PhoneStateListener.LISTEN_NONE)
                 }
-            } catch (e: Exception) {
-            }
+            } catch (e: Exception) { }
         }
     }
 
     private fun checkPermissions() {
-        hasPermissions.set(
-            ContextCompat.checkSelfPermission(
-                ctx,
-                android.Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-        )
+        hasPermissions.set(ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED)
     }
 
     private fun requestFreshCellInfoAsync() {
@@ -91,12 +80,9 @@ class CellularCollector(private val ctx: Context) {
                 lastFreshRequest.set(currentTime)
                 try {
                     tm.requestCellInfoUpdate(ctx.mainExecutor, object : TelephonyManager.CellInfoCallback() {
-                        override fun onCellInfo(cellInfo: List<CellInfo>) {
-                            processCellInfoUpdate(cellInfo)
-                        }
+                        override fun onCellInfo(cellInfo: List<CellInfo>) = processCellInfoUpdate(cellInfo)
                     })
-                } catch (e: Exception) {
-                }
+                } catch (e: Exception) { }
             }
         }
     }
@@ -104,23 +90,17 @@ class CellularCollector(private val ctx: Context) {
     private fun getCellInfoForCollection(): List<CellInfo>? {
         val powerMode = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
             .getString("powerMode", "continuous") ?: "continuous"
-
         return if (powerMode == "continuous") {
             requestFreshCellInfoAsync()
             try { tm.allCellInfo } catch (e: SecurityException) { null }
         } else {
-            cellInfoCache.get() ?: run {
-                val freshInfo = try { tm.allCellInfo } catch (e: SecurityException) { null }
-                freshInfo?.let { processCellInfoUpdate(it) }
-                freshInfo
-            }
+            cellInfoCache.get() ?: try { tm.allCellInfo?.also(::processCellInfoUpdate) } catch (e: SecurityException) { null }
         }
     }
 
     fun collect(dm: MutableMap<String, Any>, rp: Int) {
         if (!isInitialized.get() || !hasPermissions.get()) {
-            setDefaultCellValues(dm)
-            return
+            return setDefaultCellValues(dm)
         }
         try {
             dm["o"] = getOperatorName()
@@ -141,17 +121,17 @@ class CellularCollector(private val ctx: Context) {
 
     private fun processCellInfo(cellInfoList: List<CellInfo>, dm: MutableMap<String, Any>, rp: Int): Boolean {
         val registeredCell = cellInfoList.firstOrNull { it.isRegistered } ?: return false
-        return when (registeredCell) {
-            is CellInfoLte -> { CellProcessor.processLteCell(registeredCell, dm, rp); true }
-            is CellInfoWcdma -> { CellProcessor.processWcdmaCell(registeredCell, dm, rp); true }
-            is CellInfoGsm -> { CellProcessor.processGsmCell(registeredCell, dm, rp); true }
-            is CellInfoNr -> { CellProcessor.processNrCell(registeredCell, dm, rp); true }
-            else -> false
+        when (registeredCell) {
+            is CellInfoLte -> CellProcessor.processLteCell(registeredCell, dm, rp)
+            is CellInfoWcdma -> CellProcessor.processWcdmaCell(registeredCell, dm, rp)
+            is CellInfoGsm -> CellProcessor.processGsmCell(registeredCell, dm, rp)
+            is CellInfoNr -> CellProcessor.processNrCell(registeredCell, dm, rp)
+            else -> return false
         }
+        return true
     }
 
     private fun setDefaultCellValues(dm: MutableMap<String, Any>) {
-        dm["o"] = "unknown"
-        dm["t"] = "unknown"
+        dm["o"] = "unknown"; dm["t"] = "unknown"
     }
 }

@@ -19,8 +19,8 @@ import com.example.hoarder.R
 import com.example.hoarder.common.ContextUtils
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.service.BackgroundService
-import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.main.MainViewModel
+import com.example.hoarder.ui.service.ServiceCommander
 import com.example.hoarder.utils.NotifUtils
 import com.example.hoarder.utils.PermHandler
 
@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { Prefs(this) }
     private val permHandler by lazy { PermHandler(this, h) }
     private val ui by lazy { UIHelper(this, prefs) }
+    private val serviceCommander by lazy { ServiceCommander(this) }
     internal val viewModel: MainViewModel by viewModels()
 
     private var lastData: String? = null
@@ -62,13 +63,11 @@ class MainActivity : AppCompatActivity() {
             permHandler.setPendingAction { handleFirstRun() }
             if (permHandler.hasAllPerms()) handleFirstRun() else permHandler.requestPerms()
         } else {
-            if (permHandler.hasAllPerms()) ss() else permHandler.requestPerms()
+            if (permHandler.hasAllPerms()) startServiceIfNeeded() else permHandler.requestPerms()
         }
 
-        // cancel hoarder persistent notification if shown
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.cancel(99999)
-        // then start background service as before
     }
 
     private fun observeViewModel() {
@@ -76,8 +75,6 @@ class MainActivity : AppCompatActivity() {
             lastData = json
             ui.updateRawJson(json)
         }
-
-        viewModel.isUploadEnabled.observe(this) { updateFullUploadUI() }
         viewModel.uploadStatus.observe(this) { updateFullUploadUI() }
         viewModel.uploadMessage.observe(this) { updateFullUploadUI() }
         viewModel.totalUploadedBytes.observe(this) { updateFullUploadUI() }
@@ -88,10 +85,8 @@ class MainActivity : AppCompatActivity() {
     private fun updateFullUploadUI() {
         ui.updateUploadUI(
             viewModel.isUploadEnabled.value ?: false,
-            viewModel.uploadStatus.value,
-            viewModel.uploadMessage.value,
-            viewModel.totalUploadedBytes.value,
-            viewModel.totalActualNetworkBytes.value,
+            viewModel.uploadStatus.value, viewModel.uploadMessage.value,
+            viewModel.totalUploadedBytes.value, viewModel.totalActualNetworkBytes.value,
             viewModel.bufferedDataSize.value ?: 0L
         )
     }
@@ -104,9 +99,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         NotifUtils.createSilentChannel(this)
-        if (permHandler.hasAllPerms() && !ContextUtils.isServiceRunning(this, BackgroundService::class.java)) {
-            ss()
-            rs()
+        if (permHandler.hasAllPerms()) {
+            startServiceIfNeeded()
+            restoreServiceState()
         }
         ui.updateRawJson(getLastData())
     }
@@ -120,89 +115,40 @@ class MainActivity : AppCompatActivity() {
     private fun handleFirstRun() {
         prefs.markFirstRunComplete()
         prefs.setDataCollectionEnabled(true)
-        ui.updateDataCollectionUI(true)
-
-        val cip = prefs.getServerAddress()
-        if (cip.isBlank() || !NetUtils.isValidIpPort(cip)) {
-            val dip = "127.0.0.1:5000"
-            prefs.setServerAddress(dip)
-        }
-
         prefs.setDataUploadEnabled(false)
+        ui.updateDataCollectionUI(true)
         ui.updateUploadUI(false, null, null, null, null, 0L)
-
-        ss()
+        startServiceIfNeeded()
         startCollection()
-
         h.postDelayed({ finishAffinity() }, 2000)
     }
 
-    private fun ss() {
+    private fun startServiceIfNeeded() {
+        if (ContextUtils.isServiceRunning(this, BackgroundService::class.java)) return
         val si = Intent(this, BackgroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(si) else startService(si)
     }
 
-    private fun rs() {
+    private fun restoreServiceState() {
         if (prefs.isDataCollectionEnabled()) startCollection()
-        if (prefs.isDataUploadEnabled()) {
-            val ip = prefs.getServerAddress()
-            if (NetUtils.isValidIpPort(ip)) startUpload(ip)
-        }
+        if (prefs.isDataUploadEnabled()) startUpload(prefs.getServerAddress())
     }
 
-    fun onPowerModeChanged() {
-        val intent = Intent("com.example.hoarder.POWER_MODE_CHANGED").apply {
-            putExtra("newMode", prefs.getPowerMode())
-        }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
+    fun onPowerModeChanged() = serviceCommander.notifyPowerModeChanged(prefs.getPowerMode())
 
-    fun onBatchingSettingsChanged(enabled: Boolean, recordCount: Int, byCount: Boolean, timeout: Int, byTimeout: Boolean, maxSize: Int, byMaxSize: Boolean, compLevel: Int) {
-        val intent = Intent("com.example.hoarder.BATCHING_SETTINGS_CHANGED").apply {
-            putExtra("enabled", enabled)
-            putExtra("recordCount", recordCount)
-            putExtra("byCount", byCount)
-            putExtra("timeout", timeout)
-            putExtra("byTimeout", byTimeout)
-            putExtra("maxSize", maxSize)
-            putExtra("byMaxSize", byMaxSize)
-            putExtra("compLevel", compLevel)
-        }
-        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-    }
+    fun onBatchingSettingsChanged(
+        enabled: Boolean, recordCount: Int, byCount: Boolean,
+        timeout: Int, byTimeout: Boolean, maxSize: Int, byMaxSize: Boolean, compLevel: Int
+    ) = serviceCommander.notifyBatchingSettingsChanged(enabled, recordCount, byCount, timeout, byTimeout, maxSize, byMaxSize, compLevel)
 
-    fun startCollection() {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.START_COLLECTION"))
-    }
-
+    fun startCollection() = serviceCommander.startCollection()
     fun stopCollection() {
         ui.updateRawJson(null)
         lastData = null
-        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_COLLECTION"))
+        serviceCommander.stopCollection()
     }
-
-    fun startUpload(sa: String) {
-        if (NetUtils.isValidIpPort(sa)) {
-            LocalBroadcastManager.getInstance(this)
-                .sendBroadcast(Intent("com.example.hoarder.START_UPLOAD").putExtra("ipPort", sa))
-
-            val currentData = getLastData()
-            if (currentData != null && currentData.isNotBlank()) {
-                h.postDelayed({
-                    LocalBroadcastManager.getInstance(this)
-                        .sendBroadcast(Intent("com.example.hoarder.FORCE_UPLOAD").putExtra("forcedData", currentData))
-                }, 500)
-            }
-        }
-    }
-
-    fun stopUpload() {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.STOP_UPLOAD"))
-    }
-
-    fun sendBuffer() {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent("com.example.hoarder.SEND_BUFFER"))
-    }
-
+    fun startUpload(sa: String) = serviceCommander.startUpload(sa, getLastData())
+    fun stopUpload() = serviceCommander.stopUpload()
+    fun sendBuffer() = serviceCommander.sendBuffer()
     fun getLastData(): String? = lastData
 }

@@ -69,7 +69,7 @@ class ServiceCommandHandler(
             }
         } else {
             uploadActive.set(false)
-            dataUploader.notifyStatus("Error", "Invalid Server IP:Port for starting upload.", 0L, 0L, 0L)
+            dataUploader.postStatusNotification("Error", "Invalid Server IP:Port for starting upload.")
             updateAppPreferences("dataUploadToggleState", false)
             broadcastStateUpdate()
         }

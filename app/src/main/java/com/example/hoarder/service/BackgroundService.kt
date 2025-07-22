@@ -48,7 +48,7 @@ class BackgroundService: Service(){
         servicePrefs = getSharedPreferences("HoarderServicePrefs", MODE_PRIVATE)
         appPrefs = Prefs(this)
         powerManager = PowerManager(this, appPrefs)
-        dataUploader = DataUploader(this, h, servicePrefs, powerManager, appPrefs)
+        dataUploader = DataUploader(this, h, servicePrefs, appPrefs)
 
         dataCollector = DataCollector(this, h, powerManager) { json ->
             LocalBroadcastManager.getInstance(applicationContext)
