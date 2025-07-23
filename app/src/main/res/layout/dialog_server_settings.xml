@@ -17,190 +17,220 @@
             android:textColor="@color/amoled_light_gray"
             android:textSize="14sp"/>
 
-        <EditText
-            android:id="@+id/serverIpPortEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Server Address (e.g., domain.com:port)"
-            android:textColor="@color/amoled_white"
-            android:textColorHint="@color/amoled_light_gray"
-            android:backgroundTint="@color/amoled_true_blue"
-            android:inputType="textUri"
-            android:maxLines="1"
-            android:imeOptions="actionDone"
-            android:layout_marginBottom="16dp"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Buffer Warning Threshold (KB)"
-            android:textColor="@color/amoled_light_gray"
-            android:textSize="14sp"/>
-
-        <EditText
-            android:id="@+id/bufferWarningThresholdEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Warning threshold in KB (default: 5)"
-            android:textColor="@color/amoled_white"
-            android:textColorHint="@color/amoled_light_gray"
-            android:backgroundTint="@color/amoled_true_blue"
-            android:inputType="number"
-            android:maxLines="1"
-            android:layout_marginBottom="16dp"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Bulk Upload Threshold (KB)"
-            android:textColor="@color/amoled_light_gray"
-            android:textSize="14sp"/>
-
-        <EditText
-            android:id="@+id/bulkUploadThresholdEditText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Threshold in KB (default: 10240)"
-            android:textColor="@color/amoled_white"
-            android:textColorHint="@color/amoled_light_gray"
-            android:backgroundTint="@color/amoled_true_blue"
-            android:inputType="number"
-            android:maxLines="1"
-            android:layout_marginBottom="16dp"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Upload Statistics (Payload / Network)"
-            android:textColor="@color/amoled_light_gray"
-            android:textSize="14sp"
-            android:layout_marginBottom="8dp"/>
-
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingVertical="4dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Last Hour"
-                android:textColor="@color/amoled_white"/>
-            <TextView
-                android:id="@+id/statsLastHour"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:fontFamily="monospace"
-                android:text="0 B / 0 B"
-                android:textColor="@color/amoled_white"/>
-        </RelativeLayout>
-
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="4dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Last 24 Hours"
-                android:textColor="@color/amoled_white"/>
-            <TextView
-                android:id="@+id/statsLastDay"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:fontFamily="monospace"
-                android:text="0 B / 0 B"
-                android:textColor="@color/amoled_white"/>
-        </RelativeLayout>
-
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="4dp"
             android:layout_marginBottom="16dp">
-            <TextView
-                android:layout_width="wrap_content"
+
+            <EditText
+                android:id="@+id/serverIpPortEditText"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Last 7 Days"
-                android:textColor="@color/amoled_white"/>
-            <TextView
-                android:id="@+id/statsLast7Days"
+                android:layout_toStartOf="@+id/changeServerButton"
+                android:layout_marginEnd="8dp"
+                android:hint="Server Address (e.g., domain.com:port)"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:inputType="textUri"
+                android:maxLines="1" />
+
+            <Button
+                android:id="@+id/changeServerButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
-                android:fontFamily="monospace"
-                android:text="0 B / 0 B"
-                android:textColor="@color/amoled_white"/>
+                android:text="Change"/>
         </RelativeLayout>
 
         <Button
-            android:id="@+id/batchingSettingsButton"
+            android:id="@+id/advancedSettingsButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Live Batching and Compression..."
-            android:backgroundTint="@color/amoled_medium_gray"
-            android:textColor="@color/amoled_white"
-            app:cornerRadius="16dp"
-            android:layout_marginBottom="16dp"/>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Logs"
-            android:textColor="@color/amoled_light_gray"
-            android:textSize="14sp"
-            android:layout_marginBottom="8dp"/>
-
-        <Button
-            android:id="@+id/viewSuccessLogButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="View Upload Log"
+            android:text="Advanced Settings..."
             android:backgroundTint="@color/amoled_medium_gray"
             android:textColor="@color/amoled_white"
             app:cornerRadius="16dp"
             android:layout_marginBottom="8dp"/>
 
-        <Button
-            android:id="@+id/viewErrorLogButton"
+        <LinearLayout
+            android:id="@+id/advancedSettingsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="View Error Log"
-            android:backgroundTint="@color/amoled_medium_gray"
-            android:textColor="@color/amoled_white"
-            app:cornerRadius="16dp"
-            android:layout_marginBottom="8dp"/>
+            android:orientation="vertical"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/viewCachedUploadLogButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="View Batch Upload Log"
-            android:backgroundTint="@color/amoled_medium_gray"
-            android:textColor="@color/amoled_white"
-            app:cornerRadius="16dp"
-            android:layout_marginBottom="16dp"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Buffer Warning Threshold (KB)"
+                android:textColor="@color/amoled_light_gray"
+                android:textSize="14sp"/>
 
-        <Button
-            android:id="@+id/sendBufferedDataButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Send Buffered Data"
-            android:backgroundTint="@color/amoled_true_blue"
-            android:textColor="@color/amoled_white"
-            app:cornerRadius="16dp"
-            android:visibility="gone"
-            android:layout_marginBottom="8dp"/>
+            <EditText
+                android:id="@+id/bufferWarningThresholdEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Warning threshold in KB (default: 5)"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:inputType="number"
+                android:maxLines="1"
+                android:layout_marginBottom="16dp"/>
 
-        <Button
-            android:id="@+id/clearLogsButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Clear All Logs"
-            android:backgroundTint="@color/amoled_medium_gray"
-            android:textColor="@color/amoled_red"
-            app:cornerRadius="16dp"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bulk Upload Threshold (KB)"
+                android:textColor="@color/amoled_light_gray"
+                android:textSize="14sp"/>
 
+            <EditText
+                android:id="@+id/bulkUploadThresholdEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Threshold in KB (default: 10240)"
+                android:textColor="@color/amoled_white"
+                android:textColorHint="@color/amoled_light_gray"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:inputType="number"
+                android:maxLines="1"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Upload Statistics (Payload / Network)"
+                android:textColor="@color/amoled_light_gray"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="4dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Last Hour"
+                    android:textColor="@color/amoled_white"/>
+                <TextView
+                    android:id="@+id/statsLastHour"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:fontFamily="monospace"
+                    android:text="0 B / 0 B"
+                    android:textColor="@color/amoled_white"/>
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="4dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Last 24 Hours"
+                    android:textColor="@color/amoled_white"/>
+                <TextView
+                    android:id="@+id/statsLastDay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:fontFamily="monospace"
+                    android:text="0 B / 0 B"
+                    android:textColor="@color/amoled_white"/>
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingVertical="4dp"
+                android:layout_marginBottom="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Last 7 Days"
+                    android:textColor="@color/amoled_white"/>
+                <TextView
+                    android:id="@+id/statsLast7Days"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:fontFamily="monospace"
+                    android:text="0 B / 0 B"
+                    android:textColor="@color/amoled_white"/>
+            </RelativeLayout>
+
+            <Button
+                android:id="@+id/batchingSettingsButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Live Batching and Compression..."
+                android:backgroundTint="@color/amoled_medium_gray"
+                android:textColor="@color/amoled_white"
+                app:cornerRadius="16dp"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Logs"
+                android:textColor="@color/amoled_light_gray"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/viewSuccessLogButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="View Upload Log"
+                android:backgroundTint="@color/amoled_medium_gray"
+                android:textColor="@color/amoled_white"
+                app:cornerRadius="16dp"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/viewErrorLogButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="View Error Log"
+                android:backgroundTint="@color/amoled_medium_gray"
+                android:textColor="@color/amoled_white"
+                app:cornerRadius="16dp"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/viewCachedUploadLogButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="View Batch Upload Log"
+                android:backgroundTint="@color/amoled_medium_gray"
+                android:textColor="@color/amoled_white"
+                app:cornerRadius="16dp"
+                android:layout_marginBottom="16dp"/>
+
+            <Button
+                android:id="@+id/sendBufferedDataButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Send Buffered Data"
+                android:backgroundTint="@color/amoled_true_blue"
+                android:textColor="@color/amoled_white"
+                app:cornerRadius="16dp"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/clearLogsButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Clear All Logs"
+                android:backgroundTint="@color/amoled_medium_gray"
+                android:textColor="@color/amoled_red"
+                app:cornerRadius="16dp"/>
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

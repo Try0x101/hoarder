@@ -1,12 +1,12 @@
 package com.example.hoarder.ui.managers
 
 import android.widget.LinearLayout
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.ui.MainActivity
 import com.example.hoarder.ui.dialogs.PrecisionChooserDialog
 
-class PrecisionSettingsManager(private val a: MainActivity, private val p: Prefs, private val onPrecisionChanged: () -> Unit) {
+class PrecisionSettingsManager(private val a: AppCompatActivity, private val p: Prefs, private val onPrecisionChanged: () -> Unit) {
 
     private val precisionChooser by lazy { PrecisionChooserDialog(a, p, onPrecisionChanged) }
 

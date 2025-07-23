@@ -3,6 +3,7 @@ package com.example.hoarder.ui
 import android.view.View
 import android.widget.TextView
 import androidx.annotation.StringRes
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.transport.network.NetUtils
@@ -11,7 +12,7 @@ import com.example.hoarder.ui.formatters.PrecisionFormatter
 import com.example.hoarder.ui.formatters.StatusFormatter
 import com.example.hoarder.ui.state.UploadState
 
-class StatusManager(private val a: MainActivity, private val p: Prefs) {
+class StatusManager(private val a: AppCompatActivity, private val p: Prefs) {
 
     fun updateDataCollectionUI(isActive: Boolean) {
         val subtitle = a.findViewById<TextView>(R.id.dataCollectionSubtitle)
@@ -59,7 +60,7 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun updatePrecisionLabel(id: Int, text: String) {
-        a.findViewById<TextView>(id).text = text
+        a.findViewById<TextView>(id)?.text = text
     }
 
     private fun updatePrecisionInfoVisibility() {
@@ -73,7 +74,7 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
 
     private fun updateInfoVisibility(id: Int, show: Boolean, @StringRes textResId: Int) {
         val view = a.findViewById<TextView>(id)
-        view.visibility = if (show) View.VISIBLE else View.GONE
-        if (show) view.setText(textResId)
+        view?.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) view?.setText(textResId)
     }
 }

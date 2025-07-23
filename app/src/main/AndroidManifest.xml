@@ -40,6 +40,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.TelemetrySettingsActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.MainActivity" />
+
         <service
             android:name="com.example.hoarder.service.BackgroundService"
             android:enabled="true"

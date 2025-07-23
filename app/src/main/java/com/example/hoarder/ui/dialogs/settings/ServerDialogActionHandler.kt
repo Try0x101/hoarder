@@ -1,6 +1,5 @@
 package com.example.hoarder.ui.dialogs.settings
 
-import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.Button
@@ -8,7 +7,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.ui.MainActivity
+import com.example.hoarder.ui.TelemetrySettingsActivity
 import com.example.hoarder.ui.dialogs.log.LogRepository
 import com.example.hoarder.ui.dialogs.log.LogViewer
 import com.example.hoarder.ui.formatters.ByteFormatter
@@ -16,7 +15,7 @@ import com.example.hoarder.ui.service.ServiceCommander
 import kotlinx.coroutines.launch
 
 class ServerDialogActionHandler(
-    private val a: MainActivity,
+    private val a: TelemetrySettingsActivity,
     private val p: Prefs,
     private val view: View,
     private val logRepository: LogRepository,

@@ -2,19 +2,15 @@ package com.example.hoarder.ui.managers
 
 import android.view.View
 import android.widget.ImageView
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
-import com.example.hoarder.ui.MainActivity
 
-class SectionToggleManager(private val a: MainActivity, private val updateJsonCallback: () -> Unit) {
+class SectionToggleManager(private val a: AppCompatActivity, private val updateJsonCallback: () -> Unit) {
 
     fun setup() {
         val dataCollectionHeader = a.findViewById<View>(R.id.dataCollectionHeader)
         val dataCollectionContent = a.findViewById<View>(R.id.dataCollectionContent)
         val dataCollectionArrow = a.findViewById<ImageView>(R.id.dataCollectionArrow)
-
-        val dataDescriptionHeader = a.findViewById<View>(R.id.dataDescriptionHeader)
-        val dataDescriptionContent = a.findViewById<View>(R.id.dataDescriptionContent)
-        val dataDescriptionArrow = a.findViewById<ImageView>(R.id.dataDescriptionArrow)
 
         val precisionSettingsHeader = a.findViewById<View>(R.id.precisionSettingsHeader)
         val precisionSettingsContent = a.findViewById<View>(R.id.precisionSettingsContent)
@@ -30,7 +26,6 @@ class SectionToggleManager(private val a: MainActivity, private val updateJsonCa
                 updateJsonCallback()
             }
         }
-        dataDescriptionHeader.setOnClickListener { toggleVisibility(dataDescriptionContent, dataDescriptionArrow) }
         precisionSettingsHeader.setOnClickListener { toggleVisibility(precisionSettingsContent, precisionSettingsArrow) }
         powerSavingHeader.setOnClickListener { toggleVisibility(powerSavingContent, powerSavingArrow) }
     }

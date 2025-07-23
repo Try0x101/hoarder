@@ -6,11 +6,12 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Switch
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.ui.MainActivity
+import com.example.hoarder.ui.TelemetrySettingsActivity
 
-class BatchSettingsDialogHandler(private val a: MainActivity, private val p: Prefs) {
+class BatchSettingsDialogHandler(private val a: AppCompatActivity, private val p: Prefs) {
 
     fun show() {
         val builder = AlertDialog.Builder(a, R.style.AlertDialogTheme)
@@ -58,13 +59,16 @@ class BatchSettingsDialogHandler(private val a: MainActivity, private val p: Pre
                 p.setBatchTriggerByMaxSizeEnabled(triggerByMaxSizeSwitch.isChecked)
                 p.setBatchMaxSizeKb(maxSizeEditText.text.toString().toIntOrNull() ?: p.getBatchMaxSizeKb())
                 p.setCompressionLevel(compressionLevelEditText.text.toString().toIntOrNull()?.coerceIn(0, 9) ?: p.getCompressionLevel())
-                a.onBatchingSettingsChanged(
-                    p.isBatchUploadEnabled(),
-                    p.getBatchRecordCount(), p.isBatchTriggerByCountEnabled(),
-                    p.getBatchTimeout(), p.isBatchTriggerByTimeoutEnabled(),
-                    p.getBatchMaxSizeKb(), p.isBatchTriggerByMaxSizeEnabled(),
-                    p.getCompressionLevel()
-                )
+
+                if (a is TelemetrySettingsActivity) {
+                    a.onBatchingSettingsChanged(
+                        p.isBatchUploadEnabled(),
+                        p.getBatchRecordCount(), p.isBatchTriggerByCountEnabled(),
+                        p.getBatchTimeout(), p.isBatchTriggerByTimeoutEnabled(),
+                        p.getBatchMaxSizeKb(), p.isBatchTriggerByMaxSizeEnabled(),
+                        p.getCompressionLevel()
+                    )
+                }
                 dialog.dismiss()
             }
             .show()

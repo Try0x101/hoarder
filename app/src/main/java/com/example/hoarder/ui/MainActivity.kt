@@ -9,31 +9,21 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
+import android.widget.RelativeLayout
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.R
 import com.example.hoarder.common.ContextUtils
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.service.BackgroundService
-import com.example.hoarder.ui.main.MainViewModel
 import com.example.hoarder.ui.service.ServiceCommander
-import com.example.hoarder.ui.state.UploadState
-import com.example.hoarder.utils.NotifUtils
 import com.example.hoarder.utils.PermHandler
 
 class MainActivity : AppCompatActivity() {
     private val h = Handler(Looper.getMainLooper())
     private val prefs by lazy { Prefs(this) }
     private val permHandler by lazy { PermHandler(this, h) }
-    private val ui by lazy { UIHelper(this, prefs) }
     private val serviceCommander by lazy { ServiceCommander(this) }
-    internal val viewModel: MainViewModel by viewModels()
-
-    private var lastData: String? = null
 
     private val pr = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
@@ -45,18 +35,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, i ->
-            val sb = i.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(sb.left, sb.top, sb.right, sb.bottom)
-            i
-        }
 
-        ui.setupUI()
-        NotifUtils.createSilentChannel(this)
-        viewModel.registerReceivers()
-        observeViewModel()
+        findViewById<RelativeLayout>(R.id.telemetrySettingsButton).setOnClickListener {
+            startActivity(Intent(this, TelemetrySettingsActivity::class.java))
+        }
 
         LocalBroadcastManager.getInstance(this).registerReceiver(pr, IntentFilter(ServiceCommander.ACTION_PERMISSIONS_REQUIRED))
 
@@ -71,23 +54,6 @@ class MainActivity : AppCompatActivity() {
         nm.cancel(99999)
     }
 
-    private fun observeViewModel() {
-        viewModel.lastJson.observe(this) { json ->
-            lastData = json
-            ui.updateRawJson(json)
-        }
-        viewModel.uploadState.observe(this) { state ->
-            updateFullUploadUI(state)
-        }
-    }
-
-    private fun updateFullUploadUI(state: UploadState) {
-        ui.updateUploadUI(
-            prefs.isDataUploadEnabled(),
-            state
-        )
-    }
-
     override fun onRequestPermissionsResult(rc: Int, perms: Array<String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
         permHandler.handleResult(rc, res)
@@ -95,12 +61,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        NotifUtils.createSilentChannel(this)
         if (permHandler.hasAllPerms()) {
             startServiceIfNeeded()
             restoreServiceState()
         }
-        ui.updateRawJson(getLastData())
     }
 
     override fun onDestroy() {
@@ -113,10 +77,8 @@ class MainActivity : AppCompatActivity() {
         prefs.markFirstRunComplete()
         prefs.setDataCollectionEnabled(true)
         prefs.setDataUploadEnabled(false)
-        ui.updateDataCollectionUI(true)
-        ui.updateUploadUI(false, UploadState())
         startServiceIfNeeded()
-        startCollection()
+        startActivity(Intent(this, TelemetrySettingsActivity::class.java))
         h.postDelayed({ finishAffinity() }, 2000)
     }
 
@@ -127,25 +89,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restoreServiceState() {
-        if (prefs.isDataCollectionEnabled()) startCollection()
-        if (prefs.isDataUploadEnabled()) startUpload(prefs.getServerAddress())
+        if (prefs.isDataCollectionEnabled()) serviceCommander.startCollection()
+        if (prefs.isDataUploadEnabled()) serviceCommander.startUpload(prefs.getServerAddress(), null)
     }
-
-    fun onPowerModeChanged() = serviceCommander.notifyPowerModeChanged(prefs.getPowerMode())
-
-    fun onBatchingSettingsChanged(
-        enabled: Boolean, recordCount: Int, byCount: Boolean,
-        timeout: Int, byTimeout: Boolean, maxSize: Int, byMaxSize: Boolean, compLevel: Int
-    ) = serviceCommander.notifyBatchingSettingsChanged(enabled, recordCount, byCount, timeout, byTimeout, maxSize, byMaxSize, compLevel)
-
-    fun startCollection() = serviceCommander.startCollection()
-    fun stopCollection() {
-        ui.updateRawJson(null)
-        lastData = null
-        serviceCommander.stopCollection()
-    }
-    fun startUpload(sa: String) = serviceCommander.startUpload(sa, getLastData())
-    fun stopUpload() = serviceCommander.stopUpload()
-    fun sendBuffer() = serviceCommander.sendBuffer()
-    fun getLastData(): String? = lastData
 }

@@ -21,6 +21,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val uploadState: LiveData<UploadState> = ServiceStateRepository.uploadState.asLiveData()
 
+    private val serviceCommander = ServiceCommander(application)
+
     private val lbm = LocalBroadcastManager.getInstance(application)
     private val receivers = mutableListOf<BroadcastReceiver>()
 
@@ -34,6 +36,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lbm.registerReceiver(dataReceiver, IntentFilter(ServiceCommander.ACTION_DATA_UPDATE))
         receivers.add(dataReceiver)
     }
+
+    fun onPowerModeChanged(newMode: Int) {
+        serviceCommander.notifyPowerModeChanged(newMode)
+    }
+
+    fun onBatchingSettingsChanged(
+        enabled: Boolean, recordCount: Int, byCount: Boolean,
+        timeout: Int, byTimeout: Boolean, maxSize: Int, byMaxSize: Boolean, compLevel: Int
+    ) {
+        serviceCommander.notifyBatchingSettingsChanged(enabled, recordCount, byCount, timeout, byTimeout, maxSize, byMaxSize, compLevel)
+    }
+
+    fun startCollection() = serviceCommander.startCollection()
+    fun stopCollection() = serviceCommander.stopCollection()
+    fun startUpload(serverAddress: String, currentData: String?) = serviceCommander.startUpload(serverAddress, currentData)
+    fun stopUpload() = serviceCommander.stopUpload()
+    fun sendBuffer() = serviceCommander.sendBuffer()
+
 
     override fun onCleared() {
         super.onCleared()

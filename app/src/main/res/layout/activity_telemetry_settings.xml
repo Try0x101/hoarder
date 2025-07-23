@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/amoled_black"
+    android:fitsSystemWindows="true">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="Telemetry"
+        app:titleTextColor="@color/amoled_white" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="16dp">
+
+            <RelativeLayout
+                style="@style/SettingsRow">
+
+                <ImageView
+                    android:id="@+id/dataCollectionIcon"
+                    style="@style/SettingsIcon"
+                    android:src="@android:drawable/ic_menu_mylocation" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_toStartOf="@id/dataCollectionSwitch"
+                    android:layout_toEndOf="@id/dataCollectionIcon"
+                    android:layout_centerVertical="true"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/SettingsTitle"
+                        android:text="Data Collection" />
+                    <TextView
+                        android:id="@+id/dataCollectionSubtitle"
+                        style="@style/SettingsSubtitle"
+                        android:text="Inactive" />
+                </LinearLayout>
+                <Switch
+                    android:id="@+id/dataCollectionSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector" />
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/serverUploadRow"
+                style="@style/SettingsRow">
+                <ImageView
+                    android:id="@+id/serverUploadIcon"
+                    style="@style/SettingsIcon"
+                    android:src="@android:drawable/stat_sys_upload" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_toStartOf="@id/serverUploadSwitch"
+                    android:layout_toEndOf="@id/serverUploadIcon"
+                    android:layout_centerVertical="true"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/SettingsTitle"
+                        android:text="Server Upload" />
+                    <TextView
+                        android:id="@+id/serverUploadBytes"
+                        style="@style/SettingsSubtitle"
+                        android:text="Uploaded: 0 B"
+                        android:visibility="gone"/>
+                    <TextView
+                        android:id="@+id/serverUploadStatus"
+                        style="@style/SettingsSubtitle"
+                        android:text="Inactive" />
+                </LinearLayout>
+                <Switch
+                    android:id="@+id/serverUploadSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:thumbTint="@color/amoled_white"
+                    android:track="@drawable/switch_track_selector" />
+            </RelativeLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <RelativeLayout
+                    android:id="@+id/dataCollectionHeader"
+                    style="@style/SettingsRow">
+
+                    <ImageView
+                        android:id="@+id/jsonIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@drawable/ic_live_telemetry" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/dataCollectionArrow"
+                        android:layout_toEndOf="@id/jsonIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Live Telemetry" />
+                    </LinearLayout>
+
+                    <ImageView
+                        android:id="@+id/dataCollectionArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@android:drawable/arrow_down_float" />
+                </RelativeLayout>
+
+                <ScrollView
+                    android:id="@+id/dataCollectionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/jsonContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/amoled_light_gray"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:typeface="monospace"/>
+
+                </ScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <RelativeLayout
+                    android:id="@+id/precisionSettingsHeader"
+                    style="@style/SettingsRow">
+                    <ImageView
+                        android:id="@+id/precisionSettingsIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@android:drawable/ic_menu_preferences" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/precisionSettingsArrow"
+                        android:layout_toEndOf="@id/precisionSettingsIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Precision Settings" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:text="Configure data rounding" />
+                    </LinearLayout>
+                    <ImageView
+                        android:id="@+id/precisionSettingsArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@android:drawable/arrow_down_float" />
+                </RelativeLayout>
+                <LinearLayout
+                    android:id="@+id/precisionSettingsContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="20dp"
+                    android:visibility="gone">
+                    <LinearLayout android:id="@+id/gpsPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="GPS"/>
+                            <TextView android:id="@+id/gpsPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/gpsPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/gpsAltitudePrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="GPS Altitude"/>
+                            <TextView android:id="@+id/gpsAltitudePrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/gpsAltitudePrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/rssiPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="RSSI"/>
+                            <TextView android:id="@+id/rssiPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/rssiPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/batteryPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Battery"/>
+                            <TextView android:id="@+id/batteryPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/batteryPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/networkPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Network Speed"/>
+                            <TextView android:id="@+id/networkPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/networkPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/speedPrecisionSetting" style="@style/ClickableSettingsArea">
+                        <RelativeLayout style="@style/SettingsRowContent">
+                            <TextView style="@style/SettingsTitle" android:text="Speed"/>
+                            <TextView android:id="@+id/speedPrecisionValue" style="@style/SettingsSubtitle" android:layout_alignParentEnd="true"/>
+                        </RelativeLayout>
+                        <TextView android:id="@+id/speedPrecisionInfo" style="@style/SettingsInfoText" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <RelativeLayout
+                    android:id="@+id/powerSavingHeader"
+                    style="@style/SettingsRow">
+                    <ImageView
+                        android:id="@+id/powerSavingIcon"
+                        style="@style/SettingsIcon"
+                        android:src="@android:drawable/ic_lock_power_off"
+                        app:tint="@color/amoled_light_gray" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_toStartOf="@id/powerSavingArrow"
+                        android:layout_toEndOf="@id/powerSavingIcon"
+                        android:layout_centerVertical="true"
+                        android:orientation="vertical">
+                        <TextView
+                            style="@style/SettingsTitle"
+                            android:text="Power Saving" />
+                        <TextView
+                            android:id="@+id/powerSavingSubtitle"
+                            style="@style/SettingsSubtitle"
+                            android:text="Continuous" />
+                    </LinearLayout>
+                    <ImageView
+                        android:id="@+id/powerSavingArrow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@android:drawable/arrow_down_float" />
+                </RelativeLayout>
+                <LinearLayout
+                    android:id="@+id/powerSavingContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="20dp"
+                    android:paddingBottom="16dp"
+                    android:visibility="gone">
+                    <RadioGroup
+                        android:id="@+id/powerModeRadioGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="8dp">
+                        <RadioButton
+                            android:id="@+id/radioContinuous"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Continuous"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="16dp"
+                            android:lineSpacingExtra="4dp"
+                            android:text="Max Fidelity / High Power.\n• Collection: Data is collected precisely every 1 second.\n• GPS: Always active at highest accuracy.\n• Uploads: Every data point is sent for immediate processing.\n• Use Case: Best for testing or when device is charging. High battery impact." />
+                        <RadioButton
+                            android:id="@+id/radioOptimized"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Optimized"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:lineSpacingExtra="4dp"
+                            android:text="All-Day Tracking / Low Power.\n• Motion Detection: Uses Google Activity Recognition API for accurate movement detection.\n• Adaptive Intervals: Collection slows down when stationary (1-5 mins) and adapts to speed when moving (5-30 secs).\n• Smart GPS: Automatically disabled after 10 mins of being stationary to save power.\n• Use Case: Recommended for normal all-day use with minimal battery drain." />
+                        <RadioButton
+                            android:id="@+id/radioPassive"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Passive"
+                            android:textColor="@color/amoled_white"
+                            android:buttonTint="@color/amoled_true_blue"
+                            android:paddingStart="8dp" />
+                        <TextView
+                            style="@style/SettingsSubtitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="42dp"
+                            android:paddingEnd="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:lineSpacingExtra="4dp"
+                            android:text="Stealth / Ultra Low Power.\n• Location Piggyback: Only uses location updates from other apps, never activates GPS.\n• No Background Wakeups: Works only when device/system/app provides data via events.\n• Ideal for: Maximum battery life while retaining background persistence." />
+                    </RadioGroup>
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

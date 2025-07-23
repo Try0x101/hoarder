@@ -1,11 +1,18 @@
 package com.example.hoarder.ui.managers
 
 import android.widget.Switch
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.ui.MainActivity
 
-class MainSwitchManager(private val a: MainActivity, private val p: Prefs) {
+class MainSwitchManager(private val a: AppCompatActivity, private val p: Prefs, private val callbacks: MainSwitchCallbacks) {
+
+    interface MainSwitchCallbacks {
+        fun startCollection()
+        fun stopCollection()
+        fun startUpload(address: String)
+        fun stopUpload()
+    }
 
     fun setup() {
         val dataCollectionSwitch = a.findViewById<Switch>(R.id.dataCollectionSwitch)
@@ -16,7 +23,7 @@ class MainSwitchManager(private val a: MainActivity, private val p: Prefs) {
 
         dataCollectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             p.setDataCollectionEnabled(isChecked)
-            if (isChecked) a.startCollection() else a.stopCollection()
+            if (isChecked) callbacks.startCollection() else callbacks.stopCollection()
         }
 
         serverUploadSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -24,13 +31,13 @@ class MainSwitchManager(private val a: MainActivity, private val p: Prefs) {
             if (isChecked) {
                 val addr = p.getServerAddress()
                 if (addr.isNotEmpty()) {
-                    a.startUpload(addr)
+                    callbacks.startUpload(addr)
                 } else {
                     serverUploadSwitch.isChecked = false
                     p.setDataUploadEnabled(false)
                 }
             } else {
-                a.stopUpload()
+                callbacks.stopUpload()
             }
         }
     }

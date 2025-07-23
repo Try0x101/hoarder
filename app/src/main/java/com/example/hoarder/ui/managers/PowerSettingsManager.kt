@@ -2,11 +2,15 @@ package com.example.hoarder.ui.managers
 
 import android.widget.RadioGroup
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
-import com.example.hoarder.ui.MainActivity
 
-class PowerSettingsManager(private val a: MainActivity, private val p: Prefs) {
+class PowerSettingsManager(
+    private val a: AppCompatActivity,
+    private val p: Prefs,
+    private val onModeChanged: (Int) -> Unit
+) {
 
     private lateinit var powerSavingSubtitle: TextView
     private lateinit var powerModeRadioGroup: RadioGroup
@@ -25,7 +29,7 @@ class PowerSettingsManager(private val a: MainActivity, private val p: Prefs) {
             }
             p.setPowerMode(newMode)
             updatePowerSavingUI()
-            a.onPowerModeChanged()
+            onModeChanged(newMode)
         }
     }
 
