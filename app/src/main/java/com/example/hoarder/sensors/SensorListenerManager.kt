@@ -9,6 +9,7 @@ import android.location.LocationManager
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
+
 class SensorListenerManager(
     private val context: Context,
     private val locationManager: LocationManager,

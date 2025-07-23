@@ -21,6 +21,7 @@ import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.service.BackgroundService
 import com.example.hoarder.ui.main.MainViewModel
 import com.example.hoarder.ui.service.ServiceCommander
+import com.example.hoarder.ui.state.UploadState
 import com.example.hoarder.utils.NotifUtils
 import com.example.hoarder.utils.PermHandler
 
@@ -75,19 +76,15 @@ class MainActivity : AppCompatActivity() {
             lastData = json
             ui.updateRawJson(json)
         }
-        viewModel.uploadStatus.observe(this) { updateFullUploadUI() }
-        viewModel.uploadMessage.observe(this) { updateFullUploadUI() }
-        viewModel.totalUploadedBytes.observe(this) { updateFullUploadUI() }
-        viewModel.totalActualNetworkBytes.observe(this) { updateFullUploadUI() }
-        viewModel.bufferedDataSize.observe(this) { updateFullUploadUI() }
+        viewModel.uploadState.observe(this) { state ->
+            updateFullUploadUI(state)
+        }
     }
 
-    private fun updateFullUploadUI() {
+    private fun updateFullUploadUI(state: UploadState) {
         ui.updateUploadUI(
-            viewModel.isUploadEnabled.value ?: false,
-            viewModel.uploadStatus.value, viewModel.uploadMessage.value,
-            viewModel.totalUploadedBytes.value, viewModel.totalActualNetworkBytes.value,
-            viewModel.bufferedDataSize.value ?: 0L
+            prefs.isDataUploadEnabled(),
+            state
         )
     }
 
@@ -117,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         prefs.setDataCollectionEnabled(true)
         prefs.setDataUploadEnabled(false)
         ui.updateDataCollectionUI(true)
-        ui.updateUploadUI(false, null, null, null, null, 0L)
+        ui.updateUploadUI(false, UploadState())
         startServiceIfNeeded()
         startCollection()
         h.postDelayed({ finishAffinity() }, 2000)

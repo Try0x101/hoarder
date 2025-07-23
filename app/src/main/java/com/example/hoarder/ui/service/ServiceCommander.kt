@@ -25,8 +25,6 @@ class ServiceCommander(private val context: Context) {
         const val ACTION_MOTION_STATE_CHANGED = "com.example.hoarder.MOTION_STATE_CHANGED"
         const val ACTION_PERMISSIONS_REQUIRED = "com.example.hoarder.PERMISSIONS_REQUIRED"
         const val ACTION_DATA_UPDATE = "com.example.hoarder.DATA_UPDATE"
-        const val ACTION_UPLOAD_STATUS = "com.example.hoarder.UPLOAD_STATUS"
-        const val ACTION_SERVICE_STATE_UPDATE = "com.example.hoarder.SERVICE_STATE_UPDATE"
     }
 
     fun startCollection() {

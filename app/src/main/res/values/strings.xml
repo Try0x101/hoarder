@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hoarder</string>
+    <string name="gps_precision_info"><![CDATA[• If speed <4 km/h → round up to 1 km\n• If speed 4-40 km/h → round up to 20 m\n• If speed 40-140 km/h → round up to 100 m\n• If speed >140 km/h → round up to 1 km]]></string>
+    <string name="gps_altitude_precision_info"><![CDATA[• Below 100m: 10m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision]]></string>
+    <string name="rssi_precision_info"><![CDATA[• If signal worse than -110 dBm → show precise value\n• If signal worse than -90 dBm → round to nearest 5\n• If signal better than -90 dBm → round to nearest 10]]></string>
+    <string name="battery_precision_info"><![CDATA[• If battery below 10% → show precise value\n• If battery 10-50% → round to nearest 5%\n• If battery above 50% → round to nearest 10%]]></string>
+    <string name="network_precision_info"><![CDATA[• Below 2 Mbps → show decimal precision\n• 2-7 Mbps → round to nearest lower 1 Mbps\n• Above 7 Mbps → round to nearest lower 5 Mbps]]></string>
+    <string name="speed_precision_info"><![CDATA[• If speed <2 km/h → show 0\n• If speed <10 km/h → round to nearest 3 km/h\n• If speed ≥10 km/h → round to nearest 10 km/h]]></string>
 </resources>

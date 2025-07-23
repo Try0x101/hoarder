@@ -2,6 +2,7 @@ package com.example.hoarder.ui
 
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
+import com.example.hoarder.ui.state.UploadState
 
 class UIHelper(private val a: MainActivity, private val p: Prefs) {
     private val layoutManager = LayoutManager(a, p) { updateAllPrecisionLabels() }
@@ -11,7 +12,7 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
     fun setupUI() {
         layoutManager.setupUI()
         statusManager.updateDataCollectionUI(p.isDataCollectionEnabled())
-        statusManager.updateUploadUI(p.isDataUploadEnabled(), null, null, null, null, 0L)
+        statusManager.updateUploadUI(p.isDataUploadEnabled(), UploadState())
         statusManager.updateAllPrecisionLabels()
         setupServerRowListener()
     }
@@ -27,8 +28,8 @@ class UIHelper(private val a: MainActivity, private val p: Prefs) {
         statusManager.updateDataCollectionUI(isActive)
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, actualBytes: Long?, bufferedSize: Long) {
-        statusManager.updateUploadUI(isActive, status, message, totalBytes, actualBytes, bufferedSize)
+    fun updateUploadUI(isActive: Boolean, state: UploadState) {
+        statusManager.updateUploadUI(isActive, state)
     }
 
     fun updateRawJson(json: String?) {

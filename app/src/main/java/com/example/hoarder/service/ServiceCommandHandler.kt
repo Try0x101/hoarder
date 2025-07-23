@@ -2,7 +2,6 @@ package com.example.hoarder.service
 
 import android.content.Context
 import android.content.Intent
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
@@ -20,8 +19,7 @@ class ServiceCommandHandler(
     private val powerManager: PowerManager,
     private val collectionActive: AtomicBoolean,
     private val uploadActive: AtomicBoolean,
-    private val updateAppPreferences: (String, Any) -> Unit,
-    private val broadcastStateUpdate: () -> Unit
+    private val updateAppPreferences: (String, Any) -> Unit
 ) {
     fun handle(intent: Intent?) {
         when (intent?.action) {
@@ -31,7 +29,6 @@ class ServiceCommandHandler(
             ServiceCommander.ACTION_STOP_UPLOAD -> handleStopUpload()
             ServiceCommander.ACTION_FORCE_UPLOAD -> handleForceUpload(intent)
             ServiceCommander.ACTION_SEND_BUFFER -> handleSendBuffer()
-            ServiceCommander.ACTION_GET_STATE -> broadcastStateUpdate()
             ServiceCommander.ACTION_POWER_MODE_CHANGED -> handlePowerModeChange(intent)
             ServiceCommander.ACTION_MOTION_STATE_CHANGED -> handleMotionStateChange(intent)
             ServiceCommander.ACTION_BATCHING_SETTINGS_CHANGED -> handleBatchingSettingsChange(intent)
@@ -42,7 +39,6 @@ class ServiceCommandHandler(
         if (collectionActive.compareAndSet(false, true)) {
             dataCollector.start()
             updateAppPreferences(Prefs.KEY_DATA_COLLECTION_ENABLED, true)
-            broadcastStateUpdate()
         }
     }
 
@@ -50,9 +46,6 @@ class ServiceCommandHandler(
         if (collectionActive.compareAndSet(true, false)) {
             dataCollector.stop()
             updateAppPreferences(Prefs.KEY_DATA_COLLECTION_ENABLED, false)
-            LocalBroadcastManager.getInstance(context)
-                .sendBroadcast(Intent(ServiceCommander.ACTION_DATA_UPDATE).putExtra("jsonString", ""))
-            broadcastStateUpdate()
         }
     }
 
@@ -65,13 +58,11 @@ class ServiceCommandHandler(
                 dataUploader.start()
                 updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, true)
                 updateAppPreferences(Prefs.KEY_SERVER_ADDRESS, address)
-                broadcastStateUpdate()
             }
         } else {
             uploadActive.set(false)
             dataUploader.postStatusNotification("Error", "Invalid Server Address for starting upload.")
             updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, false)
-            broadcastStateUpdate()
         }
     }
 
@@ -80,7 +71,6 @@ class ServiceCommandHandler(
             dataUploader.stop()
             dataUploader.resetCounter()
             updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, false)
-            broadcastStateUpdate()
         }
     }
 

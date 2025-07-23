@@ -1,9 +1,7 @@
 package com.example.hoarder.ui.dialogs.settings
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.view.View
 import android.widget.Button
 import androidx.lifecycle.lifecycleScope
@@ -27,15 +25,11 @@ class ServerDialogActionHandler(
     private val sendBufferButton: Button = view.findViewById(R.id.sendBufferedDataButton)
     private val batchSettingsDialogHandler by lazy { BatchSettingsDialogHandler(a, p) }
 
-    private val uploadStatusReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ServiceCommander.ACTION_UPLOAD_STATUS) {
-                updateSendButtonState()
-            }
-        }
-    }
-
     fun setupListeners() {
+        a.viewModel.uploadState.observe(a) { state ->
+            updateSendButtonState()
+        }
+
         sendBufferButton.setOnClickListener {
             a.sendBuffer()
             it.isEnabled = false
@@ -60,16 +54,15 @@ class ServerDialogActionHandler(
     }
 
     fun registerReceiver() {
-        LocalBroadcastManager.getInstance(a).registerReceiver(uploadStatusReceiver, IntentFilter(ServiceCommander.ACTION_UPLOAD_STATUS))
     }
 
     fun unregisterReceiver() {
-        LocalBroadcastManager.getInstance(a).unregisterReceiver(uploadStatusReceiver)
     }
 
     private fun updateSendButtonState() {
-        val bufferSize = a.viewModel.bufferedDataSize.value ?: 0L
-        val bulkInProgress = a.viewModel.isBulkInProgress.value ?: false
+        val state = a.viewModel.uploadState.value
+        val bufferSize = state?.bufferedDataSize ?: 0L
+        val bulkInProgress = state?.isBulkInProgress ?: false
 
         if (bulkInProgress) {
             sendBufferButton.visibility = View.VISIBLE

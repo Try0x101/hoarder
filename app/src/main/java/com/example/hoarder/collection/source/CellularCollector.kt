@@ -1,14 +1,17 @@
 package com.example.hoarder.collection.source
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.*
 import androidx.core.content.ContextCompat
 import com.example.hoarder.collection.source.cellular.CellProcessor
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.resume
 
 class CellularCollector(private val ctx: Context) {
     private lateinit var tm: TelephonyManager
@@ -73,39 +76,45 @@ class CellularCollector(private val ctx: Context) {
         hasPermissions.set(ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED)
     }
 
-    private fun requestFreshCellInfoAsync() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    @SuppressLint("MissingPermission")
+    private suspend fun getFreshCellInfo(): List<CellInfo>? {
+        return suspendCancellableCoroutine { continuation ->
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastFreshRequest.get() > FRESH_REQUEST_INTERVAL) {
                 lastFreshRequest.set(currentTime)
                 try {
                     tm.requestCellInfoUpdate(ctx.mainExecutor, object : TelephonyManager.CellInfoCallback() {
-                        override fun onCellInfo(cellInfo: List<CellInfo>) = processCellInfoUpdate(cellInfo)
+                        override fun onCellInfo(cellInfo: List<CellInfo>) {
+                            processCellInfoUpdate(cellInfo)
+                            if (continuation.isActive) continuation.resume(cellInfo)
+                        }
+                        override fun onError(errorCode: Int, detail: Throwable?) {
+                            if (continuation.isActive) continuation.resume(try { tm.allCellInfo } catch (e: Exception) { null })
+                        }
                     })
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    if (continuation.isActive) continuation.resume(try { tm.allCellInfo } catch (e: Exception) { null })
+                }
+            } else {
+                continuation.resume(try { tm.allCellInfo } catch (e: Exception) { null })
             }
         }
     }
 
-    private fun getCellInfoForCollection(): List<CellInfo>? {
-        val powerMode = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
-            .getString("powerMode", "continuous") ?: "continuous"
-        return if (powerMode == "continuous") {
-            requestFreshCellInfoAsync()
-            try { tm.allCellInfo } catch (e: SecurityException) { null }
-        } else {
-            cellInfoCache.get() ?: try { tm.allCellInfo?.also(::processCellInfoUpdate) } catch (e: SecurityException) { null }
-        }
+    private fun getOptimizedCellInfo(): List<CellInfo>? {
+        return cellInfoCache.get() ?: try { tm.allCellInfo?.also(::processCellInfoUpdate) } catch (e: SecurityException) { null }
     }
 
-    fun collect(dm: MutableMap<String, Any>, rp: Int) {
+    suspend fun collect(dm: MutableMap<String, Any>, rp: Int) {
         if (!isInitialized.get() || !hasPermissions.get()) {
             return setDefaultCellValues(dm)
         }
         try {
             dm["o"] = getOperatorName()
             dm["t"] = getNetworkTypeName()
-            val currentCellInfo = getCellInfoForCollection()
+            val powerMode = ctx.getSharedPreferences("HoarderPrefs", Context.MODE_PRIVATE)
+                .getString("powerMode", "continuous") ?: "continuous"
+            val currentCellInfo = if (powerMode == "continuous") getFreshCellInfo() else getOptimizedCellInfo()
             if (currentCellInfo == null || !processCellInfo(currentCellInfo, dm, rp)) {
                 setDefaultCellValues(dm)
             }

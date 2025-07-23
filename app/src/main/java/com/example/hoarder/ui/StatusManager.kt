@@ -2,12 +2,14 @@ package com.example.hoarder.ui
 
 import android.view.View
 import android.widget.TextView
+import androidx.annotation.StringRes
 import com.example.hoarder.R
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.formatters.ByteFormatter
 import com.example.hoarder.ui.formatters.PrecisionFormatter
 import com.example.hoarder.ui.formatters.StatusFormatter
+import com.example.hoarder.ui.state.UploadState
 
 class StatusManager(private val a: MainActivity, private val p: Prefs) {
 
@@ -16,7 +18,7 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         subtitle.text = if (isActive) "Active" else "Inactive"
     }
 
-    fun updateUploadUI(isActive: Boolean, status: String?, message: String?, totalBytes: Long?, actualBytes: Long?, bufferedSize: Long) {
+    fun updateUploadUI(isActive: Boolean, state: UploadState) {
         val statusView = a.findViewById<TextView>(R.id.serverUploadStatus)
         val bytesView = a.findViewById<TextView>(R.id.serverUploadBytes)
 
@@ -33,12 +35,12 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
         }
 
         val bufferWarningThreshold = p.getBufferWarningThresholdKb()
-        statusView.text = StatusFormatter.formatStatusText(status, message, bufferedSize, bufferWarningThreshold)
+        statusView.text = StatusFormatter.formatStatusText(state.status, state.message, state.bufferedDataSize, bufferWarningThreshold)
 
-        if (actualBytes != null && actualBytes > 0) {
-            bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)} / ${ByteFormatter.format(actualBytes)}"
+        if (state.totalActualNetworkBytes > 0) {
+            bytesView.text = "Uploaded: ${ByteFormatter.format(state.totalUploadedBytes)} / ${ByteFormatter.format(state.totalActualNetworkBytes)}"
         } else {
-            bytesView.text = "Uploaded: ${ByteFormatter.format(totalBytes ?: 0)}"
+            bytesView.text = "Uploaded: ${ByteFormatter.format(state.totalUploadedBytes)}"
         }
         bytesView.visibility = View.VISIBLE
     }
@@ -61,17 +63,17 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
     }
 
     private fun updatePrecisionInfoVisibility() {
-        updateInfoVisibility(R.id.gpsPrecisionInfo, p.getGPSPrecision() == -1, "• If speed <4 km/h → round up to 1 km\n• If speed 4-40 km/h → round up to 20 m\n• If speed 40-140 km/h → round up to 100 m\n• If speed >140 km/h → round up to 1 km")
-        updateInfoVisibility(R.id.gpsAltitudePrecisionInfo, p.getGPSAltitudePrecision() == -1, "• Below 100m: 10m precision\n• 100-1000m: 50m precision\n• Above 1000m: 100m precision")
-        updateInfoVisibility(R.id.rssiPrecisionInfo, p.getRSSIPrecision() == -1, "• If signal worse than -110 dBm → show precise value\n• If signal worse than -90 dBm → round to nearest 5\n• If signal better than -90 dBm → round to nearest 10")
-        updateInfoVisibility(R.id.batteryPrecisionInfo, p.getBatteryPrecision() == -1, "• If battery below 10% → show precise value\n• If battery 10-50% → round to nearest 5%\n• If battery above 50% → round to nearest 10%")
-        updateInfoVisibility(R.id.networkPrecisionInfo, p.getNetworkPrecision() == 0, "• Below 2 Mbps → show decimal precision\n• 2-7 Mbps → round to nearest lower 1 Mbps\n• Above 7 Mbps → round to nearest lower 5 Mbps")
-        updateInfoVisibility(R.id.speedPrecisionInfo, p.getSpeedPrecision() == -1, "• If speed <2 km/h → show 0\n• If speed <10 km/h → round to nearest 3 km/h\n• If speed ≥10 km/h → round to nearest 10 km/h")
+        updateInfoVisibility(R.id.gpsPrecisionInfo, p.getGPSPrecision() == -1, R.string.gps_precision_info)
+        updateInfoVisibility(R.id.gpsAltitudePrecisionInfo, p.getGPSAltitudePrecision() == -1, R.string.gps_altitude_precision_info)
+        updateInfoVisibility(R.id.rssiPrecisionInfo, p.getRSSIPrecision() == -1, R.string.rssi_precision_info)
+        updateInfoVisibility(R.id.batteryPrecisionInfo, p.getBatteryPrecision() == -1, R.string.battery_precision_info)
+        updateInfoVisibility(R.id.networkPrecisionInfo, p.getNetworkPrecision() == 0, R.string.network_precision_info)
+        updateInfoVisibility(R.id.speedPrecisionInfo, p.getSpeedPrecision() == -1, R.string.speed_precision_info)
     }
 
-    private fun updateInfoVisibility(id: Int, show: Boolean, text: String) {
+    private fun updateInfoVisibility(id: Int, show: Boolean, @StringRes textResId: Int) {
         val view = a.findViewById<TextView>(id)
         view.visibility = if (show) View.VISIBLE else View.GONE
-        if (show) view.text = text
+        if (show) view.setText(textResId)
     }
 }

@@ -29,7 +29,6 @@ class ServiceInitializer(
     private val dataUploader: DataUploader,
     private val commandHandler: ServiceCommandHandler,
     private val uploadActive: AtomicBoolean,
-    private val broadcastStateUpdate: () -> Unit,
     private val stopService: () -> Unit
 ) {
     fun initialize() {
@@ -79,7 +78,6 @@ class ServiceInitializer(
         }
 
         handler.postDelayed({
-            broadcastStateUpdate()
             schedulePeriodicCleanup()
         }, 1000)
     }

@@ -1,9 +1,8 @@
 package com.example.hoarder.data.notifiers
 
 import android.content.Context
-import android.content.Intent
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.example.hoarder.ui.service.ServiceCommander
+import com.example.hoarder.ui.state.ServiceStateRepository
+import com.example.hoarder.ui.state.UploadState
 
 class UploaderNotifier(private val ctx: Context) {
 
@@ -21,14 +20,14 @@ class UploaderNotifier(private val ctx: Context) {
     }
 
     fun notifyStatus(s: String, m: String, ub: Long, anb: Long, bufferSize: Long, bulkInProgress: Boolean) {
-        val intent = Intent(ServiceCommander.ACTION_UPLOAD_STATUS).apply {
-            putExtra("status", s)
-            putExtra("message", m)
-            putExtra("totalUploadedBytes", ub)
-            putExtra("totalActualNetworkBytes", anb)
-            putExtra("bufferedDataSize", bufferSize)
-            putExtra("bulkInProgress", bulkInProgress)
-        }
-        LocalBroadcastManager.getInstance(ctx).sendBroadcast(intent)
+        val newState = UploadState(
+            status = s,
+            message = m,
+            totalUploadedBytes = ub,
+            totalActualNetworkBytes = anb,
+            bufferedDataSize = bufferSize,
+            isBulkInProgress = bulkInProgress
+        )
+        ServiceStateRepository.updateUploadState(newState)
     }
 }

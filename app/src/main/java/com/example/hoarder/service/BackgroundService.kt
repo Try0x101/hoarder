@@ -57,10 +57,10 @@ class BackgroundService: Service(){
         }
 
         commandHandler = ServiceCommandHandler(this, serviceScope, dataCollector, dataUploader, powerManager,
-            ca, ua, this::updateAppPreferences, this::broadcastStateUpdate)
+            ca, ua, this::updateAppPreferences)
 
         serviceInitializer = ServiceInitializer(this, appPrefs, h, serviceScope, powerManager, dataCollector,
-            dataUploader, commandHandler, ua, this::broadcastStateUpdate, this::stopSelf)
+            dataUploader, commandHandler, ua, this::stopSelf)
 
         dataCollector.setDataUploader(dataUploader)
         registerServiceReceiver()
@@ -111,16 +111,6 @@ class BackgroundService: Service(){
             is Float -> editor.putFloat(key, value)
         }
         editor.apply()
-    }
-
-    private fun broadcastStateUpdate() {
-        LocalBroadcastManager.getInstance(this).sendBroadcast(
-            Intent(ServiceCommander.ACTION_SERVICE_STATE_UPDATE).apply {
-                putExtra("dataCollectionActive", ca.get())
-                putExtra("dataUploadActive", ua.get())
-                putExtra("serviceInitialized", isInitialized.get())
-            }
-        )
     }
 
     override fun onDestroy(){

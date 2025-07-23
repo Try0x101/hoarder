@@ -115,7 +115,7 @@ class DataCollector(
         return true
     }
 
-    private fun collectDataOnce(isMoving: Boolean = true) {
+    private suspend fun collectDataOnce(isMoving: Boolean = true) {
         if (!lifecycleManager.isActive() || !isInitialized.get()) return
         reusableDataMap.clear()
         reusableDataMap["i"] = deviceId
