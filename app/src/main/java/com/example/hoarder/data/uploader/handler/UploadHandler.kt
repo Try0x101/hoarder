@@ -26,14 +26,14 @@ class UploadHandler(
 ) {
     private val mapType = object : TypeToken<MutableMap<String, Any>>() {}.type
 
-    suspend fun processSingleUpload(fullJson: String, ip: String, port: Int, compLevel: Int): Boolean {
+    suspend fun processSingleUpload(fullJson: String, serverAddress: String, compLevel: Int): Boolean {
         val currentDataMap: Map<String, Any> = g.fromJson(fullJson, mapType)
         val previousDataMap = lastProcessedMap.get()
         val deltaMap = if (previousDataMap == null) currentDataMap else DeltaComputer.calculateDelta(previousDataMap, currentDataMap)
         lastProcessedMap.set(currentDataMap)
         if (deltaMap.isEmpty()) return true
 
-        val result = networkUploader.uploadSingle(g.toJson(deltaMap), previousDataMap != null, ip, port, compLevel)
+        val result = networkUploader.uploadSingle(g.toJson(deltaMap), previousDataMap != null, serverAddress, compLevel)
 
         if (result.success) {
             handleSuccessfulUpload(result.uploadedBytes, result.actualNetworkBytes)
@@ -42,8 +42,8 @@ class UploadHandler(
         return result.success
     }
 
-    suspend fun processHotPathUpload(batch: List<BufferedPayload>, ip: String, port: Int, compLevel: Int): Boolean {
-        val result = networkUploader.uploadBatch(batch.map { it.payload }, ip, port, compLevel)
+    suspend fun processHotPathUpload(batch: List<BufferedPayload>, serverAddress: String, compLevel: Int): Boolean {
+        val result = networkUploader.uploadBatch(batch.map { it.payload }, serverAddress, compLevel)
 
         if (result.success) {
             withContext(Dispatchers.IO) {

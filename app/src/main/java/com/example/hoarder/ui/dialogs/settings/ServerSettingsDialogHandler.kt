@@ -51,7 +51,7 @@ class ServerSettingsDialogHandler(
 
         editText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (NetUtils.isValidIpPort(editText.text.toString())) {
+                if (NetUtils.isValidServerAddress(editText.text.toString())) {
                     p.setServerAddress(editText.text.toString())
                     if (p.isDataUploadEnabled()) {
                         a.stopUpload()

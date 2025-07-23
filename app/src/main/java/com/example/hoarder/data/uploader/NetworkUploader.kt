@@ -43,23 +43,23 @@ class NetworkUploader(private val context: Context) {
         }
     }
 
-    fun uploadSingle(jsonData: String, isDelta: Boolean, serverIp: String, serverPort: Int, compressionLevel: Int): UploadResult {
+    fun uploadSingle(jsonData: String, isDelta: Boolean, serverAddress: String, compressionLevel: Int): UploadResult {
         val compressionResult = CompressionUtils.compressData(jsonData, compressionLevel)
-        val url = URL("http://$serverIp:$serverPort/api/telemetry")
+        val url = URL("https://$serverAddress/api/telemetry")
         val headers = mapOf("Content-Type" to "application/json", "X-Data-Type" to if (isDelta) "delta" else "full", "Content-Encoding" to "deflate", "X-Original-Size" to compressionResult.originalSize.toString(), "X-Compression-Ratio" to String.format("%.2f", compressionResult.compressionRatio))
         return performUpload(url, compressionResult.compressed, headers, SINGLE_TIMEOUT_MS, if (isDelta) "OK (Delta)" else "OK (Full)", compressionResult)
     }
 
-    fun uploadBatch(batchData: List<String>, serverIp: String, serverPort: Int, compressionLevel: Int): UploadResult {
+    fun uploadBatch(batchData: List<String>, serverAddress: String, compressionLevel: Int): UploadResult {
         val batchJson = batchData.joinToString(separator = ",", prefix = "[", postfix = "]")
         val compressionResult = CompressionUtils.compressData(batchJson, compressionLevel)
-        val url = URL("http://$serverIp:$serverPort/api/batch")
+        val url = URL("https://$serverAddress/api/batch")
         val headers = mapOf("Content-Type" to "application/json", "X-Data-Type" to "batch", "X-Record-Count" to batchData.size.toString(), "Content-Encoding" to "deflate", "X-Original-Size" to compressionResult.originalSize.toString(), "X-Compression-Ratio" to String.format("%.2f", compressionResult.compressionRatio))
         return performUpload(url, compressionResult.compressed, headers, BATCH_TIMEOUT_MS, "OK (Batch)", compressionResult)
     }
 
-    fun uploadBulkFile(file: File, serverIp: String, serverPort: Int): UploadResult {
-        val url = URL("http://$serverIp:$serverPort/api/bulk")
+    fun uploadBulkFile(file: File, serverAddress: String): UploadResult {
+        val url = URL("https://$serverAddress/api/bulk")
         return HttpUtils.safeApiCall(url) {
             val headers = mapOf("Content-Type" to "application/octet-stream", "Content-Encoding" to "deflate")
             val connection = url.openConnection() as HttpURLConnection
@@ -75,8 +75,8 @@ class NetworkUploader(private val context: Context) {
         }
     }
 
-    fun getJobStatus(jobId: String, serverIp: String, serverPort: Int): Map<String, Any>? {
-        val url = URL("http://$serverIp:$serverPort/api/bulk/status/$jobId")
+    fun getJobStatus(jobId: String, serverAddress: String): Map<String, Any>? {
+        val url = URL("https://$serverAddress/api/bulk/status/$jobId")
         return try {
             val connection = url.openConnection() as HttpURLConnection
             connection.apply { requestMethod = "GET"; connectTimeout = CONNECT_TIMEOUT_MS; readTimeout = SINGLE_TIMEOUT_MS }

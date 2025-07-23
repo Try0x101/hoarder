@@ -59,10 +59,10 @@ class BulkUploadHandler(
             return false
         }
 
-        val (ip, port) = (appPrefs.getServerAddress().split(":") + listOf("0")).let { it[0] to it[1].toInt() }
+        val serverAddress = appPrefs.getServerAddress()
         statusNotifier("Uploading", "Bulk file...")
         appPrefs.setBulkJobState("UPLOADING")
-        val result = networkUploader.uploadBulkFile(tempFile, ip, port)
+        val result = networkUploader.uploadBulkFile(tempFile, serverAddress)
 
         val success = if (result.success && result.jobId != null) {
             appPrefs.setBulkJobId(result.jobId)
@@ -79,9 +79,9 @@ class BulkUploadHandler(
     }
 
     private suspend fun pollJobStatusLoop(jobId: String): Boolean {
-        val (ip, port) = (appPrefs.getServerAddress().split(":") + listOf("0")).let { it[0] to it[1].toInt() }
+        val serverAddress = appPrefs.getServerAddress()
         for (delayMs in listOf(2000L, 4000L, 8000L, 15000L, 30000L, 60000L)) {
-            val status = networkUploader.getJobStatus(jobId, ip, port)
+            val status = networkUploader.getJobStatus(jobId, serverAddress)
             when (status?.get("status")) {
                 "COMPLETE" -> { finalizeBulkSuccess(); return true }
                 "FAILED" -> { cleanupBulkState(isError = true, errorMessage = status["error"] as? String); return false }

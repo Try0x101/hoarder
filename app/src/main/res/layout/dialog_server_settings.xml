@@ -21,7 +21,7 @@
             android:id="@+id/serverIpPortEditText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Server IP:Port"
+            android:hint="Server Address (e.g., domain.com:port)"
             android:textColor="@color/amoled_white"
             android:textColorHint="@color/amoled_light_gray"
             android:backgroundTint="@color/amoled_true_blue"

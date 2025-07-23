@@ -26,7 +26,7 @@ class StatusManager(private val a: MainActivity, private val p: Prefs) {
             return
         }
 
-        if (!NetUtils.isValidIpPort(p.getServerAddress())) {
+        if (!NetUtils.isValidServerAddress(p.getServerAddress())) {
             statusView.text = "Invalid Address"
             bytesView.visibility = View.GONE
             return

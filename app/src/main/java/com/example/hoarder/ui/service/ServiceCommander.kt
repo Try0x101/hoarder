@@ -38,8 +38,8 @@ class ServiceCommander(private val context: Context) {
     }
 
     fun startUpload(serverAddress: String, currentData: String?) {
-        if (NetUtils.isValidIpPort(serverAddress)) {
-            lbm.sendBroadcast(Intent(ACTION_START_UPLOAD).putExtra("ipPort", serverAddress))
+        if (NetUtils.isValidServerAddress(serverAddress)) {
+            lbm.sendBroadcast(Intent(ACTION_START_UPLOAD).putExtra("address", serverAddress))
 
             if (currentData != null && currentData.isNotBlank()) {
                 h.postDelayed({

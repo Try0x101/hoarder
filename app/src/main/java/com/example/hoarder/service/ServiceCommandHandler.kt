@@ -7,6 +7,7 @@ import com.example.hoarder.data.DataUploader
 import com.example.hoarder.data.storage.app.Prefs
 import com.example.hoarder.power.PowerManager
 import com.example.hoarder.sensors.DataCollector
+import com.example.hoarder.transport.network.NetUtils
 import com.example.hoarder.ui.service.ServiceCommander
 import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.atomic.AtomicBoolean
@@ -56,21 +57,19 @@ class ServiceCommandHandler(
     }
 
     private fun handleStartUpload(intent: Intent) {
-        val ip = intent.getStringExtra("ipPort")?.split(":")
-        if (ip != null && ip.size == 2 && ip[0].isNotBlank() && ip[1].toIntOrNull() != null
-            && ip[1].toInt() in 1..65535
-        ) {
+        val address = intent.getStringExtra("address")
+        if (address != null && NetUtils.isValidServerAddress(address)) {
             if (uploadActive.compareAndSet(false, true)) {
                 dataUploader.resetCounter()
-                dataUploader.setServer(ip[0], ip[1].toInt())
+                dataUploader.setServer(address)
                 dataUploader.start()
                 updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, true)
-                updateAppPreferences(Prefs.KEY_SERVER_ADDRESS, "${ip[0]}:${ip[1]}")
+                updateAppPreferences(Prefs.KEY_SERVER_ADDRESS, address)
                 broadcastStateUpdate()
             }
         } else {
             uploadActive.set(false)
-            dataUploader.postStatusNotification("Error", "Invalid Server IP:Port for starting upload.")
+            dataUploader.postStatusNotification("Error", "Invalid Server Address for starting upload.")
             updateAppPreferences(Prefs.KEY_DATA_UPLOAD_ENABLED, false)
             broadcastStateUpdate()
         }

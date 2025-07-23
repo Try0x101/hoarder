@@ -32,8 +32,7 @@ class DataUploader(
     private val appPrefs: Prefs
 ) {
     private val ua = AtomicBoolean(false)
-    private var ip = ""
-    private var port = 5000
+    private var serverAddress = ""
     private val lastProcessedMap = AtomicReference<Map<String, Any>?>(null)
     private val bulkUploadInProgress = AtomicBoolean(false)
     private val reconnectInProgress = AtomicBoolean(false)
@@ -99,7 +98,7 @@ class DataUploader(
                     batchingManager.checkTriggers(dataBuffer.getBufferedPayloadsCount(), bufferedSize.get() / 1024)
                 }
             } else {
-                val success = uploadHandler.processSingleUpload(data, ip, port, compressionLevel)
+                val success = uploadHandler.processSingleUpload(data, serverAddress, compressionLevel)
                 if (success) {
                     if (connectivityHandler.getWasOffline()) { handleReconnect() }
                     connectivityHandler.setWasOffline(false)
@@ -168,7 +167,7 @@ class DataUploader(
         return if (currentBufferSize >= bulkThresholdBytes || recordCount > HOT_PATH_RECORD_LIMIT) {
             bulkUploadHandler.initiateBulkUploadProcess()
         } else {
-            val success = uploadHandler.processHotPathUpload(dataBuffer.getBufferedData(), ip, port, compressionLevel)
+            val success = uploadHandler.processHotPathUpload(dataBuffer.getBufferedData(), serverAddress, compressionLevel)
             if (success) {
                 if (connectivityHandler.getWasOffline()) { handleReconnect() }
                 connectivityHandler.setWasOffline(false)
@@ -185,8 +184,8 @@ class DataUploader(
         notifier.notifyStatus(status, message, tb.get(), actualNetworkBytes.get(), bufferedSize.get(), bulkUploadInProgress.get())
     }
 
-    fun setServer(ip: String, port: Int) { this.ip = ip; this.port = port }
-    fun hasValidServer(): Boolean = ip.isNotBlank() && port > 0
+    fun setServer(address: String) { this.serverAddress = address }
+    fun hasValidServer(): Boolean = serverAddress.isNotBlank()
     fun start() { ua.set(true); reapplyBatchingConfiguration(); connectivityHandler.start(); scheduler.start(); h.post { notifier.notifyStatus("Connecting", "...", tb.get(), actualNetworkBytes.get(), bufferedSize.get(), bulkUploadInProgress.get()) } }
     fun stop() { ua.set(false); scheduler.stop(); batchingManager.onForceSendBuffer(); connectivityHandler.stop() }
     fun resetCounter() { tb.set(0L); actualNetworkBytes.set(0L); lastProcessedMap.set(null); sp.edit().putLong(Prefs.KEY_TOTAL_UPLOADED_BYTES, 0L).putLong(Prefs.KEY_TOTAL_ACTUAL_NETWORK_BYTES, 0L).apply(); h.post { postStatusNotification("Paused", "Upload paused") } }

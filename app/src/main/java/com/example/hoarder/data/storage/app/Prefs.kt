@@ -51,7 +51,7 @@ class Prefs(ctx: Context) {
     fun isBatchUploadEnabled() = p.getBoolean(KEY_BATCH_UPLOAD_ENABLED, true)
     fun setBatchUploadEnabled(e: Boolean) = p.edit().putBoolean(KEY_BATCH_UPLOAD_ENABLED, e).apply()
 
-    fun getServerAddress() = p.getString(KEY_SERVER_ADDRESS, "188.132.234.72:5000") ?: "188.132.234.72:5000"
+    fun getServerAddress() = p.getString(KEY_SERVER_ADDRESS, "ingest.try0x101.uk") ?: "ingest.try0x101.uk"
     fun setServerAddress(a: String) = p.edit().putString(KEY_SERVER_ADDRESS, a).apply()
 
     fun getGPSPrecision() = p.getInt(KEY_GPS_PRECISION, 100)
@@ -121,7 +121,7 @@ class Prefs(ctx: Context) {
             setBatteryPrecision(0)
             setNetworkPrecision(-2)
             setSpeedPrecision(0)
-            setServerAddress("188.132.234.72:5000")
+            setServerAddress("ingest.try0x101.uk")
             markFirstRunComplete()
         }
     }

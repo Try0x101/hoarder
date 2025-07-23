@@ -65,11 +65,9 @@ class ServiceInitializer(
     private fun restoreServiceState() {
         val shouldCollect = appPrefs.isDataCollectionEnabled()
         val shouldUpload = appPrefs.isDataUploadEnabled()
-        val server = appPrefs.getServerAddress().split(":")
+        val serverAddress = appPrefs.getServerAddress()
 
-        if (server.size == 2 && server[0].isNotBlank() && server[1].toIntOrNull() != null) {
-            dataUploader.setServer(server[0], server[1].toInt())
-        }
+        dataUploader.setServer(serverAddress)
 
         if (shouldCollect) {
             commandHandler.handle(Intent(ServiceCommander.ACTION_START_COLLECTION))
